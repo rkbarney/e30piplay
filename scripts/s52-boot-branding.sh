@@ -16,6 +16,7 @@ fi
 BACKUP_DIR="/etc/s52-boot-branding-backup"
 PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/s52-tech"
 PLYMOUTH_THEME_NAME="s52-tech"
+PLYMOUTH_THEME_FILE="${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.plymouth"
 
 require_files() {
   if [[ ! -f "${BOOT_CONFIG}" || ! -f "${CMDLINE_CONFIG}" ]]; then
@@ -56,7 +57,7 @@ set_config_option() {
 create_plymouth_theme() {
   mkdir -p "${PLYMOUTH_THEME_DIR}"
 
-  cat > "${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.plymouth" <<EOF
+  cat > "${PLYMOUTH_THEME_FILE}" <<EOF
 [Plymouth Theme]
 Name=S52 Tech
 Description=Simple S52 loading splash
@@ -73,6 +74,21 @@ title_sprite = Sprite(title_image);
 title_sprite.SetX(Window.GetWidth() * 0.5 - title_image.GetWidth() * 0.5);
 title_sprite.SetY(Window.GetHeight() * 0.5 - title_image.GetHeight() * 0.5);
 EOF
+}
+
+set_default_plymouth_theme() {
+  if command -v update-alternatives >/dev/null 2>&1; then
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "${PLYMOUTH_THEME_FILE}" 200 || true
+    update-alternatives --set default.plymouth "${PLYMOUTH_THEME_FILE}" || true
+  fi
+
+  plymouth-set-default-theme "${PLYMOUTH_THEME_NAME}" -R
+
+  local current_theme
+  current_theme="$(plymouth-set-default-theme || true)"
+  if [[ "${current_theme}" != "${PLYMOUTH_THEME_NAME}" ]]; then
+    echo "Warning: expected Plymouth theme '${PLYMOUTH_THEME_NAME}', got '${current_theme}'."
+  fi
 }
 
 normalize_cmdline() {
@@ -104,7 +120,7 @@ apply_changes() {
   normalize_cmdline
   create_plymouth_theme
 
-  plymouth-set-default-theme "${PLYMOUTH_THEME_NAME}" -R
+  set_default_plymouth_theme
 
   echo ""
   echo "Applied S52 boot branding settings."
@@ -145,11 +161,12 @@ status_changes() {
   echo "cmdline.txt:"
   cat "${CMDLINE_CONFIG}"
   echo ""
-  if [[ -f "${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.plymouth" ]]; then
+  if [[ -f "${PLYMOUTH_THEME_FILE}" ]]; then
     echo "Custom Plymouth theme exists: yes"
   else
     echo "Custom Plymouth theme exists: no"
   fi
+  echo "Current Plymouth theme: $(plymouth-set-default-theme || true)"
   if [[ -f "${BACKUP_DIR}/config.txt.bak" && -f "${BACKUP_DIR}/cmdline.txt.bak" ]]; then
     echo "Backups exist: yes (${BACKUP_DIR})"
   else
