@@ -117,6 +117,13 @@ if [[ -f "${EXIT_PY}" ]]; then
   EXIT_SERVER_PID=$!
 fi
 
+KIOSK_URL_WITH_EXIT="${S52_KIOSK_URL}"
+if [[ "${KIOSK_URL_WITH_EXIT}" == *\?* ]]; then
+  KIOSK_URL_WITH_EXIT="${KIOSK_URL_WITH_EXIT}&s52ExitPort=${S52_KIOSK_EXIT_PORT}"
+else
+  KIOSK_URL_WITH_EXIT="${KIOSK_URL_WITH_EXIT}?s52ExitPort=${S52_KIOSK_EXIT_PORT}"
+fi
+
 # Wait until the page URL responds (nginx or embedded static server).
 for ((i = 1; i <= S52_HTTP_RETRIES; i++)); do
   if curl -sf -o /dev/null --connect-timeout 1 --max-time 3 "${S52_KIOSK_URL}/" 2>/dev/null; then
@@ -142,7 +149,7 @@ fi
   --disable-restore-session-state \
   --disable-session-crashed-bubble \
   --check-for-update-interval=31536000 \
-  "${S52_KIOSK_URL}" &
+  "${KIOSK_URL_WITH_EXIT}" &
 
 CHROMIUM_PID=$!
 echo "${CHROMIUM_PID}" > "${KIOSK_PID_FILE}"

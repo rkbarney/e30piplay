@@ -11,7 +11,7 @@ S52_WLR_TRANSFORM=90
 S52_LAYOUT_DELAY=2
 # Move pointer to car output before Chromium starts (helps labwc open kiosk there).
 S52_WARP_CURSOR_TO_KIOSK_OUTPUT=1
-# Local POST target for in-app "Exit kiosk" (must match KioskExit.jsx).
+# Local POST target for in-app "Exit kiosk" (launcher passes this via URL query).
 # S52_KIOSK_EXIT_PORT=8765
 # Serve latest dist/ without sudo rsync to /var/www (python http.server):
 # S52_KIOSK_STATIC_PORT=8899

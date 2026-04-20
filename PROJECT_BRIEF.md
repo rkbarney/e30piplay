@@ -166,7 +166,7 @@ bash setup.sh
 sudo reboot
 
 # 4. When Carlinkit dongle arrives:
-cd ~/s52-display
+cd ~/tinycarplay
 npm install react-carplay
 # Update src/components/CarPlayReceiver.jsx
 npm run build
