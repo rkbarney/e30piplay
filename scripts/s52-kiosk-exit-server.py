@@ -10,20 +10,34 @@ import urllib.parse
 
 PID_FILE = os.environ.get("S52_KIOSK_PID_FILE", "")
 PORT = int(os.environ.get("S52_KIOSK_EXIT_PORT", "8765"))
+ALLOWED_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_args) -> None:
         return
 
+    def _origin_ok(self) -> bool:
+        origin = self.headers.get("Origin", "")
+        if not origin:
+            return False
+        parsed = urllib.parse.urlparse(origin)
+        return parsed.hostname in ALLOWED_HOSTS
+
     def _cors(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin", "")
+        if self._origin_ok():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def do_OPTIONS(self) -> None:
         if urllib.parse.urlparse(self.path).path != "/exit":
             self.send_error(404)
+            return
+        if not self._origin_ok():
+            self.send_error(403)
             return
         self.send_response(204)
         self._cors()
@@ -32,6 +46,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if urllib.parse.urlparse(self.path).path != "/exit":
             self.send_error(404)
+            return
+        if not self._origin_ok():
+            self.send_error(403)
             return
         try:
             with open(PID_FILE, encoding="utf-8") as f:

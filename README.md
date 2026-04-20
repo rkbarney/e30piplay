@@ -79,6 +79,38 @@ Useful runtime files:
 - Kiosk launcher: `scripts/s52-kiosk-launch.sh`
 - Exit helper server: `scripts/s52-kiosk-exit-server.py`
 - Display config template: `scripts/s52-display-layout.conf.example`
+- Boot branding helper: `scripts/s52-boot-branding.sh`
+
+## Factory-style boot branding (hide Raspberry Pi login/branding)
+
+If you want the Pi to look like an OEM car unit at boot (no Raspberry Pi splash,
+minimal console noise, custom `s52 tech loading` splash), run:
+
+```bash
+chmod +x scripts/s52-boot-branding.sh
+sudo scripts/s52-boot-branding.sh apply
+sudo reboot
+```
+
+What this changes on the Pi:
+
+- Disables firmware splash (`disable_splash=1`)
+- Updates kernel cmdline for `quiet splash` boot
+- Installs Plymouth and sets a custom `s52-tech` theme text splash
+- Backs up original boot files to `/etc/s52-boot-branding-backup`
+
+To verify:
+
+```bash
+sudo scripts/s52-boot-branding.sh status
+```
+
+To roll back to previous behavior:
+
+```bash
+sudo scripts/s52-boot-branding.sh revert
+sudo reboot
+```
 
 ## CarPlay integration status
 
