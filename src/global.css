@@ -1,0 +1,98 @@
+/* S52 Solutions — fixed 480x320 viewport, terminal aesthetic */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --amber:     #ffb300;
+  --amber-dim: #7a5500;
+  --amber-dark:#2e1f00;
+  --red:       #ff3333;
+  --bg:        #000000;
+  --surface:   #0a0a0a;
+  --border:    #3a2800;
+  --font:      'Courier New', Courier, monospace;
+  --w: 320px;
+  --h: 480px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* Logo: constant-deceleration spin — θ(t) = 2160·(2t − t²) for t∈[0,1]  */
+/* Sampled at even intervals so linear timing produces perfectly smooth     */
+/* deceleration. Final = 2160° = 6 full rotations = right-side up.         */
+@keyframes spinSettle {
+  0%    { transform: rotate(0deg);    filter: blur(0px);    opacity: 0; }
+  3%    { transform: rotate(124deg);  filter: blur(8px);    opacity: 1; }
+  8.5%  { transform: rotate(410deg);  filter: blur(8px); }
+  17%   { transform: rotate(778deg);  filter: blur(6px); }
+  25.5% { transform: rotate(1102deg); filter: blur(3.5px); }
+  34%   { transform: rotate(1382deg); filter: blur(1.5px); }
+  42.5% { transform: rotate(1620deg); filter: blur(0.5px); }
+  51%   { transform: rotate(1814deg); filter: blur(0px); }
+  59.5% { transform: rotate(1966deg); filter: blur(0px); }
+  68%   { transform: rotate(2074deg); filter: blur(0px); }
+  76.5% { transform: rotate(2138deg); filter: blur(0px); }
+  85%   { transform: rotate(2160deg); filter: blur(0px); } /* fully stopped */
+  91%   { transform: rotate(2165deg); filter: blur(0px); } /* tiny overshoot */
+  96%   { transform: rotate(2158deg); filter: blur(0px); } /* settle        */
+  100%  { transform: rotate(2160deg); filter: blur(0px);   opacity: 1; }
+}
+
+/* Logo fades out */
+@keyframes logoFadeOut {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Clock fades in */
+@keyframes clockReveal {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--amber);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-font-smoothing: none;
+  image-rendering: pixelated;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ViewportScale — inner keeps 320×480 design coords; scales to fit any HDMI mode */
+.viewport-scale-outer {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.viewport-scale-inner {
+  position: relative;
+  flex-shrink: 0;
+  transform-origin: center center;
+  overflow: hidden;
+}

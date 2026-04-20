@@ -1,0 +1,20 @@
+# Copy to ~/.config/s52-display-layout.conf and adjust.
+# Run: wlr-randr   (lists outputs and mode strings for each monitor)
+#
+# Pi 5: micro-HDMI next to USB-C is often HDMI-A-1; the other port is often HDMI-A-2.
+# If the car screen is on "HDMI 2", set S52_WLR_OUTPUT=HDMI-A-2 so rotation/mode
+# apply to that panel (not your primary desktop monitor).
+
+S52_WLR_OUTPUT=HDMI-A-2
+S52_WLR_MODE=1280x720
+S52_WLR_TRANSFORM=90
+S52_LAYOUT_DELAY=2
+# Move pointer to car output before Chromium starts (helps labwc open kiosk there).
+S52_WARP_CURSOR_TO_KIOSK_OUTPUT=1
+# Local POST target for in-app "Exit kiosk" (must match KioskExit.jsx).
+# S52_KIOSK_EXIT_PORT=8765
+# Serve latest dist/ without sudo rsync to /var/www (python http.server):
+# S52_KIOSK_STATIC_PORT=8899
+# S52_KIOSK_STATIC_ROOT=/home/admin/tinycarplay/dist
+# Optional: max seconds to wait for nginx before opening Chromium (default 90)
+# S52_HTTP_RETRIES=90

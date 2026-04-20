@@ -1,0 +1,3 @@
+#!/bin/bash
+# Enter car / kiosk display (Chromium fullscreen to localhost). Run from desktop terminal.
+exec "${HOME}/.local/bin/s52-kiosk-launch.sh"
