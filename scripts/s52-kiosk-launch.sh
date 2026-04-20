@@ -125,7 +125,14 @@ for ((i = 1; i <= S52_HTTP_RETRIES; i++)); do
   sleep 1
 done
 
-chromium \
+# Debian's /usr/bin/chromium wrapper can inject unsupported JS flags on some
+# Pi kernels/page sizes. Prefer direct binary when available.
+CHROMIUM_BIN="chromium"
+if [[ -x "/usr/lib/chromium/chromium" ]]; then
+  CHROMIUM_BIN="/usr/lib/chromium/chromium"
+fi
+
+"${CHROMIUM_BIN}" \
   --user-data-dir="${S52_CHROMIUM_USER_DATA_DIR}" \
   --password-store=basic \
   --kiosk \
