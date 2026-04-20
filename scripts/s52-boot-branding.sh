@@ -184,4 +184,4 @@ main() {
   esac
 }
 
-main "${@:-}"
+main "$@"
