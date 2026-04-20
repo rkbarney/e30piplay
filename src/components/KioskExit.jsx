@@ -1,6 +1,17 @@
 import { useCallback, useState } from 'react';
 
-const EXIT_URL = 'http://127.0.0.1:8765/exit';
+const DEFAULT_EXIT_PORT = 8765;
+
+function getExitUrl() {
+  if (typeof window === 'undefined') return `http://127.0.0.1:${DEFAULT_EXIT_PORT}/exit`;
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('s52ExitPort');
+  const parsed = Number(raw);
+  const port = Number.isInteger(parsed) && parsed > 0 && parsed <= 65535
+    ? parsed
+    : DEFAULT_EXIT_PORT;
+  return `http://127.0.0.1:${port}/exit`;
+}
 
 function kioskExitAvailable() {
   if (typeof window === 'undefined') return false;
@@ -15,7 +26,7 @@ export default function KioskExit() {
   const requestExit = useCallback(async () => {
     setErr(null);
     try {
-      const r = await fetch(EXIT_URL, { method: 'POST' });
+      const r = await fetch(getExitUrl(), { method: 'POST' });
       if (!r.ok && r.status !== 204) setErr(`HTTP ${r.status}`);
     } catch (e) {
       setErr('Could not reach exit helper (kiosk script not running?)');

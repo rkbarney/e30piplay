@@ -6,7 +6,7 @@
 # =============================================================================
 set -e
 
-APP_DIR="/home/$USER/s52-display"
+APP_DIR="/home/$USER/tinycarplay"
 SERVICE_USER="$USER"
 
 echo ""
@@ -52,7 +52,7 @@ echo "    Node $(node -v) / npm $(npm -v)"
 echo "[3/8] Installing app..."
 mkdir -p "$APP_DIR"
 # If running from a USB drive or cloned repo, copy everything here.
-# Adjust SOURCE_DIR if your files are elsewhere (e.g. /media/usb/s52-display).
+# Adjust SOURCE_DIR if your files are elsewhere (e.g. /media/usb/tinycarplay).
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 SOURCE_DIR="$(cd "$(dirname -- "$SCRIPT_PATH")" && pwd)"
 rsync -a --exclude node_modules --exclude .git "$SOURCE_DIR/" "$APP_DIR/"
@@ -107,7 +107,7 @@ fi
 
 # ── 5. CarPlay backend service (react-carplay) ────────────────────────────────
 # This service will do nothing until you:
-#   cd ~/s52-display && npm install react-carplay
+#   cd ~/tinycarplay && npm install react-carplay
 #   Then update src/components/CarPlayReceiver.jsx with the real component.
 echo "[5/8] Setting up CarPlay service..."
 sudo tee /etc/systemd/system/s52-carplay.service > /dev/null <<SERVICE
@@ -207,6 +207,7 @@ rm -f "/home/$SERVICE_USER/.config/autostart/s52-kiosk.desktop"
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-launch.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-launch.sh"
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-exit-server.py" "/home/$SERVICE_USER/.local/bin/s52-kiosk-exit-server.py"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
+install -m 755 "$SOURCE_DIR/scripts/s52-boot-branding.sh" "/home/$SERVICE_USER/.local/bin/s52-boot-branding.sh"
 
 cp "$SOURCE_DIR/scripts/s52-display-layout.conf.example" "/home/$SERVICE_USER/.config/s52-display-layout.conf.example"
 if [ ! -f "/home/$SERVICE_USER/.config/s52-display-layout.conf" ]; then
@@ -250,7 +251,7 @@ echo ""
 echo "  HDMI / Wayland layout: ~/.config/s52-display-layout.conf"
 echo ""
 echo "  When Carlinkit dongle arrives:"
-echo "  cd ~/s52-display"
+echo "  cd ~/tinycarplay"
 echo "  npm install react-carplay"
 echo "  (then update CarPlayReceiver.jsx)"
 echo "============================================"
