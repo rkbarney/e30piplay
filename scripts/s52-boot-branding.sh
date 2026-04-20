@@ -77,9 +77,11 @@ EOF
 }
 
 set_default_plymouth_theme() {
-  if command -v update-alternatives >/dev/null 2>&1; then
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "${PLYMOUTH_THEME_FILE}" 200 || true
-    update-alternatives --set default.plymouth "${PLYMOUTH_THEME_FILE}" || true
+  if command -v update-alternatives >/dev/null 2>&1 && [[ -f "${PLYMOUTH_THEME_FILE}" ]]; then
+    if ! update-alternatives --query default.plymouth >/dev/null 2>&1; then
+      update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "${PLYMOUTH_THEME_FILE}" 200
+    fi
+    update-alternatives --set default.plymouth "${PLYMOUTH_THEME_FILE}"
   fi
 
   plymouth-set-default-theme "${PLYMOUTH_THEME_NAME}" -R
@@ -139,6 +141,10 @@ revert_changes() {
   cp "${BACKUP_DIR}/config.txt.bak" "${BOOT_CONFIG}"
   cp "${BACKUP_DIR}/cmdline.txt.bak" "${CMDLINE_CONFIG}"
 
+  if command -v update-alternatives >/dev/null 2>&1; then
+    update-alternatives --remove default.plymouth "${PLYMOUTH_THEME_FILE}" >/dev/null 2>&1 || true
+  fi
+
   if command -v plymouth-set-default-theme >/dev/null 2>&1; then
     plymouth-set-default-theme spinner -R || true
   fi
@@ -166,7 +172,11 @@ status_changes() {
   else
     echo "Custom Plymouth theme exists: no"
   fi
-  echo "Current Plymouth theme: $(plymouth-set-default-theme || true)"
+  if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    echo "Current Plymouth theme: $(plymouth-set-default-theme || true)"
+  else
+    echo "Current Plymouth theme: (plymouth not installed)"
+  fi
   if [[ -f "${BACKUP_DIR}/config.txt.bak" && -f "${BACKUP_DIR}/cmdline.txt.bak" ]]; then
     echo "Backups exist: yes (${BACKUP_DIR})"
   else
