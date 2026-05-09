@@ -63,10 +63,15 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if command -v wlr-randr &>/dev/null; then
-  sleep "$S52_LAYOUT_DELAY"
-  wlr-randr --output "$S52_WLR_OUTPUT" --transform "$S52_WLR_TRANSFORM" --mode "$S52_WLR_MODE" 2>/dev/null || \
-  wlr-randr --output "$S52_WLR_OUTPUT" --transform "$S52_WLR_TRANSFORM" 2>/dev/null || \
-  wlr-randr --output "$S52_WLR_OUTPUT" --mode "$S52_WLR_MODE" 2>/dev/null || true
+  # Retry until the compositor exposes the output (avoids a fixed sleep).
+  for ((i = 1; i <= S52_LAYOUT_DELAY * 5; i++)); do
+    if wlr-randr --output "$S52_WLR_OUTPUT" --transform "$S52_WLR_TRANSFORM" --mode "$S52_WLR_MODE" 2>/dev/null || \
+       wlr-randr --output "$S52_WLR_OUTPUT" --transform "$S52_WLR_TRANSFORM" 2>/dev/null || \
+       wlr-randr --output "$S52_WLR_OUTPUT" --mode "$S52_WLR_MODE" 2>/dev/null; then
+      break
+    fi
+    sleep 0.2
+  done
 fi
 
 if [[ "${S52_WARP_CURSOR_TO_KIOSK_OUTPUT}" == "1" ]] && command -v xdotool &>/dev/null && command -v wlr-randr &>/dev/null; then
@@ -101,14 +106,14 @@ PY
   fi
 fi
 
-sleep 1
 killall wf-panel-pi 2>/dev/null || true
 killall lxpanel 2>/dev/null || true
 killall pcmanfm 2>/dev/null || true
-sleep 0.5
+# Suppress X11 screen blanking if running under X11.
 xset s off 2>/dev/null || true
 xset -dpms 2>/dev/null || true
 xset s noblank 2>/dev/null || true
+# Hide cursor under X11. Under Wayland the touchscreen driver suppresses it.
 unclutter -idle 0.1 -root 2>/dev/null &
 
 if [[ -f "${EXIT_PY}" ]]; then
@@ -139,7 +144,14 @@ if [[ -x "/usr/lib/chromium/chromium" ]]; then
   CHROMIUM_BIN="/usr/lib/chromium/chromium"
 fi
 
-"${CHROMIUM_BIN}" \
+# systemd-inhibit blocks idle and sleep at the logind level, preventing screen
+# blank under both X11 and Wayland regardless of compositor idle settings.
+INHIBIT_CMD=""
+if command -v systemd-inhibit &>/dev/null; then
+  INHIBIT_CMD="systemd-inhibit --what=idle:sleep --who=s52-kiosk --why=kiosk-mode --mode=block"
+fi
+
+${INHIBIT_CMD} "${CHROMIUM_BIN}" \
   --user-data-dir="${S52_CHROMIUM_USER_DATA_DIR}" \
   --password-store=basic \
   --kiosk \

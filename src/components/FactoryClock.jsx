@@ -14,7 +14,7 @@ function polarToXY(angleDeg, radius) {
   };
 }
 
-export default function FactoryClock({ onMinus, onPlus }) {
+export default function FactoryClock({ onMinus, onPlus, showButtons = true }) {
   const [time, setTime] = useState(() => new Date());
 
   useEffect(() => {
@@ -100,11 +100,12 @@ export default function FactoryClock({ onMinus, onPlus }) {
         <circle cx={CX} cy={CY} r={3.5} fill="#111" />
       </svg>
 
-      {/* OEM-style -/+ buttons */}
-      <div style={styles.buttons}>
-        <button style={styles.btn} onClick={onMinus}>−</button>
-        <button style={styles.btn} onClick={onPlus}>+</button>
-      </div>
+      {showButtons && (
+        <div style={styles.buttons}>
+          <button style={styles.btn} onClick={onMinus}>−</button>
+          <button style={styles.btn} onClick={onPlus}>+</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -112,6 +113,7 @@ export default function FactoryClock({ onMinus, onPlus }) {
 FactoryClock.propTypes = {
   onMinus: PropTypes.func,
   onPlus: PropTypes.func,
+  showButtons: PropTypes.bool,
 };
 
 const styles = {

@@ -26,7 +26,7 @@ export default function LogoIntro({ onComplete }) {
     <div style={styles.root}>
       {/* Clock fades in from underneath as logo fades out */}
       <div style={styles.clockLayer}>
-        <FactoryClock />
+        <FactoryClock showButtons={false} />
       </div>
 
       {/* Logo layer — spins, settles, fades */}

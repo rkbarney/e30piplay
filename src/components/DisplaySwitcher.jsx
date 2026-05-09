@@ -7,7 +7,7 @@ import AnalogClock     from './AnalogClock';
 import CarPlayReceiver from './CarPlayReceiver';
 
 // Faces cycled by the − button
-const CLOCK_FACES = ['factory', 'digital', 'clock'];
+const CLOCK_FACES = ['factory', 'digital', 'analog'];
 
 export default function DisplaySwitcher() {
   const [screen,    setScreen]    = useState('boot');
@@ -43,7 +43,7 @@ export default function DisplaySwitcher() {
         <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
       {isClockScreen && clockFace === 'digital' &&
         <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {isClockScreen && clockFace === 'clock' &&
+      {isClockScreen && clockFace === 'analog' &&
         <AnalogClock  onMinus={handleMinus} onPlus={handlePlus} />}
     </div>
   );
