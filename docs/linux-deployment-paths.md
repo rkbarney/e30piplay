@@ -22,8 +22,9 @@ become a problem.
 **Rough edges:**
 - Desktop environment is loaded and immediately killed — wasteful
 - `xset` / `xdotool` / `unclutter` in the launch script are X11 tools; they silently
-  fail under Wayland (see bugs doc)
-- Screen blanking is not actually suppressed under Wayland via the current approach
+  fail under Wayland but are harmless no-ops
+- Screen blanking is suppressed via `systemd-inhibit --what=idle:sleep` wrapping
+  Chromium, which works under both X11 and Wayland at the logind level
 
 ---
 

@@ -53,8 +53,9 @@ EXIT_SERVER_PID=""
 CHROMIUM_PID=""
 
 cleanup() {
-  [[ -n "${STATIC_SRV_PID:-}" ]] && kill "${STATIC_SRV_PID}" 2>/dev/null || true
+  [[ -n "${STATIC_SRV_PID:-}" ]]  && kill "${STATIC_SRV_PID}"  2>/dev/null || true
   [[ -n "${EXIT_SERVER_PID:-}" ]] && kill "${EXIT_SERVER_PID}" 2>/dev/null || true
+  [[ -n "${INHIBIT_PID:-}" ]]     && kill "${INHIBIT_PID}"     2>/dev/null || true
   if [[ -n "${CHROMIUM_PID:-}" ]] && kill -0 "${CHROMIUM_PID}" 2>/dev/null; then
     kill "${CHROMIUM_PID}" 2>/dev/null || true
   fi
@@ -64,7 +65,10 @@ trap cleanup EXIT INT TERM
 
 if command -v wlr-randr &>/dev/null; then
   # Retry until the compositor exposes the output (avoids a fixed sleep).
-  for ((i = 1; i <= S52_LAYOUT_DELAY * 5; i++)); do
+  # Clamp to at least 1 attempt so S52_LAYOUT_DELAY=0 still configures the output.
+  _wlr_retries=$(( S52_LAYOUT_DELAY * 5 ))
+  (( _wlr_retries < 1 )) && _wlr_retries=1
+  for ((i = 1; i <= _wlr_retries; i++)); do
     if wlr-randr --output "$S52_WLR_OUTPUT" --transform "$S52_WLR_TRANSFORM" --mode "$S52_WLR_MODE" 2>/dev/null || \
        wlr-randr --output "$S52_WLR_OUTPUT" --transform "$S52_WLR_TRANSFORM" 2>/dev/null || \
        wlr-randr --output "$S52_WLR_OUTPUT" --mode "$S52_WLR_MODE" 2>/dev/null; then
@@ -144,14 +148,17 @@ if [[ -x "/usr/lib/chromium/chromium" ]]; then
   CHROMIUM_BIN="/usr/lib/chromium/chromium"
 fi
 
-# systemd-inhibit blocks idle and sleep at the logind level, preventing screen
-# blank under both X11 and Wayland regardless of compositor idle settings.
-INHIBIT_CMD=""
+# Hold the idle/sleep inhibit lock in a separate background process so that
+# $! captures Chromium's PID, not systemd-inhibit's. Without this, the exit
+# server and cleanup trap would SIGTERM the wrong process.
+INHIBIT_PID=""
 if command -v systemd-inhibit &>/dev/null; then
-  INHIBIT_CMD="systemd-inhibit --what=idle:sleep --who=s52-kiosk --why=kiosk-mode --mode=block"
+  systemd-inhibit --what=idle:sleep --who=s52-kiosk --why=kiosk-mode --mode=block \
+    sleep infinity &
+  INHIBIT_PID=$!
 fi
 
-${INHIBIT_CMD} "${CHROMIUM_BIN}" \
+"${CHROMIUM_BIN}" \
   --user-data-dir="${S52_CHROMIUM_USER_DATA_DIR}" \
   --password-store=basic \
   --kiosk \
