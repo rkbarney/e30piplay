@@ -15,6 +15,8 @@ function getExitUrl() {
 
 function kioskExitAvailable() {
   if (typeof window === 'undefined') return false;
+  // Hide during Vite dev — Pi kiosk uses a production build + localhost helper.
+  if (import.meta.env.DEV) return false;
   const { hostname } = window.location;
   return hostname === 'localhost' || hostname === '127.0.0.1';
 }
@@ -22,14 +24,19 @@ function kioskExitAvailable() {
 export default function KioskExit() {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState(null);
+  const [errSoft, setErrSoft] = useState(false);
 
   const requestExit = useCallback(async () => {
     setErr(null);
+    setErrSoft(false);
     try {
       const r = await fetch(getExitUrl(), { method: 'POST' });
       if (!r.ok && r.status !== 204) setErr(`HTTP ${r.status}`);
-    } catch (e) {
-      setErr('Could not reach exit helper (kiosk script not running?)');
+    } catch {
+      setErrSoft(true);
+      setErr(
+        'No kiosk exit helper on port 8765 — normal when previewing on Mac or Docker. Close this tab instead. On the Pi, the kiosk launcher starts s52-kiosk-exit-server.py with Chromium.',
+      );
     }
   }, []);
 
@@ -40,7 +47,11 @@ export default function KioskExit() {
       <button
         type="button"
         aria-label="Exit kiosk"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setErr(null);
+          setErrSoft(false);
+          setOpen(true);
+        }}
         style={styles.hit}
       >
         exit
@@ -49,7 +60,7 @@ export default function KioskExit() {
         <div style={styles.overlay} role="dialog" aria-modal="true">
           <div style={styles.card}>
             <p style={styles.prompt}>Close kiosk browser?</p>
-            {err && <p style={styles.err}>{err}</p>}
+            {err && <p style={errSoft ? styles.hint : styles.err}>{err}</p>}
             <div style={styles.row}>
               <button type="button" style={styles.no} onClick={() => setOpen(false)}>
                 Cancel
@@ -104,6 +115,7 @@ const styles = {
   },
   prompt: { marginBottom: 12, fontSize: 13 },
   err: { color: '#ff3333', fontSize: 11, marginBottom: 10 },
+  hint: { color: '#cc9900', fontSize: 11, marginBottom: 10, lineHeight: 1.35 },
   row: { display: 'flex', gap: 10, justifyContent: 'flex-end' },
   no: {
     padding: '8px 14px',
