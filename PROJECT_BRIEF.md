@@ -38,7 +38,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Layer | Technology |
 |---|---|
-| OS | Raspberry Pi OS (64-bit) |
+| OS | Raspberry Pi OS Lite (64-bit) + cage |
 | UI framework | React + Vite |
 | CarPlay receiver | react-carplay (github.com/rhysmorgan134/react-carplay) |
 | Static server | nginx |
@@ -122,7 +122,7 @@ ACC 12V (stereo wire)
 ## Project Structure
 
 ```
-tinycarplay/
+e30piplay/
 ├── src/
 │   ├── App.jsx
 │   ├── global.css
@@ -136,7 +136,7 @@ tinycarplay/
 │       └── CarPlayReceiver.jsx   # CarPlay (placeholder → react-carplay)
 ├── public/
 │   └── BMW-Logo-1970-1989.png
-├── setup.sh                      # One-shot Pi setup script
+├── setup.sh                      # Pi OS Lite + cage + nginx (one shot)
 ├── carplay-server.js             # CarPlay backend (placeholder)
 ├── SHOPPING_LIST.md
 └── PROJECT_BRIEF.md
@@ -159,16 +159,17 @@ DevTools → Device toolbar → Custom → **320 × 480**
 ## Pi Deployment
 
 ```bash
-# 1. Flash Pi OS to SD card (Pi Imager, enable SSH)
-# 2. Boot Pi, SSH in, copy project folder
+# 1. Flash Pi OS Lite (64-bit) with SSH (Pi Imager)
+# 2. Clone repo to ~/e30piplay
 # 3. Run setup (once):
 bash setup.sh
 sudo reboot
 
 # 4. When Carlinkit dongle arrives:
-cd ~/tinycarplay
+cd ~/e30piplay
 npm install react-carplay
 # Update src/components/CarPlayReceiver.jsx
 npm run build
-sudo systemctl restart s52-carplay nginx
+sudo rsync -a --delete dist/ /var/www/s52-display/
+sudo systemctl restart s52-carplay nginx s52-cage-kiosk
 ```

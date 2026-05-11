@@ -16,8 +16,8 @@ placeholder flow designed for Carlinkit + `react-carplay`.
 
 - React 18 + Vite
 - ESLint (React + Hooks rules)
-- Chromium kiosk mode on Raspberry Pi OS
-- Optional Nginx + systemd services via `setup.sh`
+- Chromium kiosk (Wayland / cage) on Raspberry Pi OS Lite
+- Nginx + systemd via `setup.sh`
 
 ## Project layout
 
@@ -38,15 +38,13 @@ placeholder flow designed for Carlinkit + `react-carplay`.
 │       ├── ViewportScale.jsx
 │       └── KioskExit.jsx
 ├── docker/
-│   └── phase2-web/
+│   └── web/
 ├── public/
 ├── scripts/
-├── docker-compose.phase2.yml
+├── docker-compose.yml
 ├── setup.sh
-├── setup-phase2.sh
 ├── docs/
-│   ├── linux-deployment-paths.md
-│   └── phase2-getting-started.md
+│   └── linux-deployment-paths.md
 └── PROJECT_BRIEF.md
 ```
 
@@ -59,26 +57,20 @@ npm run dev
 
 Open the Vite URL and test with a 320x480 viewport for realistic layout.
 
-### Phase 2 stack on macOS (Docker — nginx like the Pi)
+### Docker on macOS (nginx + built UI only)
 
-Phase 2 targets Raspberry Pi OS **Lite** + **nginx** + **cage** + Chromium (see [docs/linux-deployment-paths.md](docs/linux-deployment-paths.md)). Docker Desktop does not expose a host Wayland socket the way a Linux desktop does, so **macOS is best used to iterate on the built UI served by nginx**; cage + fullscreen Chromium should be exercised on the Pi (or a Linux machine) before you rely on them in the car.
+The Pi stack is **Lite + cage + Chromium**; Docker Desktop on macOS cannot mirror that fully. Use Compose to serve the **same nginx-style static bundle** as the Pi for UI checks only ([docs/linux-deployment-paths.md](docs/linux-deployment-paths.md)).
 
-1. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) and start it (Apple Silicon is a good match for `linux/arm64` Pi images; Intel Mac works too for this nginx-only setup).
+1. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) and start it.
 2. From the repo root:
 
    ```bash
-   docker compose -f docker-compose.phase2.yml up --build
+   docker compose up --build
    ```
 
-   Or:
+   Or: `./scripts/docker-nginx-up.sh`
 
-   ```bash
-   ./scripts/docker-phase2-nginx-up.sh
-   ```
-
-3. Open [http://localhost:8080](http://localhost:8080) and use devtools device mode (~320×480) for layout checks.
-
-On a **Linux** host with Wayland, you can smoke-test **cage + Chromium** against local nginx using the command in `docs/linux-deployment-paths.md` (Docker section under Phase 2).
+3. Open [http://localhost:8080](http://localhost:8080) — devtools device mode ~320×480.
 
 ## Quality checks
 
@@ -89,31 +81,38 @@ npm run build
 
 ## Raspberry Pi deployment
 
-### Phase 1 — Pi OS Desktop (current default installer)
+**Image:** [Raspberry Pi Imager](https://www.raspberrypi.com/software/) → **Raspberry Pi OS Lite (64-bit)** → enable **SSH**, user, hostname → flash SD.
 
-The setup script installs system dependencies, builds the app, publishes `dist`
-to Nginx root, and installs helper scripts/services.
+**Install path:** clone this repo to **`~/e30piplay`** (default used by `setup.sh`). To use another directory, run `APP_DIR=/path/to/repo bash setup.sh`.
 
 ```bash
+cd ~/e30piplay   # your clone
 bash setup.sh
+sudo reboot
 ```
 
-After setup, start the kiosk UI manually from desktop:
+`setup.sh` installs **cage**, **seatd**, **Chromium**, **nginx**, **Node**, publishes `dist/` to `/var/www/s52-display`, applies **`display_rotate`** (and optional custom HDMI mode) in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`** (kiosk at boot), and scaffolds CarPlay placeholder + udev. Override rotation before setup: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`.
+
+**Iterate without re-flashing:**
 
 ```bash
-s52-car-display
+cd ~/e30piplay && git pull && npm ci && npm run build
+sudo rsync -a --delete dist/ /var/www/s52-display/
+sudo systemctl restart s52-cage-kiosk
 ```
 
-### Phase 2 — Pi OS Lite + cage (no desktop)
+**SSH helpers**
 
-Flash **Raspberry Pi OS Lite (64-bit)**, then follow **[docs/phase2-getting-started.md](docs/phase2-getting-started.md)** and run **`bash setup-phase2.sh`** on the Pi (auto kiosk via systemd).
+- Restart kiosk: `s52-car-display` (uses sudo).
+- Logs: `journalctl -u s52-cage-kiosk -f`
+- Stop UI for maintenance: `sudo systemctl stop s52-cage-kiosk`
 
-Useful runtime files:
+Runtime references:
 
-- Kiosk launcher: `scripts/s52-kiosk-launch.sh`
-- Exit helper server: `scripts/s52-kiosk-exit-server.py`
-- Display config template: `scripts/s52-display-layout.conf.example`
-- Boot branding helper: `scripts/s52-boot-branding.sh`
+- Cage Chromium wrapper: `scripts/s52-kiosk-inner.sh` (installed to `~/.local/bin`)
+- Exit helper: `scripts/s52-kiosk-exit-server.py`
+- Optional kiosk URL / ports: `scripts/s52-display-layout.conf.example` → `~/.config/s52-display-layout.conf`
+- Boot branding: `scripts/s52-boot-branding.sh`
 
 ## Factory-style boot branding (hide Raspberry Pi login/branding)
 
@@ -152,12 +151,12 @@ sudo reboot
 When the dongle and dependency are ready:
 
 ```bash
+cd ~/e30piplay
 npm install react-carplay
 ```
 
-Then replace the placeholder renderer with the real `react-carplay` component.
+Then replace the placeholder renderer with the real `react-carplay` component; rebuild and `rsync` `dist/` as above.
 
 ## Notes
 
-- This repository currently uses the local folder name `tinycarplay`.
-- You can publish it to GitHub as `e30piplay` without changing runtime behavior.
+- On the Pi, `setup.sh` defaults to **`~/e30piplay`** for the installed copy (`APP_DIR`).

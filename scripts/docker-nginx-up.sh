@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Start Phase 2 nginx container (built React app on port 8080).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -9,4 +8,4 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-exec docker compose -f docker-compose.phase2.yml up --build "$@"
+exec docker compose up --build "$@"
