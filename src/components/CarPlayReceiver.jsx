@@ -15,12 +15,28 @@
  * just renders whatever the dongle streams.
  */
 
-export default function CarPlayReceiver() {
+import PropTypes from 'prop-types';
+
+export default function CarPlayReceiver({ onBack }) {
   return (
     <div style={styles.root}>
       {/* Status bar */}
       <div style={styles.statusBar}>
-        <span style={styles.brand}>S52 SOLUTIONS</span>
+        <div style={styles.statusLeft}>
+          {typeof onBack === 'function' && (
+            <button
+              type="button"
+              style={styles.backBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                onBack(e);
+              }}
+            >
+              ← back
+            </button>
+          )}
+          <span style={styles.brand}>S52 SOLUTIONS</span>
+        </div>
         <span style={styles.mode}>CARPLAY</span>
       </div>
 
@@ -68,6 +84,10 @@ export default function CarPlayReceiver() {
   );
 }
 
+CarPlayReceiver.propTypes = {
+  onBack: PropTypes.func,
+};
+
 const styles = {
   root: {
     width: '320px',
@@ -77,6 +97,7 @@ const styles = {
     flexDirection: 'column',
     fontFamily: "'Courier New', monospace",
     overflow: 'hidden',
+    position: 'relative',
   },
   statusBar: {
     height: '22px',
@@ -85,18 +106,44 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 10px',
+    padding: '0 8px',
+    gap: '6px',
+    flexShrink: 0,
+  },
+  statusLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
+    flex: 1,
+  },
+  backBtn: {
+    flexShrink: 0,
+    padding: '1px 5px',
+    fontFamily: 'inherit',
+    fontSize: '8px',
+    lineHeight: 1.2,
+    color: '#ffb300',
+    background: 'rgba(0,0,0,0.35)',
+    border: '1px solid #3a2800',
+    borderRadius: '2px',
+    cursor: 'pointer',
+    letterSpacing: '0.06em',
   },
   brand: {
     color: '#ffb300',
     fontSize: '9px',
     letterSpacing: '0.2em',
     fontWeight: 'bold',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   mode: {
     color: '#ffb300',
     fontSize: '9px',
     letterSpacing: '0.15em',
+    flexShrink: 0,
   },
   main: {
     flex: 1,
