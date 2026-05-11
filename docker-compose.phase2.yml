@@ -1,0 +1,13 @@
+# Phase 2 dev stack on macOS (and Linux): production-like nginx serving the Vite build.
+# Matches Pi OS Lite + nginx; Chromium/cage still validated on the Pi or a Linux machine.
+#
+#   docker compose -f docker-compose.phase2.yml up --build
+#   open http://localhost:8080  # resize devtools to ~320×480 for layout checks
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/phase2-web/Dockerfile
+    ports:
+      - "8080:80"

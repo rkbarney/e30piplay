@@ -37,8 +37,11 @@ placeholder flow designed for Carlinkit + `react-carplay`.
 │       ├── CarPlayReceiver.jsx
 │       ├── ViewportScale.jsx
 │       └── KioskExit.jsx
+├── docker/
+│   └── phase2-web/
 ├── public/
 ├── scripts/
+├── docker-compose.phase2.yml
 ├── setup.sh
 └── PROJECT_BRIEF.md
 ```
@@ -51,6 +54,27 @@ npm run dev
 ```
 
 Open the Vite URL and test with a 320x480 viewport for realistic layout.
+
+### Phase 2 stack on macOS (Docker — nginx like the Pi)
+
+Phase 2 targets Raspberry Pi OS **Lite** + **nginx** + **cage** + Chromium (see [docs/linux-deployment-paths.md](docs/linux-deployment-paths.md)). Docker Desktop does not expose a host Wayland socket the way a Linux desktop does, so **macOS is best used to iterate on the built UI served by nginx**; cage + fullscreen Chromium should be exercised on the Pi (or a Linux machine) before you rely on them in the car.
+
+1. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) and start it (Apple Silicon is a good match for `linux/arm64` Pi images; Intel Mac works too for this nginx-only setup).
+2. From the repo root:
+
+   ```bash
+   docker compose -f docker-compose.phase2.yml up --build
+   ```
+
+   Or:
+
+   ```bash
+   ./scripts/docker-phase2-nginx-up.sh
+   ```
+
+3. Open [http://localhost:8080](http://localhost:8080) and use devtools device mode (~320×480) for layout checks.
+
+On a **Linux** host with Wayland, you can smoke-test **cage + Chromium** against local nginx using the command in `docs/linux-deployment-paths.md` (Docker section under Phase 2).
 
 ## Quality checks
 
