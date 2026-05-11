@@ -91,9 +91,12 @@ html, body {
   background: var(--bg);
 }
 
+.viewport-scale-slot {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .viewport-scale-inner {
   position: relative;
-  flex-shrink: 0;
-  transform-origin: center center;
   overflow: hidden;
 }

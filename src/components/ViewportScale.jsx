@@ -12,8 +12,9 @@ export default function ViewportScale({ children }) {
   const [scale, setScale] = useState(1);
 
   const update = useCallback(() => {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vv = window.visualViewport;
+    const vw = vv?.width ?? window.innerWidth;
+    const vh = vv?.height ?? window.innerHeight;
     const s = Math.min(vw / DW, vh / DH);
     setScale(Number.isFinite(s) && s > 0 ? s : 1);
   }, []);
@@ -21,21 +22,43 @@ export default function ViewportScale({ children }) {
   useEffect(() => {
     update();
     window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+    };
   }, [update]);
+
+  const slotW = DW * scale;
+  const slotH = DH * scale;
 
   return (
     <div className="viewport-scale-outer">
+      {/* Slot is the real painted size. Flex centers this instead of the pre-scale
+          320×480 box — avoids asymmetric clipping when scale≠1 and overflow:hidden
+          interacted with transform on the same element (Chrome device mode). */}
       <div
-        className="viewport-scale-inner"
+        className="viewport-scale-slot"
         style={{
-          width: DW,
-          height: DH,
-          transform: `scale(${scale})`,
+          width: slotW,
+          height: slotH,
         }}
       >
-        {children}
-        <KioskExit />
+        <div
+          className="viewport-scale-inner"
+          style={{
+            width: DW,
+            height: DH,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {children}
+          <KioskExit />
+        </div>
       </div>
     </div>
   );
