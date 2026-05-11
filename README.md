@@ -85,8 +85,10 @@ npm run build
 
 ## Raspberry Pi deployment
 
-The one-shot setup script installs system dependencies, builds the app, publishes
-`dist` to Nginx root, and installs helper scripts/services.
+### Phase 1 — Pi OS Desktop (current default installer)
+
+The setup script installs system dependencies, builds the app, publishes `dist`
+to Nginx root, and installs helper scripts/services.
 
 ```bash
 bash setup.sh
@@ -97,6 +99,10 @@ After setup, start the kiosk UI manually from desktop:
 ```bash
 s52-car-display
 ```
+
+### Phase 2 — Pi OS Lite + cage (no desktop)
+
+Flash **Raspberry Pi OS Lite (64-bit)**, then follow **[docs/phase2-getting-started.md](docs/phase2-getting-started.md)** and run **`bash setup-phase2.sh`** on the Pi (auto kiosk via systemd).
 
 Useful runtime files:
 

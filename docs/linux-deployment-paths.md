@@ -30,7 +30,7 @@ become a problem.
 
 ## Phase 2 — Pi OS Lite + cage
 
-**Status:** Not started. Do this when the car install is stable.
+**Status:** Install automation lives in **`setup-phase2.sh`** + **[phase2-getting-started.md](phase2-getting-started.md)** (flash Lite → SSH → run script → reboot).
 
 **How it works:**
 - Raspberry Pi OS **Lite** 64-bit (no desktop, same kernel/drivers/apt ecosystem)
