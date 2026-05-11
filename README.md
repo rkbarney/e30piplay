@@ -43,6 +43,10 @@ placeholder flow designed for Carlinkit + `react-carplay`.
 ├── scripts/
 ├── docker-compose.phase2.yml
 ├── setup.sh
+├── setup-phase2.sh
+├── docs/
+│   ├── linux-deployment-paths.md
+│   └── phase2-getting-started.md
 └── PROJECT_BRIEF.md
 ```
 
