@@ -206,13 +206,13 @@ sudo reboot
 
 **`npm install react-carplay` will 404.** The project [rhysmorgan134/react-carplay](https://github.com/rhysmorgan134/react-carplay) is an **Electron** application; it is **not** published as an npm package you can drop into this Vite + Chromium kiosk.
 
-**On the Pi today:** **`setup.sh`** installs the upstream **AppImage** by default (`~/.local/bin/react-carplay`). Then use **`+`** → **Open CarPlay (Electron)** in the kiosk. That POSTs **`/api/launch-react-carplay`**; **`carplay-server.cjs`** stops **`s52-cage-kiosk`** and starts **`s52-cage-react-carplay`** (**cage → react-carplay --no-sandbox**). Quitting Electron restores the kiosk (**`ExecStopPost`**).
+**On the Pi today:** **`setup.sh`** installs the upstream **AppImage** by default (`~/.local/bin/react-carplay`). Tap **`+`** on the clock — CarPlay opens automatically (**POST `/api/launch-react-carplay`**); **`carplay-server.cjs`** stops **`s52-cage-kiosk`** and starts **`s52-cage-react-carplay`** (**cage → react-carplay --no-sandbox**). Quitting Electron restores the kiosk (**`ExecStopPost`**).
 
 **SSH escape hatch:** `sudo /usr/local/bin/s52-carplay-switch.sh return`.
 
 **Still not implemented:** decoding CarPlay purely inside the Chromium window (would need e.g. **`node-carplay`** + video/WebSocket bridge).
 
-**Desktop dev:** set **`VITE_S52_API_BASE=http://your-pi-host`** when running **`npm run dev`** so **Open CarPlay** POSTs hit the Pi launcher API.
+**Desktop dev:** set **`VITE_S52_API_BASE=http://your-pi-host`** when running **`npm run dev`** so the **`+`** CarPlay screen’s POST hits the Pi launcher API.
 
 **If AppImage failed during setup** (no network, wrong arch): `bash ~/e30piplay/scripts/install-react-carplay-appimage.sh` then **`sudo systemctl restart s52-cage-kiosk`** if needed.
 
