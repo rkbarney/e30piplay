@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+  labwc config for the S52 kiosk session.
+
+  windowRule: the react-carplay AppImage is launched at boot but should be
+  invisible until the user taps `+` on the clock. Iconify-on-first-map keeps
+  it warm without ever flashing the Electron loading screen at the user.
+
+  IMPORTANT — do NOT set skipTaskbar / skipWindowSwitcher / ignoreFocusRequest:
+  labwc translates them into zwlr_foreign_toplevel_handle_v1 state bits, and
+  wlrctl (which we use to flip CarPlay in/out) then refuses to act on the
+  handle. Iconify alone is enough to prevent focus-steal.
+-->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <theme><cornerRadius>0</cornerRadius></theme>
+  <focus><followMouse>no</followMouse></focus>
+  <windowRules>
+    <!--
+      Iconify the react-carplay AppImage as soon as labwc maps it (cold-boot
+      keepalive trick). serverDecoration="no" suppresses labwc's white SSD
+      titlebar frame so the splash → kiosk transition stays continuous.
+    -->
+    <windowRule identifier="react-carplay" serverDecoration="no">
+      <action name="Iconify"/>
+    </windowRule>
+  </windowRules>
+</openbox_config>

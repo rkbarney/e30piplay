@@ -16,7 +16,7 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 
 - React 18 + Vite
 - ESLint (React + Hooks rules)
-- Chromium kiosk (Wayland / cage) on Raspberry Pi OS Lite
+- Chromium kiosk (Wayland / labwc, multi-client) on Raspberry Pi OS Lite
 - Nginx + systemd via `setup.sh`
 
 ## Project layout
@@ -106,7 +106,7 @@ sudo reboot
 (Use `main` instead of `experiment/pios-lite-cage` if you deploy from that branch.)
 
 
-`setup.sh` is intended as a **single appliance installer**: it installs **cage**, **seatd**, **Chromium**, **nginx**, **Node**, publishes **`dist/`** to **`/var/www/s52-display`**, **`location /api/`** → **`carplay-server.cjs`** (POST switches kiosk ↔ Electron CarPlay), **downloads the upstream react-carplay AppImage** (unless **`S52_SKIP_REACT_CARPLAY_APPIMAGE=1`** for offline installs), applies **`display_rotate`** / optional HDMI mode in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`**, **`s52-carplay`**, **`s52-cage-react-carplay`** (on-demand), **TTY1 autologin**, Carlinkit **udev**, and **NOPASSWD** **`/usr/local/bin/s52-carplay-switch.sh`**. Override rotation: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`. AppImage version: **`REACT_CARPLAY_VERSION=…`** (default **4.0.5**).
+`setup.sh` is intended as a **single appliance installer**: it installs **labwc**, **wlrctl**, **seatd**, **Chromium**, **nginx**, **Node**, publishes **`dist/`** to **`/var/www/s52-display`**, **`location /api/`** → **`carplay-server.cjs`** (POST flips labwc focus kiosk ↔ Electron CarPlay via `wlrctl`), **downloads the upstream react-carplay AppImage** (unless **`S52_SKIP_REACT_CARPLAY_APPIMAGE=1`** for offline installs), applies **`display_rotate`** / optional HDMI mode in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`** (runs labwc; Chromium **and** the AppImage are clients), **`s52-carplay`**, **TTY1 autologin**, Carlinkit **udev**, and **NOPASSWD** **`/usr/local/bin/s52-carplay-switch.sh`**. labwc autostart and rc.xml are installed to `~/.config/labwc/`. Override rotation: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`. AppImage version: **`REACT_CARPLAY_VERSION=…`** (default **4.0.5**).
 
 **Already ran `setup.sh` before autologin was added?** Over SSH (as the user that should autologin):
 
@@ -167,8 +167,10 @@ EGL warnings from cage alone are often harmless.
 
 Runtime references:
 
-- Cage Chromium wrapper: `scripts/s52-kiosk-inner.sh` (installed to `~/.local/bin`)
-- Cage + Electron CarPlay: `scripts/s52-react-carplay-inner.sh`, **`carplay-server.cjs`**, **`scripts/s52-carplay-switch.sh`** → **`/usr/local/bin/s52-carplay-switch.sh`**
+- labwc autostart (launches Chromium + AppImage as siblings): `scripts/s52-labwc-autostart.sh` → `~/.config/labwc/autostart`
+- labwc rc.xml (windowRule iconifies AppImage on first map): `scripts/s52-labwc-rc.xml` → `~/.config/labwc/rc.xml`
+- Chromium wrapper (foreground kiosk window): `scripts/s52-kiosk-inner.sh` (installed to `~/.local/bin`)
+- CarPlay focus bridge: **`carplay-server.cjs`** + **`scripts/s52-carplay-switch.sh`** → **`/usr/local/bin/s52-carplay-switch.sh`** (`wlrctl toplevel focus|minimize app_id:react-carplay`)
 - Exit helper: `scripts/s52-kiosk-exit-server.py`
 - Optional kiosk URL / ports: `scripts/s52-display-layout.conf.example` → `~/.config/s52-display-layout.conf`
 - Boot branding: `scripts/s52-boot-branding.sh`
@@ -208,7 +210,7 @@ sudo reboot
 
 **`npm install react-carplay` will 404.** The project [rhysmorgan134/react-carplay](https://github.com/rhysmorgan134/react-carplay) is an **Electron** application; it is **not** published as an npm package you can drop into this Vite + Chromium kiosk.
 
-**On the Pi today:** **`setup.sh`** installs the upstream **AppImage** by default (`~/.local/bin/react-carplay`). Tap **`+`** on the clock — CarPlay opens automatically (**POST `/api/launch-react-carplay`**); **`carplay-server.cjs`** stops **`s52-cage-kiosk`** and starts **`s52-cage-react-carplay`** (**cage → react-carplay --no-sandbox**). Quitting Electron restores the kiosk (**`ExecStopPost`**).
+**On the Pi today:** **`setup.sh`** installs the upstream **AppImage** by default (`~/.local/bin/react-carplay`). The AppImage is **pre-loaded at boot** as a sibling labwc client of Chromium (auto-iconified by a windowRule on `react-carplay`), so by the time the user taps **`+`** the dongle-detection / "connecting phone" splash is already past. Tap **`+`** → **POST `/api/launch-react-carplay`** → **`carplay-server.cjs`** runs **`wlrctl toplevel focus app_id:react-carplay`** — instant focus, no service churn, no terminal flash, no white loading screen. Return path: **`/api/return-to-kiosk`** → **`wlrctl toplevel minimize app_id:react-carplay`**.
 
 **SSH escape hatch:** `sudo /usr/local/bin/s52-carplay-switch.sh return`.
 
