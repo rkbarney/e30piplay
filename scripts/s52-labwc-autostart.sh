@@ -10,9 +10,10 @@
 # true and the React splash hung forever.
 #
 # We start three clients of the labwc session:
-#   1. swaybg — solid-black wallpaper layer, kills Chromium's pre-CSS
-#      white first-paint flash (Chromium runs with a transparent window
-#      background via --default-background-color=00000000).
+#   1. swaybg — solid-black wallpaper layer; we sleep briefly after it so
+#      its surface commits before Chromium maps (avoids a one-frame race
+#      with labwc's empty scene). Chromium uses opaque black via
+#      --default-background-color=000000 in s52-kiosk-inner.sh.
 #   2. Chromium kiosk (s52-kiosk-inner.sh) — the visible window on boot.
 #   3. The upstream react-carplay AppImage — pre-loaded but auto-iconified
 #      by the windowRule in ~/.config/labwc/rc.xml. The user never sees its
@@ -30,12 +31,14 @@ CARPLAY_LAUNCHER="${HOME}/.local/bin/react-carplay"
 CARPLAY_LOG="${S52_CARPLAY_LOG:-/tmp/react-carplay.log}"
 CARPLAY_START_DELAY="${S52_CARPLAY_START_DELAY:-4}"
 
-# Solid-black background layer underneath every client (kills Chromium's
-# pre-CSS white first-paint flash, since Chromium runs with a transparent
-# window background — see --default-background-color=00000000).
+# Solid-black background layer underneath every client.
 if command -v swaybg >/dev/null 2>&1; then
   swaybg --color '#000000' >/dev/null 2>&1 &
 fi
+# Let swaybg win the first-frame race vs labwc's initial clear before
+# Chromium maps its toplevel (tunable: S52_SWAYBG_SETTLE_SEC, default 0.2).
+SWAYBG_SETTLE="${S52_SWAYBG_SETTLE_SEC:-0.2}"
+sleep "${SWAYBG_SETTLE}" 2>/dev/null || sleep 1
 
 # Hide the pointer when not in use.
 if command -v unclutter >/dev/null 2>&1; then
