@@ -54,9 +54,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === 'GET' && url.pathname === '/') {
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('S52 CarPlay launcher API\nPOST /api/launch-react-carplay  POST /api/return-to-kiosk\n');
+    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/api/health')) {
+      json(res, 200, { ok: true, service: 's52-carplay', pid: process.pid });
       return;
     }
 
