@@ -21,7 +21,7 @@ const BOOT_MESSAGES = [
   '[  0.312]  AUDIO: USB DAC → 3.5mm AUX — OK',
   '[  0.445]  USB:  Carlinkit dongle — detected',
   '[  0.520]  NET:  Wireless interface — up',
-  '[  0.680]  CARPLAY: react-carplay receiver — loaded',
+  '[  0.680]  CARPLAY: upstream Electron receiver — see github.com/rhysmorgan134/react-carplay',
   '[  0.891]  ENGINE: S52 3.2L I6 — all systems nominal',
   '[  1.120]  M-TECH: Sport mode — engaged',
   '[  1.340]  S52 Solutions display — READY',

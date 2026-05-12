@@ -40,7 +40,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 |---|---|
 | OS | Raspberry Pi OS Lite (64-bit) + cage |
 | UI framework | React + Vite |
-| CarPlay receiver | react-carplay (github.com/rhysmorgan134/react-carplay) |
+| CarPlay receiver | [react-carplay](https://github.com/rhysmorgan134/react-carplay) (Electron — use Releases / setup-pi.sh; not npm-in-this-repo) |
 | Static server | nginx |
 | CarPlay backend | Node.js service (systemd) |
 | Browser | Chromium in kiosk mode |
@@ -75,7 +75,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 - 12/3/6/9 numerals, animated hands, digital readout
 
 ### CarPlay
-- Full-screen react-carplay receiver (placeholder until dongle arrives)
+- Full-screen CarPlay via upstream Electron project (not embedded here yet)
 - Press `+` on any clock face to enter
 - Press `+` again to return to clock
 
@@ -133,7 +133,7 @@ e30piplay/
 │       ├── FactoryClock.jsx      # OEM white analog clock
 │       ├── DigitalClock.jsx      # OEM red LED digital clock
 │       ├── AnalogClock.jsx       # S52 amber analog clock
-│       └── CarPlayReceiver.jsx   # CarPlay (placeholder → react-carplay)
+│       └── CarPlayReceiver.jsx   # CarPlay placeholder (real UI = upstream Electron app)
 ├── public/
 │   └── BMW-Logo-1970-1989.png
 ├── setup.sh                      # Pi OS Lite + cage + nginx (one shot)
@@ -165,11 +165,7 @@ DevTools → Device toolbar → Custom → **320 × 480**
 bash setup.sh
 sudo reboot
 
-# 4. When Carlinkit dongle arrives:
-cd ~/e30piplay
-npm install react-carplay
-# Update src/components/CarPlayReceiver.jsx
-npm run build
-sudo rsync -a --delete dist/ /var/www/s52-display/
-sudo systemctl restart s52-carplay nginx s52-cage-kiosk
+# 4. CarPlay UI: upstream Electron app — not npm-installable into this repo:
+#    https://github.com/rhysmorgan134/react-carplay (Releases AppImage or setup-pi.sh).
+#    In-browser integration in e30piplay is still TBD (placeholder only).
 ```

@@ -199,15 +199,13 @@ sudo reboot
 
 ## CarPlay integration status
 
-`src/components/CarPlayReceiver.jsx` is intentionally a placeholder.
-When the dongle and dependency are ready:
+**`npm install react-carplay` will 404.** The project [rhysmorgan134/react-carplay](https://github.com/rhysmorgan134/react-carplay) is an **Electron** application; it is **not** published as an npm package you can drop into this Vite + Chromium kiosk.
 
-```bash
-cd ~/e30piplay
-npm install react-carplay
-```
+**To run CarPlay today (upstream path):** follow their repo — **`setup-pi.sh`**, or install an **AppImage** from **[Releases](https://github.com/rhysmorgan134/react-carplay/releases)**. That stack is separate from this browser UI.
 
-Then replace the placeholder renderer with the real `react-carplay` component; rebuild and `rsync` `dist/` as above.
+**This repo:** `CarPlayReceiver.jsx` stays a **placeholder** until someone builds a **browser-side bridge** (e.g. WebSocket + decoded video from **`node-carplay`**) or you choose to run the Electron app fullscreen instead of cage + Chromium.
+
+Placeholder **`s52-carplay`** / nginx **`/ws`** in `setup.sh` are scaffolding only until a real backend exists.
 
 ## Notes
 

@@ -1,18 +1,15 @@
 /**
  * CarPlayReceiver
  *
- * Placeholder component — will be replaced with react-carplay integration.
- * https://github.com/rhysmorgan134/react-carplay
+ * Placeholder — real CarPlay UI is not wired into this Chromium kiosk yet.
  *
- * When the Carlinkit dongle is plugged in and react-carplay is installed:
- *   npm install react-carplay
+ * Upstream reference project (Electron, not an npm library):
+ *   https://github.com/rhysmorgan134/react-carplay
+ * Install via their setup-pi.sh or AppImage releases — `npm install react-carplay`
+ * does not exist on the registry (404).
  *
- * Then swap this file for the real receiver:
- *   import Carplay from 'react-carplay';
- *   <Carplay width={480} height={272} fps={60} />
- *
- * The dongle handles all iPhone ↔ Pi communication; this component
- * just renders whatever the dongle streams.
+ * A future path would bridge node-carplay / WebSockets / video into this React app;
+ * that integration is TBD.
  */
 
 import PropTypes from 'prop-types';
@@ -67,8 +64,8 @@ export default function CarPlayReceiver({ onBack }) {
           <div style={styles.step}>1  Plug Carlinkit dongle into Pi USB port</div>
           <div style={styles.step}>2  Enable Wireless CarPlay on iPhone</div>
           <div style={styles.step}>3  Select &quot;S52 Solutions&quot; from CarPlay list</div>
-          <div style={styles.step}>4  Install react-carplay:  npm install react-carplay</div>
-          <div style={styles.step}>5  Replace this component with &lt;Carplay /&gt;</div>
+          <div style={styles.step}>4  CarPlay UI: github.com/rhysmorgan134/react-carplay — Releases AppImage or setup-pi.sh (Electron app; not on npm)</div>
+          <div style={styles.step}>5  In-browser CarPlay in this kiosk is not implemented yet</div>
         </div>
       </div>
 
