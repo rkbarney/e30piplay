@@ -56,10 +56,13 @@
   100% { opacity: 1; }
 }
 
+/* Use height: 100% only — avoid min-height: 100vh here. In Chrome DevTools device
+   mode the page runs in an iframe where 100vh can resolve to the outer window,
+   so flex centering targets a taller box than the visible frame and layout
+   looks shifted/clipped. Pi kiosk fullscreen still gets a correct % chain. */
 html, body {
   width: 100%;
   height: 100%;
-  min-height: 100vh;
   margin: 0;
   overflow: hidden;
   background: var(--bg);
@@ -74,7 +77,6 @@ html, body {
 #root {
   width: 100%;
   height: 100%;
-  min-height: 100vh;
   position: relative;
   overflow: hidden;
 }
@@ -83,16 +85,18 @@ html, body {
 .viewport-scale-outer {
   width: 100%;
   height: 100%;
-  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg);
 }
 
+.viewport-scale-slot {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .viewport-scale-inner {
   position: relative;
-  flex-shrink: 0;
-  transform-origin: center center;
   overflow: hidden;
 }

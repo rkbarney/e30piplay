@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useLayoutEffect, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import KioskExit from './KioskExit.jsx';
 
@@ -7,35 +7,59 @@ const DH = 480;
 
 /**
  * Scales the fixed 320×480 UI to fit the browser (any resolution / HDMI mode).
+ * Scale is derived from the outer flex container's real size (ResizeObserver),
+ * not window.innerWidth / visualViewport — those can disagree with Chrome device
+ * mode's iframe dimensions (e.g. responsive width 291px while APIs report 320).
  */
 export default function ViewportScale({ children }) {
+  const outerRef = useRef(null);
   const [scale, setScale] = useState(1);
 
-  const update = useCallback(() => {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const s = Math.min(vw / DW, vh / DH);
+  const measure = useCallback(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    if (!(width > 0 && height > 0)) return;
+    const s = Math.min(width / DW, height / DH);
     setScale(Number.isFinite(s) && s > 0 ? s : 1);
   }, []);
 
-  useEffect(() => {
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, [update]);
+  useLayoutEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  const slotW = DW * scale;
+  const slotH = DH * scale;
 
   return (
-    <div className="viewport-scale-outer">
+    <div className="viewport-scale-outer" ref={outerRef}>
+      {/* Slot is the real painted size. Flex centers this instead of the pre-scale
+          320×480 box — avoids asymmetric clipping when scale≠1 and overflow:hidden
+          interacted with transform on the same element (Chrome device mode). */}
       <div
-        className="viewport-scale-inner"
+        className="viewport-scale-slot"
         style={{
-          width: DW,
-          height: DH,
-          transform: `scale(${scale})`,
+          width: slotW,
+          height: slotH,
         }}
       >
-        {children}
-        <KioskExit />
+        <div
+          className="viewport-scale-inner"
+          style={{
+            width: DW,
+            height: DH,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {children}
+          <KioskExit />
+        </div>
       </div>
     </div>
   );
