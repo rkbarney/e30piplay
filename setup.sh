@@ -138,7 +138,14 @@ fi
 
 # ── 5. CarPlay launcher API + sudo helper ─────────────────────────────────────
 echo "[5/10] CarPlay launcher API (carplay-server.cjs + switch script)…"
-install -m 644 "$SOURCE_DIR/carplay-server.cjs" "$APP_DIR/carplay-server.cjs"
+# install(1) fails with "same file" when SOURCE_DIR == APP_DIR (common: bash setup.sh from ~/e30piplay).
+# That aborts set -e before the systemd unit is updated — stale carplay-server.js keeps broken ExecStart.
+if [[ -f "$APP_DIR/carplay-server.cjs" ]] && cmp -s "$SOURCE_DIR/carplay-server.cjs" "$APP_DIR/carplay-server.cjs"; then
+  chmod 644 "$APP_DIR/carplay-server.cjs" || true
+else
+  install -m 644 "$SOURCE_DIR/carplay-server.cjs" "$APP_DIR/carplay-server.cjs"
+fi
+rm -f "$APP_DIR/carplay-server.js"
 
 sudo tee /etc/systemd/system/s52-carplay.service > /dev/null <<SERVICE
 [Unit]
