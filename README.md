@@ -140,7 +140,13 @@ sudo systemctl restart s52-cage-kiosk
 
 **If the kiosk restarts in a loop** and logs show **`systemd-inhibit` / Interactive authentication required**:
 
-1. **Update the installed launcher** (the service does **not** read `~/e30piplay/scripts/` — only `~/.local/bin/s52-kiosk-inner.sh`):
+1. **Update the installed launcher** (the service does **not** read `~/e30piplay/scripts/` — only `~/.local/bin/s52-kiosk-inner.sh`). On the Pi, after `git pull`:
+
+   ```bash
+   cd ~/e30piplay && git pull && bash scripts/pi-fix-kiosk-launcher.sh
+   ```
+
+   Or manually:
 
    ```bash
    cd ~/e30piplay && git pull
