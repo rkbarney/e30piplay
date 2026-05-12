@@ -106,7 +106,23 @@ sudo reboot
 (Use `main` instead of `experiment/pios-lite-cage` if you deploy from that branch.)
 
 
-`setup.sh` installs **cage**, **seatd**, **Chromium**, **nginx**, **Node**, publishes `dist/` to `/var/www/s52-display`, applies **`display_rotate`** (and optional custom HDMI mode) in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`** (kiosk at boot), and scaffolds CarPlay placeholder + udev. Override rotation before setup: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`.
+`setup.sh` installs **cage**, **seatd**, **Chromium**, **nginx**, **Node**, publishes `dist/` to `/var/www/s52-display`, applies **`display_rotate`** (and optional custom HDMI mode) in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`** (kiosk at boot), enables **TTY1 console autologin** for your user (no `login:` prompt on HDMI after reboot), and scaffolds CarPlay placeholder + udev. Override rotation before setup: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`.
+
+**Already ran `setup.sh` before autologin was added?** Over SSH (as the user that should autologin):
+
+```bash
+sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $(whoami) --noclear %I \$TERM
+EOF
+sudo systemctl daemon-reload
+sudo reboot
+```
+
+(Physical access = logged-in shell on the console — normal tradeoff for a dedicated dash unit.)
+
 
 **Iterate without re-flashing:**
 

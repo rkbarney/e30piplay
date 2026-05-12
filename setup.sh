@@ -204,7 +204,7 @@ sudo sed -i '/^hdmi_drive=/d' "$CONFIG"
 } | sudo tee -a "$CONFIG" > /dev/null
 
 # ── 9. Kiosk scripts + systemd ────────────────────────────────────────────────
-echo "[9/9] cage kiosk service…"
+echo "[9/9] cage kiosk service + console autologin…"
 mkdir -p "/home/$SERVICE_USER/.local/bin"
 mkdir -p "/home/$SERVICE_USER/.config"
 
@@ -248,11 +248,21 @@ sudo systemctl restart s52-cage-kiosk.service || {
   echo "  Logs: journalctl -u s52-cage-kiosk -b --no-pager"
 }
 
+echo "[9b] Console autologin (tty1 — skips login: prompt on HDMI)…"
+sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<AUTOLOGIN
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin ${SERVICE_USER} --noclear %I \$TERM
+AUTOLOGIN
+sudo systemctl daemon-reload
+
 echo ""
 echo "============================================"
 echo "  Setup complete"
 echo ""
-echo "  Reboot:  sudo reboot"
+echo "  HDMI boots straight to your user + kiosk (console autologin tty1)."
+echo "  Reboot now:  sudo reboot"
 echo ""
 echo "  App copy:  $APP_DIR"
 echo "  Iteration:  cd $APP_DIR && git pull && npm ci && npm run build"
