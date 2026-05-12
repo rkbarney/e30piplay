@@ -138,7 +138,20 @@ sudo systemctl restart s52-cage-kiosk
 - Logs: `journalctl -u s52-cage-kiosk -f`
 - Stop UI for maintenance: `sudo systemctl stop s52-cage-kiosk`
 
-**If the kiosk restarts in a loop** and logs show **`systemd-inhibit` / Interactive authentication required**: update **`~/.local/bin/s52-kiosk-inner.sh`** from the repo (`scripts/s52-kiosk-inner.sh`) — the launcher no longer uses **`systemd-inhibit`** (it breaks under systemd). Then `sudo systemctl restart s52-cage-kiosk`. EGL warnings from cage alone are often harmless.
+**If the kiosk restarts in a loop** and logs show **`systemd-inhibit` / Interactive authentication required**:
+
+1. **Update the installed launcher** (the service does **not** read `~/e30piplay/scripts/` — only `~/.local/bin/s52-kiosk-inner.sh`):
+
+   ```bash
+   cd ~/e30piplay && git pull
+   install -m 755 ~/e30piplay/scripts/s52-kiosk-inner.sh ~/.local/bin/s52-kiosk-inner.sh
+   grep INHIBIT_CMD ~/.local/bin/s52-kiosk-inner.sh && echo 'Still old launcher — fix install' || echo 'Launcher OK (no INHIBIT_CMD)'
+   sudo systemctl restart s52-cage-kiosk
+   ```
+
+2. The script runs **`/usr/lib/chromium/chromium`** only (never **`chromium`** from PATH), so a Debian **`/usr/bin/chromium`** wrapper cannot inject **`systemd-inhibit`**.
+
+EGL warnings from cage alone are often harmless.
 
 Runtime references:
 

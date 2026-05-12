@@ -76,13 +76,21 @@ for ((i = 1; i <= S52_HTTP_RETRIES; i++)); do
   sleep 1
 done
 
-CHROMIUM_BIN="chromium"
-if [[ -x "/usr/lib/chromium/chromium" ]]; then
-  CHROMIUM_BIN="/usr/lib/chromium/chromium"
+CHROMIUM_BIN=""
+for cand in /usr/lib/chromium/chromium /usr/lib/chromium-browser/chromium-browser; do
+  if [[ -x "$cand" ]]; then
+    CHROMIUM_BIN="$cand"
+    break
+  fi
+done
+if [[ -z "${CHROMIUM_BIN}" ]]; then
+  echo "s52-kiosk-inner: no Chromium binary found under /usr/lib (install chromium package)" >&2
+  exit 1
 fi
 
-# Do not wrap with systemd-inhibit here: under systemd/cage it triggers PolKit
-# "Interactive authentication required" and exits 1, killing the kiosk loop.
+# Do not use /usr/bin/chromium — on Debian/Pi it can be a wrapper that runs systemd-inhibit
+# (PolKit fails under systemd → exit 1 → kiosk restart loop).
+# Do not wrap with systemd-inhibit in this script either (same PolKit issue).
 
 "${CHROMIUM_BIN}" \
   --user-data-dir="${S52_CHROMIUM_USER_DATA_DIR}" \
