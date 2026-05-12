@@ -1,111 +1,103 @@
-import { useState, useEffect, useRef } from 'react';
+/**
+ * BootScreen — S52 SOLUTIONS / M-TECH OEM splash.
+ *
+ * Visually mirrors the Plymouth theme (scripts/s52-boot-branding.sh →
+ * /usr/share/plymouth/themes/s52-tech) so the handoff from Plymouth →
+ * Chromium is continuous: same logo, same spinner, same amber.
+ *
+ * Holds until /api/carplay-ready returns 200 (the react-carplay AppImage
+ * has been registered with labwc as a toplevel — i.e. tapping `+` will be
+ * instant). 60s safety timeout falls through to the clock anyway so a
+ * broken backend never bricks the UI.
+ */
+
+import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 
-const LOGO = [
-  '  ███╗   ███╗      ████████╗███████╗ ██████╗██╗  ██╗',
-  '  ████╗ ████║         ██╔══╝██╔════╝██╔════╝██║  ██║',
-  '  ██╔████╔██║         ██║   █████╗  ██║     ███████║',
-  '  ██║╚██╔╝██║         ██║   ██╔══╝  ██║     ██╔══██║',
-  '  ██║ ╚═╝ ██║         ██║   ███████╗╚██████╗██║  ██║',
-  '  ╚═╝     ╚═╝         ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝',
-];
+const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
+const POLL_INTERVAL_MS = 500;
+const SAFETY_TIMEOUT_MS = 60000;
+const FADE_OUT_MS = 350;
 
-const TAGLINE = '  S52 SOLUTIONS — E30 SYSTEM v1.0';
-
-const BOOT_MESSAGES = [
-  '[  0.001]  KERNEL: Initializing S52 subsystems...',
-  '[  0.043]  CPU: ARM Cortex-A76 @ 2.4GHz — 4 cores online',
-  '[  0.089]  MEM: 8192MB LPDDR4X — OK',
-  '[  0.134]  DISPLAY: 480x320 HDMI — framebuffer ready',
-  '[  0.201]  TOUCH: SPI touchscreen — calibrated',
-  '[  0.312]  AUDIO: USB DAC → 3.5mm AUX — OK',
-  '[  0.445]  USB:  Carlinkit dongle — detected',
-  '[  0.520]  NET:  Wireless interface — up',
-  '[  0.680]  CARPLAY: react-carplay receiver — loaded',
-  '[  0.891]  ENGINE: S52 3.2L I6 — all systems nominal',
-  '[  1.120]  M-TECH: Sport mode — engaged',
-  '[  1.340]  S52 Solutions display — READY',
-];
-
-const BOOT_DURATION_MS = 4000;
+const SPINNER_DOTS = 12;
+const SPINNER_RADIUS = 28;
+const SPINNER_SPEED_MS = 80;
 
 export default function BootScreen({ onComplete }) {
-  const [visibleLines, setVisibleLines] = useState([]);
-  const [progress, setProgress] = useState(0);
-  const [done, setDone] = useState(false);
-  const startTime = useRef(Date.now());
-  const rafRef = useRef(null);
-  const timeoutRef = useRef(null);
+  const [tick, setTick] = useState(0);
+  const [fading, setFading] = useState(false);
+  const handedOffRef = useRef(false);
 
   useEffect(() => {
-    const totalLines = BOOT_MESSAGES.length;
+    const id = setInterval(() => setTick((t) => t + 1), SPINNER_SPEED_MS);
+    return () => clearInterval(id);
+  }, []);
 
-    function tick() {
-      const elapsed = Date.now() - startTime.current;
-      const pct = Math.min(elapsed / BOOT_DURATION_MS, 1);
-      const lineCount = Math.floor(pct * totalLines);
+  useEffect(() => {
+    let cancelled = false;
+    let pollTimer;
+    let safetyTimer;
+    let fadeTimer;
 
-      setProgress(Math.round(pct * 100));
-      setVisibleLines(BOOT_MESSAGES.slice(0, lineCount));
+    const finish = () => {
+      if (cancelled || handedOffRef.current) return;
+      handedOffRef.current = true;
+      setFading(true);
+      fadeTimer = setTimeout(() => onComplete?.(), FADE_OUT_MS);
+    };
 
-      if (pct < 1) {
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        setDone(true);
-        // Hold the complete screen for 800ms then hand off
-        timeoutRef.current = setTimeout(() => onComplete?.(), 800);
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/carplay-ready`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          finish();
+          return;
+        }
+      } catch {
+        // Network not ready yet — keep spinning.
       }
-    }
+      pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+    };
 
-    rafRef.current = requestAnimationFrame(tick);
+    poll();
+    safetyTimer = setTimeout(finish, SAFETY_TIMEOUT_MS);
+
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      clearTimeout(timeoutRef.current);
+      cancelled = true;
+      clearTimeout(pollTimer);
+      clearTimeout(safetyTimer);
+      clearTimeout(fadeTimer);
     };
   }, [onComplete]);
 
-  const barFilled = Math.round(progress / 2); // 50 chars wide
-  const barEmpty  = 50 - barFilled;
+  const lit = tick % SPINNER_DOTS;
 
   return (
-    <div style={styles.root}>
-      {/* Logo */}
-      <div style={styles.logoBlock}>
-        {LOGO.map((line, i) => (
-          <div key={i} style={styles.logoLine}>{line}</div>
-        ))}
-        <div style={styles.tagline}>{TAGLINE}</div>
-      </div>
+    <div style={{ ...styles.root, opacity: fading ? 0 : 1 }}>
+      <div style={styles.brand}>S52 SOLUTIONS</div>
+      <div style={styles.sub}>M&nbsp;-&nbsp;T&nbsp;E&nbsp;C&nbsp;H</div>
 
-      {/* Divider */}
-      <div style={styles.divider}>{'─'.repeat(60)}</div>
-
-      {/* Scrolling log */}
-      <div style={styles.logArea}>
-        {visibleLines.map((line, i) => (
-          <div key={i} style={styles.logLine}>{line}</div>
-        ))}
-        {!done && <span style={styles.cursor}>█</span>}
-      </div>
-
-      {/* Progress bar */}
-      <div style={styles.progressSection}>
-        <div style={styles.divider}>{'─'.repeat(60)}</div>
-        <div style={styles.progressRow}>
-          <span style={styles.progressLabel}>BOOT</span>
-          <span style={styles.progressBar}>
-            {'['}
-            <span style={styles.filled}>{'█'.repeat(barFilled)}</span>
-            <span style={styles.empty}>{'░'.repeat(barEmpty)}</span>
-            {']'}
-          </span>
-          <span style={styles.progressPct}>{String(progress).padStart(3, ' ')}%</span>
-        </div>
-        {done && (
-          <div style={styles.readyLine}>
-            ✓ ALL SYSTEMS NOMINAL — LAUNCHING S52 DISPLAY
-          </div>
-        )}
+      <div style={styles.spinnerWrap}>
+        {Array.from({ length: SPINNER_DOTS }).map((_, i) => {
+          const trail = (lit - i + SPINNER_DOTS) % SPINNER_DOTS;
+          const alpha = Math.max(0.08, 1 - trail / SPINNER_DOTS);
+          const ang = (i / SPINNER_DOTS) * Math.PI * 2 - Math.PI / 2;
+          const x = Math.cos(ang) * SPINNER_RADIUS;
+          const y = Math.sin(ang) * SPINNER_RADIUS;
+          return (
+            <span
+              key={i}
+              style={{
+                ...styles.dot,
+                transform: `translate(${x}px, ${y}px)`,
+                background: `rgba(255, 179, 0, ${alpha})`,
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -122,90 +114,40 @@ const styles = {
     background: '#000',
     color: '#ffb300',
     fontFamily: "'Courier New', monospace",
-    fontSize: '9px',
-    lineHeight: 1.35,
     display: 'flex',
     flexDirection: 'column',
-    padding: '6px 8px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '4px',
     overflow: 'hidden',
+    transition: `opacity ${FADE_OUT_MS}ms ease-out`,
   },
-  logoBlock: {
-    marginBottom: '3px',
-  },
-  logoLine: {
-    fontSize: '7.5px',
-    lineHeight: 1.2,
-    letterSpacing: '0.05em',
+  brand: {
+    fontSize: '22px',
+    letterSpacing: '0.22em',
+    fontWeight: 'bold',
     color: '#ffb300',
-    whiteSpace: 'pre',
+    marginTop: '-40px',
   },
-  tagline: {
-    fontSize: '8px',
-    color: '#ffb300',
-    marginTop: '2px',
-    letterSpacing: '0.12em',
-    whiteSpace: 'pre',
+  sub: {
+    fontSize: '11px',
+    letterSpacing: '0.4em',
+    color: '#8c6000',
+    marginBottom: '40px',
   },
-  divider: {
-    color: '#3a2800',
-    fontSize: '9px',
-    marginBottom: '2px',
-    whiteSpace: 'pre',
-  },
-  logArea: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'flex-end',
-  },
-  logLine: {
-    color: '#cc8800',
-    fontSize: '9px',
-    lineHeight: 1.35,
-    whiteSpace: 'pre',
-  },
-  cursor: {
-    color: '#ffb300',
-    animation: 'blink 0.6s step-end infinite',
-  },
-  progressSection: {
-    marginTop: '3px',
-  },
-  progressRow: {
+  spinnerWrap: {
+    position: 'relative',
+    width: '80px',
+    height: '80px',
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    marginTop: '2px',
+    justifyContent: 'center',
   },
-  progressLabel: {
-    color: '#ffb300',
-    fontSize: '9px',
-    fontWeight: 'bold',
-    letterSpacing: '0.1em',
-  },
-  progressBar: {
-    flex: 1,
-    fontSize: '9px',
-    whiteSpace: 'pre',
-  },
-  filled: {
-    color: '#ffb300',
-  },
-  empty: {
-    color: '#3a2800',
-  },
-  progressPct: {
-    color: '#ffb300',
-    fontSize: '9px',
-    minWidth: '30px',
-    textAlign: 'right',
-  },
-  readyLine: {
-    color: '#ffb300',
-    fontSize: '9px',
-    marginTop: '2px',
-    letterSpacing: '0.05em',
-    animation: 'blink 0.8s step-end 3',
+  dot: {
+    position: 'absolute',
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    background: '#ffb300',
   },
 };

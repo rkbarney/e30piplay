@@ -59,7 +59,7 @@ create_plymouth_theme() {
   cat > "${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.plymouth" <<EOF
 [Plymouth Theme]
 Name=S52 Tech
-Description=Simple S52 loading splash
+Description=S52 Solutions / M-TECH OEM boot splash
 ModuleName=script
 
 [script]
@@ -67,11 +67,52 @@ ImageDir=${PLYMOUTH_THEME_DIR}
 ScriptFile=${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.script
 EOF
 
+  # Plymouth script theme — kept defensively simple. Plymouth Script is a
+  # custom embedded interpreter; complex constructs (helper fns with object
+  # params, per-frame Image.Text spam) can silently fall back to the text
+  # plugin. Stick to: pre-rendered Sprites, primitive math, single refresh
+  # callback. Image.Text(label, r, g, b[, alpha]) — no font arg.
   cat > "${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.script" <<'EOF'
-title_image = Image.Text("s52 tech loading");
-title_sprite = Sprite(title_image);
-title_sprite.SetX(Window.GetWidth() * 0.5 - title_image.GetWidth() * 0.5);
-title_sprite.SetY(Window.GetHeight() * 0.5 - title_image.GetHeight() * 0.5);
+Window.SetBackgroundTopColor(0.0, 0.0, 0.0);
+Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
+
+w = Window.GetWidth();
+h = Window.GetHeight();
+
+title_img = Image.Text("S52 SOLUTIONS", 1.0, 0.70, 0.0);
+title_spr = Sprite();
+title_spr.SetImage(title_img);
+title_spr.SetX(w / 2 - title_img.GetWidth() / 2);
+title_spr.SetY(h / 2 - 40);
+
+sub_img = Image.Text("M - T E C H", 0.6, 0.42, 0.0);
+sub_spr = Sprite();
+sub_spr.SetImage(sub_img);
+sub_spr.SetX(w / 2 - sub_img.GetWidth() / 2);
+sub_spr.SetY(h / 2 - 12);
+
+# Pre-render the four spinner frames once so refresh() never allocates.
+dots_a = Image.Text(".",    1.0, 0.70, 0.0);
+dots_b = Image.Text("..",   1.0, 0.70, 0.0);
+dots_c = Image.Text("...",  1.0, 0.70, 0.0);
+dots_d = Image.Text("....", 1.0, 0.70, 0.0);
+
+dots_spr = Sprite();
+phase = 0;
+
+fun refresh () {
+    phase = phase + 1;
+    n = Math.Int(phase / 12);
+    n = n - Math.Int(n / 4) * 4;
+    if (n == 0) { img = dots_a; }
+    if (n == 1) { img = dots_b; }
+    if (n == 2) { img = dots_c; }
+    if (n == 3) { img = dots_d; }
+    dots_spr.SetImage(img);
+    dots_spr.SetX(w / 2 - img.GetWidth() / 2);
+    dots_spr.SetY(h / 2 + 28);
+}
+Plymouth.SetRefreshFunction(refresh);
 EOF
 }
 
