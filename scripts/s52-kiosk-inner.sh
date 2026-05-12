@@ -105,6 +105,7 @@ fi
   --disable-session-crashed-bubble \
   --disable-features=Translate \
   --check-for-update-interval=31536000 \
+  --default-background-color=000000 \
   "${KIOSK_URL_WITH_EXIT}" &
 
 CHROMIUM_PID=$!

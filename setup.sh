@@ -43,11 +43,15 @@ SOURCE_DIR="$(cd "$(dirname -- "$SCRIPT_PATH")" && pwd)"
 echo "[1/10] Updating system…"
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
-  cage \
+  labwc \
+  wlrctl \
+  wlr-randr \
+  swaybg \
   seatd \
   chromium \
   nginx \
   curl \
+  unclutter \
   alsa-utils \
   openssh-server \
   avahi-daemon \
@@ -150,17 +154,20 @@ rm -f "$APP_DIR/carplay-server.js"
 
 sudo tee /etc/systemd/system/s52-carplay.service > /dev/null <<SERVICE
 [Unit]
-Description=S52 CarPlay launcher API (switch kiosk / Electron)
-After=network.target
+Description=S52 CarPlay launcher API (wlrctl bridge to labwc)
+After=network.target s52-cage-kiosk.service
+Wants=s52-cage-kiosk.service
 
 [Service]
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$APP_DIR
+Environment=PORT=3001
+Environment=XDG_RUNTIME_DIR=/run/user/$S52_UID
+Environment=WAYLAND_DISPLAY=wayland-0
 ExecStart=/usr/bin/node $APP_DIR/carplay-server.cjs
 Restart=on-failure
 RestartSec=3
-Environment=PORT=3001
 
 [Install]
 WantedBy=multi-user.target
@@ -168,7 +175,9 @@ SERVICE
 
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
 
+# Preserve WAYLAND_DISPLAY/XDG_RUNTIME_DIR through sudo so wlrctl can find labwc.
 sudo tee /etc/sudoers.d/s52-carplay-launcher > /dev/null <<SUDOERS
+Defaults!/usr/local/bin/s52-carplay-switch.sh env_keep += "WAYLAND_DISPLAY XDG_RUNTIME_DIR"
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-carplay-switch.sh
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/s52-carplay-launcher
@@ -241,14 +250,22 @@ sudo sed -i '/^hdmi_drive=/d' "$CONFIG"
 } | sudo tee -a "$CONFIG" > /dev/null
 
 # ── 9. Kiosk scripts + systemd ────────────────────────────────────────────────
-echo "[9/10] cage kiosk service + console autologin…"
+echo "[9/10] labwc kiosk service + labwc config + console autologin…"
 mkdir -p "/home/$SERVICE_USER/.local/bin"
 mkdir -p "/home/$SERVICE_USER/.config"
+mkdir -p "/home/$SERVICE_USER/.config/labwc"
 
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-inner.sh"
-install -m 755 "$SOURCE_DIR/scripts/s52-react-carplay-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-react-carplay-inner.sh"
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-exit-server.py" "/home/$SERVICE_USER/.local/bin/s52-kiosk-exit-server.py"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
+
+# labwc autostart + rc.xml. We always write these — they are appliance config,
+# not user prefs. Comment out the install if you want to customise rc.xml by hand.
+install -m 755 "$SOURCE_DIR/scripts/s52-labwc-autostart.sh" "/home/$SERVICE_USER/.config/labwc/autostart"
+install -m 644 "$SOURCE_DIR/scripts/s52-labwc-rc.xml" "/home/$SERVICE_USER/.config/labwc/rc.xml"
+
+# Clear any stale launcher from the cage-era setup.
+rm -f "/home/$SERVICE_USER/.local/bin/s52-react-carplay-inner.sh"
 
 cp "$SOURCE_DIR/scripts/s52-display-layout.conf.example" "/home/$SERVICE_USER/.config/s52-display-layout.conf.example"
 if [[ ! -f "/home/$SERVICE_USER/.config/s52-display-layout.conf" ]]; then
@@ -257,26 +274,57 @@ fi
 
 install -m 755 "$SOURCE_DIR/scripts/s52-boot-branding.sh" "/home/$SERVICE_USER/.local/bin/s52-boot-branding.sh" 2>/dev/null || true
 
+# s52-cage-kiosk has NO network dependency on purpose — nginx serves
+# /var/www/s52-display from disk and the AppImage talks to USB, so waiting
+# on NetworkManager-wait-online (which can take 4+ seconds on cold boot)
+# only widens the tty1 / blank-FB gap between plymouth-quit and labwc.
 sudo tee /etc/systemd/system/s52-cage-kiosk.service > /dev/null <<SERVICE
 [Unit]
-Description=S52 cage + Chromium kiosk
-After=network-online.target nginx.service
-Wants=network-online.target
+Description=S52 labwc kiosk (Chromium + pre-loaded react-carplay)
+After=nginx.service plymouth-quit.service
+Wants=nginx.service
 
 [Service]
 Type=simple
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
 Environment=XDG_RUNTIME_DIR=/run/user/${S52_UID}
+Environment=WLR_BACKENDS=drm,libinput
 SupplementaryGroups=video render input plugdev
 ExecStartPre=/bin/bash -c 'for i in {1..120}; do [[ -d /run/user/${S52_UID} ]] && exit 0; sleep 0.25; done; exit 1'
-ExecStart=/usr/bin/cage -- /home/${SERVICE_USER}/.local/bin/s52-kiosk-inner.sh
+ExecStart=/usr/bin/labwc
 Restart=on-failure
 RestartSec=4
 
 [Install]
 WantedBy=multi-user.target
 SERVICE
+
+# Plymouth → labwc handoff: keep the amber splash on the framebuffer while
+# labwc is grabbing DRM by overriding the default `plymouth quit` with
+# `plymouth quit --retain-splash`. Only takes effect if Plymouth is
+# installed (s52-boot-branding.sh apply).
+sudo mkdir -p /etc/systemd/system/plymouth-quit.service.d
+sudo tee /etc/systemd/system/plymouth-quit.service.d/retain-splash.conf > /dev/null <<'PLYMOUTH'
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/plymouth quit --retain-splash
+PLYMOUTH
+
+# Disable NetworkManager-wait-online — the kiosk doesn't gate on network at
+# boot. Saves ~4s of dead-air during which getty would otherwise be the only
+# thing painting tty1.
+sudo systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
+
+# getty@tty1 is the source of the "raspberrypi login:" text that flashed
+# during the plymouth-quit → labwc gap. We don't need a console shell on the
+# panel; SSH stays available.
+sudo systemctl disable getty@tty1.service 2>/dev/null || true
+sudo rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
+
+# Clean up the cage-era second-VT service if upgrading in place.
+sudo systemctl disable --now s52-cage-react-carplay.service 2>/dev/null || true
+sudo rm -f /etc/systemd/system/s52-cage-react-carplay.service
 
 sudo systemctl daemon-reload
 sudo systemctl enable s52-cage-kiosk.service
@@ -286,36 +334,8 @@ sudo systemctl restart s52-cage-kiosk.service || {
   echo "  Logs: journalctl -u s52-cage-kiosk -b --no-pager"
 }
 
-sudo tee /etc/systemd/system/s52-cage-react-carplay.service > /dev/null <<SERVICE
-[Unit]
-Description=S52 cage + react-carplay Electron (from kiosk CarPlay screen)
-After=network-online.target nginx.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_USER}
-Environment=XDG_RUNTIME_DIR=/run/user/${S52_UID}
-SupplementaryGroups=video render input plugdev
-ExecStartPre=/bin/bash -c 'for i in {1..120}; do [[ -d /run/user/${S52_UID} ]] && exit 0; sleep 0.25; done; exit 1'
-ExecStart=/usr/bin/cage -- /home/${SERVICE_USER}/.local/bin/s52-react-carplay-inner.sh
-Restart=no
-ExecStopPost=+/usr/bin/systemctl start s52-cage-kiosk.service
-
-[Install]
-WantedBy=multi-user.target
-SERVICE
-
-sudo systemctl daemon-reload
-
-echo "[9b/10] Console autologin (tty1 — skips login: prompt on HDMI)…"
-sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
-sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<AUTOLOGIN
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin ${SERVICE_USER} --noclear %I \$TERM
-AUTOLOGIN
+echo "[9b/10] No tty1 autologin — getty@tty1 is disabled above so the OEM"
+echo "        splash → labwc handoff has nothing painting the console."
 sudo systemctl daemon-reload
 
 # ── 10. Upstream react-carplay Electron (AppImage) ─────────────────────────────

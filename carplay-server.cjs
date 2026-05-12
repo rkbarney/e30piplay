@@ -40,6 +40,20 @@ async function returnToKiosk() {
   await run('sudo', ['-n', '/usr/local/bin/s52-carplay-switch.sh', 'return']);
 }
 
+const WLRCTL = '/usr/bin/wlrctl';
+
+// Used by the React splash to know when the AppImage is alive as a labwc
+// toplevel — i.e. when tapping `+` will be instant. Resolves true iff
+// `wlrctl toplevel find app_id:react-carplay` returns 0.
+async function carplayReady() {
+  try {
+    await run(WLRCTL, ['toplevel', 'find', 'app_id:react-carplay']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -56,6 +70,12 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/api/health')) {
       json(res, 200, { ok: true, service: 's52-carplay', pid: process.pid });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/carplay-ready') {
+      const ready = await carplayReady();
+      json(res, ready ? 200 : 503, { ready });
       return;
     }
 
