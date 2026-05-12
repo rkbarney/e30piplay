@@ -44,6 +44,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
+    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api')) {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Accept',
+      });
+      res.end();
+      return;
+    }
+
     if (req.method === 'GET' && url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('S52 CarPlay launcher API\nPOST /api/launch-react-carplay  POST /api/return-to-kiosk\n');

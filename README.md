@@ -140,6 +140,8 @@ sudo systemctl restart s52-cage-kiosk s52-carplay
 - Logs: `journalctl -u s52-cage-kiosk -f`
 - Stop UI for maintenance: `sudo systemctl stop s52-cage-kiosk`
 
+**Open CarPlay → HTTP 405:** nginx is handling **`POST /api/…`** as the SPA (**`try_files`** falls through to **`index.html`**; POST to a static file → **405**). Fix by deploying the **`location ^~ /api`** block from this repo — easiest: **`cd ~/e30piplay && git pull && bash setup.sh`** (rewrites **`/etc/nginx/sites-available/s52`**), then **`sudo nginx -t && sudo systemctl reload nginx`**. Also check **`systemctl is-active s52-carplay`** (logs: **`journalctl -u s52-carplay -n 30`**).
+
 **If the kiosk restarts in a loop** and logs show **`systemd-inhibit` / Interactive authentication required**:
 
 1. **Update the installed launcher** (the service does **not** read `~/e30piplay/scripts/` — only `~/.local/bin/s52-kiosk-inner.sh`). On the Pi, after `git pull`:
