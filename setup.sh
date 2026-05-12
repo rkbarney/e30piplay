@@ -229,7 +229,6 @@ Wants=network-online.target
 Type=simple
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
-Environment=S52_KIOSK_UNDER_SYSTEMD=1
 Environment=XDG_RUNTIME_DIR=/run/user/${S52_UID}
 SupplementaryGroups=video render input plugdev
 ExecStartPre=/bin/bash -c 'for i in {1..120}; do [[ -d /run/user/${S52_UID} ]] && exit 0; sleep 0.25; done; exit 1'

@@ -81,15 +81,10 @@ if [[ -x "/usr/lib/chromium/chromium" ]]; then
   CHROMIUM_BIN="/usr/lib/chromium/chromium"
 fi
 
-INHIBIT_CMD=( )
-# systemd-inhibit requires PolKit; fails non-interactively under systemd → skip there.
-if command -v systemd-inhibit &>/dev/null \
-  && [[ -z "${S52_KIOSK_UNDER_SYSTEMD:-}" ]] \
-  && [[ -z "${INVOCATION_ID:-}" ]]; then
-  INHIBIT_CMD=( systemd-inhibit --what=idle:sleep --who=s52-kiosk --why=kiosk --mode=block )
-fi
+# Do not wrap with systemd-inhibit here: under systemd/cage it triggers PolKit
+# "Interactive authentication required" and exits 1, killing the kiosk loop.
 
-"${INHIBIT_CMD[@]}" "${CHROMIUM_BIN}" \
+"${CHROMIUM_BIN}" \
   --user-data-dir="${S52_CHROMIUM_USER_DATA_DIR}" \
   --password-store=basic \
   --ozone-platform=wayland \
