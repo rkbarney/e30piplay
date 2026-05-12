@@ -138,6 +138,8 @@ sudo systemctl restart s52-cage-kiosk
 - Logs: `journalctl -u s52-cage-kiosk -f`
 - Stop UI for maintenance: `sudo systemctl stop s52-cage-kiosk`
 
+**If the kiosk restarts in a loop** and logs show `systemd-inhibit` / **Interactive authentication required**: pull the latest repo (the launcher skips `systemd-inhibit` under systemd), copy `scripts/s52-kiosk-inner.sh` to `~/.local/bin/`, add `Environment=S52_KIOSK_UNDER_SYSTEMD=1` under `[Service]` in `/etc/systemd/system/s52-cage-kiosk.service`, then `sudo systemctl daemon-reload && sudo systemctl restart s52-cage-kiosk`. Standalone EGL warnings from cage are often harmless.
+
 Runtime references:
 
 - Cage Chromium wrapper: `scripts/s52-kiosk-inner.sh` (installed to `~/.local/bin`)

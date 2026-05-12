@@ -82,7 +82,10 @@ if [[ -x "/usr/lib/chromium/chromium" ]]; then
 fi
 
 INHIBIT_CMD=( )
-if command -v systemd-inhibit &>/dev/null; then
+# systemd-inhibit requires PolKit; fails non-interactively under systemd → skip there.
+if command -v systemd-inhibit &>/dev/null \
+  && [[ -z "${S52_KIOSK_UNDER_SYSTEMD:-}" ]] \
+  && [[ -z "${INVOCATION_ID:-}" ]]; then
   INHIBIT_CMD=( systemd-inhibit --what=idle:sleep --who=s52-kiosk --why=kiosk --mode=block )
 fi
 
