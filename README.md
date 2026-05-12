@@ -205,7 +205,19 @@ sudo reboot
 
 **This repo:** `CarPlayReceiver.jsx` stays a **placeholder** until someone builds a **browser-side bridge** (e.g. WebSocket + decoded video from **`node-carplay`**) or you choose to run the Electron app fullscreen instead of cage + Chromium.
 
-Placeholder **`s52-carplay`** / nginx **`/ws`** in `setup.sh` are scaffolding only until a real backend exists.
+**One-shot installer (on the Pi, SSH):** after `git pull`, run:
+
+```bash
+bash ~/e30piplay/scripts/install-react-carplay-appimage.sh
+```
+
+Or fetch directly from GitHub (replace branch if yours differs):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rkbarney/e30piplay/experiment/pios-lite-cage/scripts/install-react-carplay-appimage.sh | bash
+```
+
+That downloads the official **arm64 AppImage**, installs **udev** + **FUSE/libfuse2**, and adds **`~/.local/bin/react-carplay`**. **Pi OS Lite** often still needs you to **`sudo systemctl stop s52-cage-kiosk`** before **`~/.local/bin/react-carplay --no-sandbox`** so Electron can access the display; if it still fails, use upstream docs / Desktop OS — Electron isn’t built around cage + Chromium.
 
 ## Notes
 
