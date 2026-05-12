@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install rhysmorgan134/react-carplay Linux arm64 AppImage on Raspberry Pi OS.
-# Paste into SSH on the Pi (or: bash scripts/install-react-carplay-appimage.sh).
+# Also invoked automatically at the end of setup.sh unless S52_SKIP_REACT_CARPLAY_APPIMAGE=1.
+# Standalone: bash scripts/install-react-carplay-appimage.sh
 #
 # This is the upstream Electron app — NOT embedded in e30piplay's Chromium kiosk.
 # On Pi OS Lite you may need to stop cage before running (see messages at end).

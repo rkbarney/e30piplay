@@ -8,7 +8,7 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 
 - Shows a terminal-style boot screen and logo intro
 - Cycles between three clock faces (`Factory`, `Digital`, `S52 Analog`)
-- Uses `-` to cycle clock faces and `+` to enter/exit CarPlay
+- Uses `-` to cycle clock faces and `+` to open the CarPlay screen (launch Electron from there on the Pi)
 - Runs in a fixed 320x480 design viewport with auto scaling
 - Supports kiosk exit via localhost helper when launched with kiosk scripts
 
@@ -106,7 +106,7 @@ sudo reboot
 (Use `main` instead of `experiment/pios-lite-cage` if you deploy from that branch.)
 
 
-`setup.sh` installs **cage**, **seatd**, **Chromium**, **nginx**, **Node**, publishes `dist/` to `/var/www/s52-display`, **`location /api/`** → **`carplay-server.cjs`** (POST to switch kiosk ↔ Electron CarPlay), applies **`display_rotate`** (and optional custom HDMI mode) in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`** (kiosk at boot), **`s52-carplay`** (launcher API), **`s52-cage-react-carplay`** (on-demand cage + AppImage; not started at boot), enables **TTY1 console autologin** for your user (no `login:` prompt on HDMI after reboot), Carlinkit **udev**, and **sudo NOPASSWD** for **`/usr/local/bin/s52-carplay-switch.sh`**. Override rotation before setup: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`.
+`setup.sh` is intended as a **single appliance installer**: it installs **cage**, **seatd**, **Chromium**, **nginx**, **Node**, publishes **`dist/`** to **`/var/www/s52-display`**, **`location /api/`** → **`carplay-server.cjs`** (POST switches kiosk ↔ Electron CarPlay), **downloads the upstream react-carplay AppImage** (unless **`S52_SKIP_REACT_CARPLAY_APPIMAGE=1`** for offline installs), applies **`display_rotate`** / optional HDMI mode in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`**, **`s52-carplay`**, **`s52-cage-react-carplay`** (on-demand), **TTY1 autologin**, Carlinkit **udev**, and **NOPASSWD** **`/usr/local/bin/s52-carplay-switch.sh`**. Override rotation: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`. AppImage version: **`REACT_CARPLAY_VERSION=…`** (default **4.0.5**).
 
 **Already ran `setup.sh` before autologin was added?** Over SSH (as the user that should autologin):
 
@@ -124,19 +124,15 @@ sudo reboot
 (Physical access = logged-in shell on the console — normal tradeoff for a dedicated dash unit.)
 
 
-**Iterate without re-flashing:**
+**Iterate UI without re-running full setup:**
 
 ```bash
 cd ~/e30piplay && git pull && npm ci && npm run build
 sudo rsync -a --delete dist/ /var/www/s52-display/
-sudo install -m 755 ~/e30piplay/scripts/s52-carplay-switch.sh /usr/local/bin/s52-carplay-switch.sh
-install -m 755 ~/e30piplay/scripts/s52-react-carplay-inner.sh ~/.local/bin/s52-react-carplay-inner.sh
-sudo systemctl daemon-reload
 sudo systemctl restart s52-cage-kiosk s52-carplay
-sudo nginx -t && sudo systemctl reload nginx
 ```
 
-**First time after pulling the in-kiosk CarPlay launcher:** run **`bash setup.sh`** once on the Pi so **`/etc/nginx/sites-available/s52`** gains **`location /api/`**, **`/etc/systemd/system/s52-cage-react-carplay.service`** exists, **`/etc/sudoers.d/s52-carplay-launcher`** is installed, and **`carplay-server.cjs`** is deployed. Later iterations only need the block above.
+**Refresh nginx, systemd, launcher scripts, or retry AppImage download:** run **`bash setup.sh`** again from **`~/e30piplay`** (safe; idempotent). Example offline omit Electron download: **`S52_SKIP_REACT_CARPLAY_APPIMAGE=1 bash setup.sh`**.
 
 **SSH helpers**
 
@@ -208,27 +204,27 @@ sudo reboot
 
 **`npm install react-carplay` will 404.** The project [rhysmorgan134/react-carplay](https://github.com/rhysmorgan134/react-carplay) is an **Electron** application; it is **not** published as an npm package you can drop into this Vite + Chromium kiosk.
 
-**On the Pi today:** install the upstream **AppImage** (below), then use **CarPlay** in the kiosk (**`+`** → **Open CarPlay (Electron)**). That POSTs to **`/api/launch-react-carplay`**; **`carplay-server.cjs`** stops **`s52-cage-kiosk`** and starts **`s52-cage-react-carplay`**, which runs **cage → `~/.local/bin/react-carplay --no-sandbox`**. When Electron exits, **`ExecStopPost`** brings **`s52-cage-kiosk`** back.
+**On the Pi today:** **`setup.sh`** installs the upstream **AppImage** by default (`~/.local/bin/react-carplay`). Then use **`+`** → **Open CarPlay (Electron)** in the kiosk. That POSTs **`/api/launch-react-carplay`**; **`carplay-server.cjs`** stops **`s52-cage-kiosk`** and starts **`s52-cage-react-carplay`** (**cage → react-carplay --no-sandbox**). Quitting Electron restores the kiosk (**`ExecStopPost`**).
 
-**SSH escape hatch:** `sudo /usr/local/bin/s52-carplay-switch.sh return` (same as the API’s return path).
+**SSH escape hatch:** `sudo /usr/local/bin/s52-carplay-switch.sh return`.
 
-**Still not implemented:** decoding CarPlay inside the browser (would need something like **`node-carplay`** + a video/WebSocket bridge).
+**Still not implemented:** decoding CarPlay purely inside the Chromium window (would need e.g. **`node-carplay`** + video/WebSocket bridge).
 
-**Desktop dev:** the UI calls **`VITE_S52_API_BASE`** when set (e.g. `VITE_S52_API_BASE=http://raspberrypi.local npm run dev`) so **`POST …/api/launch-react-carplay`** hits your Pi; otherwise local Vite has no launcher.
+**Desktop dev:** set **`VITE_S52_API_BASE=http://your-pi-host`** when running **`npm run dev`** so **Open CarPlay** POSTs hit the Pi launcher API.
 
-**One-shot AppImage installer (on the Pi, SSH):** after `git pull`, run:
+**If AppImage failed during setup** (no network, wrong arch): `bash ~/e30piplay/scripts/install-react-carplay-appimage.sh` then **`sudo systemctl restart s52-cage-kiosk`** if needed.
+
+**Manual AppImage-only** (same script **`setup`** runs internally):
 
 ```bash
 bash ~/e30piplay/scripts/install-react-carplay-appimage.sh
 ```
 
-Or fetch directly from GitHub (replace branch if yours differs):
+Or fetch the installer raw from GitHub (replace branch if yours differs):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rkbarney/e30piplay/experiment/pios-lite-cage/scripts/install-react-carplay-appimage.sh | bash
 ```
-
-That installs **`~/.local/bin/react-carplay`** plus udev. **Re-run `setup.sh`** (or the iterate block above) once so nginx **`/api/`**, **`carplay-server.cjs`**, **`s52-carplay-switch.sh`**, and **`s52-cage-react-carplay`** exist.
 
 ## Notes
 

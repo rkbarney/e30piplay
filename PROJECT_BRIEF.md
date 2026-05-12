@@ -165,7 +165,5 @@ DevTools → Device toolbar → Custom → **320 × 480**
 bash setup.sh
 sudo reboot
 
-# 4. CarPlay UI: upstream Electron (AppImage). From the kiosk CarPlay screen,
-#    POST /api/launch-react-carplay switches cage from Chromium to Electron;
-#    quitting Electron restores the kiosk (see README).
+# 4. CarPlay: setup.sh installs the upstream Electron AppImage and kiosk → cage handoff (README).
 ```

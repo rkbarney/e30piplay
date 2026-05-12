@@ -10,6 +10,8 @@
 #   APP_DIR=~/e30piplay
 #   S52_DISPLAY_ROTATE=1     # 0 normal, 1=90° CW, 2=180°, 3=270°
 #   S52_CUSTOM_HDMI=0        # 1 = add hdmi_group/mode/cvt example for 480×320 panel
+#   S52_SKIP_REACT_CARPLAY_APPIMAGE=1   # skip upstream Electron download (offline / headless)
+#   REACT_CARPLAY_VERSION=4.0.5         # passed through to install-react-carplay-appimage.sh
 #
 # Do NOT use `source` or `. setup.sh`.
 # =============================================================================
@@ -20,11 +22,13 @@ S52_UID="$(id -u)"
 APP_DIR="${APP_DIR:-$HOME/e30piplay}"
 S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
+S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
 
 echo ""
 echo "=== S52 Solutions — Pi OS Lite + cage ==="
 echo "    APP_DIR=$APP_DIR"
 echo "    display_rotate=$S52_DISPLAY_ROTATE  S52_CUSTOM_HDMI=$S52_CUSTOM_HDMI"
+echo "    skip AppImage=${S52_SKIP_REACT_CARPLAY_APPIMAGE} (set S52_SKIP_REACT_CARPLAY_APPIMAGE=1 to skip Electron download)"
 echo ""
 
 if [[ ! -f /etc/debian_version ]]; then
@@ -36,7 +40,7 @@ SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 SOURCE_DIR="$(cd "$(dirname -- "$SCRIPT_PATH")" && pwd)"
 
 # ── 1. Packages ───────────────────────────────────────────────────────────────
-echo "[1/9] Updating system…"
+echo "[1/10] Updating system…"
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
   cage \
@@ -59,7 +63,7 @@ sudo systemctl enable seatd
 sudo systemctl restart seatd
 
 # ── 2. Node.js ─────────────────────────────────────────────────────────────────
-echo "[2/9] Installing Node.js…"
+echo "[2/10] Installing Node.js…"
 if ! command -v node &>/dev/null || [[ "$(node -v)" != v20* ]]; then
   NS_URL="https://deb.nodesource.com/setup_20.x"
   HTTP_CODE=$(curl -sS -o /tmp/nodesource_setup.sh -w "%{http_code}" --max-time 60 "$NS_URL") || true
@@ -74,7 +78,7 @@ fi
 echo "    Node $(node -v) / npm $(npm -v)"
 
 # ── 3. App ───────────────────────────────────────────────────────────────────
-echo "[3/9] Installing app → $APP_DIR …"
+echo "[3/10] Installing app → $APP_DIR …"
 mkdir -p "$APP_DIR"
 rsync -a --exclude node_modules --exclude .git "$SOURCE_DIR/" "$APP_DIR/"
 cd "$APP_DIR"
@@ -82,7 +86,7 @@ npm install --silent
 npm run build
 
 WEB_ROOT="/var/www/s52-display"
-echo "[3b/9] Publishing web root → $WEB_ROOT …"
+echo "[3b/10] Publishing web root → $WEB_ROOT …"
 sudo mkdir -p "$WEB_ROOT"
 sudo rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
 sudo chown -R root:www-data "$WEB_ROOT"
@@ -90,7 +94,7 @@ sudo find "$WEB_ROOT" -type d -exec chmod 755 {} \;
 sudo find "$WEB_ROOT" -type f -exec chmod 644 {} \;
 
 # ── 4. nginx ───────────────────────────────────────────────────────────────────
-echo "[4/9] Configuring nginx…"
+echo "[4/10] Configuring nginx…"
 sudo tee /etc/nginx/sites-available/s52 > /dev/null <<'NGINX'
 server {
     listen 80 default_server;
@@ -130,7 +134,7 @@ else
 fi
 
 # ── 5. CarPlay launcher API + sudo helper ─────────────────────────────────────
-echo "[5/9] CarPlay launcher API (carplay-server.cjs + switch script)…"
+echo "[5/10] CarPlay launcher API (carplay-server.cjs + switch script)…"
 install -m 644 "$SOURCE_DIR/carplay-server.cjs" "$APP_DIR/carplay-server.cjs"
 
 sudo tee /etc/systemd/system/s52-carplay.service > /dev/null <<SERVICE
@@ -164,7 +168,7 @@ sudo systemctl enable s52-carplay
 sudo systemctl restart s52-carplay || true
 
 # ── 6. Carlinkit udev ─────────────────────────────────────────────────────────
-echo "[6/9] Carlinkit udev rules…"
+echo "[6/10] Carlinkit udev rules…"
 sudo tee /etc/udev/rules.d/99-carlinkit.rules > /dev/null <<'UDEV'
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1314", ATTRS{idProduct}=="152*", MODE="0660", GROUP="plugdev"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", MODE="0660", GROUP="plugdev"
@@ -172,7 +176,7 @@ UDEV
 sudo udevadm control --reload-rules
 
 # ── 7. Groups + linger ────────────────────────────────────────────────────────
-echo "[7/9] User groups + systemd linger…"
+echo "[7/10] User groups + systemd linger…"
 sudo usermod -aG plugdev,video,render,input "$SERVICE_USER"
 if getent group seat >/dev/null; then
   sudo usermod -aG seat "$SERVICE_USER"
@@ -181,7 +185,7 @@ sudo loginctl enable-linger "$SERVICE_USER"
 sudo systemctl start "user@${S52_UID}.service" 2>/dev/null || true
 
 # ── 8. Display firmware (/boot/firmware/config.txt) ──────────────────────────
-echo "[8/9] config.txt (display_rotate + optional HDMI mode)…"
+echo "[8/10] config.txt (display_rotate + optional HDMI mode)…"
 CONFIG="/boot/firmware/config.txt"
 [[ -f "$CONFIG" ]] || CONFIG="/boot/config.txt"
 
@@ -208,7 +212,7 @@ sudo sed -i '/^hdmi_drive=/d' "$CONFIG"
 } | sudo tee -a "$CONFIG" > /dev/null
 
 # ── 9. Kiosk scripts + systemd ────────────────────────────────────────────────
-echo "[9/9] cage kiosk service + console autologin…"
+echo "[9/10] cage kiosk service + console autologin…"
 mkdir -p "/home/$SERVICE_USER/.local/bin"
 mkdir -p "/home/$SERVICE_USER/.config"
 
@@ -276,7 +280,7 @@ SERVICE
 
 sudo systemctl daemon-reload
 
-echo "[9b] Console autologin (tty1 — skips login: prompt on HDMI)…"
+echo "[9b/10] Console autologin (tty1 — skips login: prompt on HDMI)…"
 sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
 sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<AUTOLOGIN
 [Service]
@@ -284,6 +288,24 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin ${SERVICE_USER} --noclear %I \$TERM
 AUTOLOGIN
 sudo systemctl daemon-reload
+
+# ── 10. Upstream react-carplay Electron (AppImage) ─────────────────────────────
+if [[ "${S52_SKIP_REACT_CARPLAY_APPIMAGE}" == "1" ]]; then
+  echo "[10/10] Skipping react-carplay AppImage (S52_SKIP_REACT_CARPLAY_APPIMAGE=1)."
+  echo "        Install later: bash $APP_DIR/scripts/install-react-carplay-appimage.sh"
+else
+  echo "[10/10] Installing react-carplay AppImage (rhysmorgan134/react-carplay)…"
+  export REACT_CARPLAY_VERSION="${REACT_CARPLAY_VERSION:-4.0.5}"
+  if bash "$SOURCE_DIR/scripts/install-react-carplay-appimage.sh"; then
+    echo "    react-carplay launcher: ~/.local/bin/react-carplay"
+  else
+    echo "" >&2
+    echo "  WARNING: AppImage step failed (network, wrong arch, or GitHub rate limit)." >&2
+    echo "           The kiosk works; install Electron when ready:" >&2
+    echo "             bash $APP_DIR/scripts/install-react-carplay-appimage.sh" >&2
+    echo "" >&2
+  fi
+fi
 
 echo ""
 echo "============================================"
@@ -300,7 +322,7 @@ echo ""
 echo "  Logs:     journalctl -u s52-cage-kiosk -f"
 echo "  Stop UI:  sudo systemctl stop s52-cage-kiosk"
 echo ""
-echo "  CarPlay:  AppImage installer + kiosk \"Open CarPlay\" → cage + Electron (see README)"
-echo "            SSH escape hatch: sudo /usr/local/bin/s52-carplay-switch.sh return"
+echo "  CarPlay:  Use + → Open CarPlay on the display (Electron via cage). Quit Electron → kiosk returns."
+echo "            SSH: sudo /usr/local/bin/s52-carplay-switch.sh return"
 echo "============================================"
 echo ""
