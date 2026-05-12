@@ -53,7 +53,8 @@ sudo apt-get install -y -qq \
   avahi-daemon \
   python3 \
   rsync \
-  git
+  git \
+  zlib1g-dev
 
 sudo systemctl enable ssh
 sudo systemctl start ssh
@@ -300,7 +301,7 @@ SupplementaryGroups=video render input plugdev
 ExecStartPre=/bin/bash -c 'for i in {1..120}; do [[ -d /run/user/${S52_UID} ]] && exit 0; sleep 0.25; done; exit 1'
 ExecStart=/usr/bin/cage -- /home/${SERVICE_USER}/.local/bin/s52-react-carplay-inner.sh
 Restart=no
-ExecStopPost=/usr/bin/systemctl start s52-cage-kiosk.service
+ExecStopPost=+/usr/bin/systemctl start s52-cage-kiosk.service
 
 [Install]
 WantedBy=multi-user.target
