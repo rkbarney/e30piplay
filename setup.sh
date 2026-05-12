@@ -101,6 +101,13 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    location /api/ {
+        proxy_pass         http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+    }
+
     location /ws {
         proxy_pass         http://127.0.0.1:3001;
         proxy_http_version 1.1;
@@ -122,18 +129,20 @@ else
   echo "    WARNING: homepage returned HTTP $CODE — sudo tail -50 /var/log/nginx/error.log" >&2
 fi
 
-# ── 5. CarPlay placeholder ─────────────────────────────────────────────────────
-echo "[5/9] CarPlay backend placeholder…"
+# ── 5. CarPlay launcher API + sudo helper ─────────────────────────────────────
+echo "[5/9] CarPlay launcher API (carplay-server.cjs + switch script)…"
+install -m 644 "$SOURCE_DIR/carplay-server.cjs" "$APP_DIR/carplay-server.cjs"
+
 sudo tee /etc/systemd/system/s52-carplay.service > /dev/null <<SERVICE
 [Unit]
-Description=S52 CarPlay Backend (react-carplay)
+Description=S52 CarPlay launcher API (switch kiosk / Electron)
 After=network.target
 
 [Service]
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/node $APP_DIR/carplay-server.js
+ExecStart=/usr/bin/node $APP_DIR/carplay-server.cjs
 Restart=on-failure
 RestartSec=3
 Environment=PORT=3001
@@ -142,18 +151,13 @@ Environment=PORT=3001
 WantedBy=multi-user.target
 SERVICE
 
-if [[ ! -f "$APP_DIR/carplay-server.js" ]]; then
-  cat > "$APP_DIR/carplay-server.js" <<'JS'
-const http = require('http');
-const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('CarPlay backend placeholder\n');
-});
-server.listen(process.env.PORT || 3001, () => {
-  console.log('CarPlay placeholder listening on', process.env.PORT || 3001);
-});
-JS
-fi
+sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
+
+sudo tee /etc/sudoers.d/s52-carplay-launcher > /dev/null <<SUDOERS
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-carplay-switch.sh
+SUDOERS
+sudo chmod 440 /etc/sudoers.d/s52-carplay-launcher
+sudo visudo -cf /etc/sudoers.d/s52-carplay-launcher
 
 sudo systemctl daemon-reload
 sudo systemctl enable s52-carplay
@@ -209,6 +213,7 @@ mkdir -p "/home/$SERVICE_USER/.local/bin"
 mkdir -p "/home/$SERVICE_USER/.config"
 
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-inner.sh"
+install -m 755 "$SOURCE_DIR/scripts/s52-react-carplay-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-react-carplay-inner.sh"
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-exit-server.py" "/home/$SERVICE_USER/.local/bin/s52-kiosk-exit-server.py"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
 
@@ -248,6 +253,29 @@ sudo systemctl restart s52-cage-kiosk.service || {
   echo "  Logs: journalctl -u s52-cage-kiosk -b --no-pager"
 }
 
+sudo tee /etc/systemd/system/s52-cage-react-carplay.service > /dev/null <<SERVICE
+[Unit]
+Description=S52 cage + react-carplay Electron (from kiosk CarPlay screen)
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${SERVICE_USER}
+Group=${SERVICE_USER}
+Environment=XDG_RUNTIME_DIR=/run/user/${S52_UID}
+SupplementaryGroups=video render input plugdev
+ExecStartPre=/bin/bash -c 'for i in {1..120}; do [[ -d /run/user/${S52_UID} ]] && exit 0; sleep 0.25; done; exit 1'
+ExecStart=/usr/bin/cage -- /home/${SERVICE_USER}/.local/bin/s52-react-carplay-inner.sh
+Restart=no
+ExecStopPost=/usr/bin/systemctl start s52-cage-kiosk.service
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+sudo systemctl daemon-reload
+
 echo "[9b] Console autologin (tty1 — skips login: prompt on HDMI)…"
 sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
 sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<AUTOLOGIN
@@ -267,12 +295,12 @@ echo ""
 echo "  App copy:  $APP_DIR"
 echo "  Iteration:  cd $APP_DIR && git pull && npm ci && npm run build"
 echo "             sudo rsync -a --delete dist/ /var/www/s52-display/"
-echo "             sudo systemctl restart s52-cage-kiosk"
+echo "             sudo systemctl restart s52-cage-kiosk s52-carplay"
 echo ""
 echo "  Logs:     journalctl -u s52-cage-kiosk -f"
 echo "  Stop UI:  sudo systemctl stop s52-cage-kiosk"
 echo ""
-echo "  CarPlay:  see README — upstream is Electron (github.com/rhysmorgan134/react-carplay), not npm install"
-echo "            (then wire CarPlayReceiver.jsx — see README)"
+echo "  CarPlay:  AppImage installer + kiosk \"Open CarPlay\" → cage + Electron (see README)"
+echo "            SSH escape hatch: sudo /usr/local/bin/s52-carplay-switch.sh return"
 echo "============================================"
 echo ""

@@ -1,34 +1,49 @@
 /**
- * CarPlayReceiver
+ * CarPlayReceiver — launches upstream Electron react-carplay from the Pi kiosk.
  *
- * Placeholder — real CarPlay UI is not wired into this Chromium kiosk yet.
- *
- * Upstream reference project (Electron, not an npm library):
- *   https://github.com/rhysmorgan134/react-carplay
- * Install via their setup-pi.sh or AppImage releases — `npm install react-carplay`
- * does not exist on the registry (404).
- *
- * A future path would bridge node-carplay / WebSockets / video into this React app;
- * that integration is TBD.
+ * On device: nginx proxies POST /api/* → carplay-server.cjs (see setup.sh).
+ * Requires ~/.local/bin/react-carplay (install-react-carplay-appimage.sh).
  */
 
+import { useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
+const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
+
 export default function CarPlayReceiver({ onBack }) {
+  const [phase, setPhase] = useState('idle');
+  const [err, setErr] = useState('');
+
+  const launchElectron = useCallback(async () => {
+    setErr('');
+    setPhase('starting');
+    try {
+      const res = await fetch(`${API_BASE}/api/launch-react-carplay`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPhase('idle');
+        setErr(data.detail || data.error || `HTTP ${res.status}`);
+        return;
+      }
+      setPhase('handoff');
+    } catch (e) {
+      setPhase('idle');
+      setErr(
+        e.message ||
+          'Request failed — use the Pi build (nginx + carplay-server). For desktop dev set VITE_S52_API_BASE=http://pi-host'
+      );
+    }
+  }, []);
+
   return (
     <div style={styles.root}>
-      {/* Status bar */}
       <div style={styles.statusBar}>
         <div style={styles.statusLeft}>
           {typeof onBack === 'function' && (
-            <button
-              type="button"
-              style={styles.backBtn}
-              onClick={(e) => {
-                e.stopPropagation();
-                onBack(e);
-              }}
-            >
+            <button type="button" style={styles.backBtn} onClick={onBack}>
               ← back
             </button>
           )}
@@ -37,10 +52,8 @@ export default function CarPlayReceiver({ onBack }) {
         <span style={styles.mode}>CARPLAY</span>
       </div>
 
-      {/* Main area */}
       <div style={styles.main}>
         <div style={styles.iconWrap}>
-          {/* SVG so the icon shows without emoji fonts (Chromium/Linux kiosk) */}
           <div style={styles.bigIcon} aria-hidden>
             <svg width="56" height="56" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <rect
@@ -60,22 +73,38 @@ export default function CarPlayReceiver({ onBack }) {
           <div style={styles.title}>CarPlay</div>
         </div>
 
-        <div style={styles.instructions}>
-          <div style={styles.step}>1  Plug Carlinkit dongle into Pi USB port</div>
-          <div style={styles.step}>2  Enable Wireless CarPlay on iPhone</div>
-          <div style={styles.step}>3  Select &quot;S52 Solutions&quot; from CarPlay list</div>
-          <div style={styles.step}>4  CarPlay UI: github.com/rhysmorgan134/react-carplay — Releases AppImage or setup-pi.sh (Electron app; not on npm)</div>
-          <div style={styles.step}>5  In-browser CarPlay in this kiosk is not implemented yet</div>
+        <div style={styles.col}>
+          <div style={styles.instructions}>
+            <div style={styles.step}>1  Plug Carlinkit dongle into Pi USB</div>
+            <div style={styles.step}>2  Install Electron app: bash ~/e30piplay/scripts/install-react-carplay-appimage.sh</div>
+            <div style={styles.step}>3  Tap Open CarPlay below — kiosk hands display to react-carplay</div>
+            <div style={styles.step}>4  Quit Electron when done — kiosk restarts automatically</div>
+          </div>
+
+          <button
+            type="button"
+            style={styles.primaryBtn}
+            disabled={phase === 'starting' || phase === 'handoff'}
+            onClick={launchElectron}
+          >
+            {phase === 'starting' ? 'Starting…' : phase === 'handoff' ? 'Handoff…' : 'Open CarPlay (Electron)'}
+          </button>
+
+          {err ? <div style={styles.error}>{err}</div> : null}
+
+          <div style={styles.hint}>
+            Stuck? SSH:{' '}
+            <span style={styles.mono}>sudo /usr/local/bin/s52-carplay-switch.sh return</span>
+          </div>
         </div>
       </div>
 
-      {/* Footer */}
       <div style={styles.footer}>
         <span style={styles.footerLeft}>CARLINKIT WIRELESS DONGLE</span>
-        <span style={styles.footerRight}>WAITING FOR CONNECTION...</span>
+        <span style={styles.footerRight}>
+          {phase === 'handoff' ? 'SWITCHING DISPLAY…' : 'READY'}
+        </span>
       </div>
-
-      {/* Blinking dot */}
       <div style={styles.waitDot} />
     </div>
   );
@@ -145,9 +174,10 @@ const styles = {
   main: {
     flex: 1,
     display: 'flex',
-    alignItems: 'center',
-    gap: '32px',
-    padding: '0 24px',
+    alignItems: 'flex-start',
+    gap: '16px',
+    padding: '12px 14px 8px',
+    minHeight: 0,
   },
   iconWrap: {
     display: 'flex',
@@ -155,6 +185,7 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     flexShrink: 0,
+    paddingTop: '8px',
   },
   bigIcon: {
     display: 'flex',
@@ -168,18 +199,57 @@ const styles = {
     fontWeight: 'bold',
     letterSpacing: '0.1em',
   },
-  instructions: {
+  col: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: '7px',
+    gap: '8px',
+    minWidth: 0,
+  },
+  instructions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '5px',
   },
   step: {
     color: '#cc8800',
-    fontSize: '9.5px',
-    lineHeight: 1.3,
+    fontSize: '8.5px',
+    lineHeight: 1.28,
     borderLeft: '2px solid #3a2800',
-    paddingLeft: '8px',
+    paddingLeft: '6px',
+  },
+  primaryBtn: {
+    marginTop: '4px',
+    padding: '8px 10px',
+    fontFamily: 'inherit',
+    fontSize: '9px',
+    fontWeight: 'bold',
+    letterSpacing: '0.08em',
+    color: '#1a1200',
+    background: 'linear-gradient(180deg, #ffc940 0%, #e6a000 100%)',
+    border: '1px solid #ffdd77',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    alignSelf: 'stretch',
+  },
+  error: {
+    color: '#ff6b6b',
+    fontSize: '8px',
+    lineHeight: 1.35,
+    borderLeft: '2px solid #662222',
+    paddingLeft: '6px',
+  },
+  hint: {
+    color: '#665533',
+    fontSize: '7px',
+    lineHeight: 1.35,
+    marginTop: 'auto',
+    paddingBottom: '4px',
+  },
+  mono: {
+    fontFamily: 'monospace',
+    color: '#887755',
+    wordBreak: 'break-all',
   },
   footer: {
     height: '22px',
@@ -189,6 +259,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '0 10px',
+    flexShrink: 0,
   },
   footerLeft: {
     color: '#3a2800',
@@ -199,7 +270,6 @@ const styles = {
     color: '#ffb300',
     fontSize: '8px',
     letterSpacing: '0.1em',
-    animation: 'blink 1.2s step-end infinite',
   },
   waitDot: {
     position: 'absolute',

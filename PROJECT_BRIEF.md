@@ -133,11 +133,11 @@ e30piplay/
 │       ├── FactoryClock.jsx      # OEM white analog clock
 │       ├── DigitalClock.jsx      # OEM red LED digital clock
 │       ├── AnalogClock.jsx       # S52 amber analog clock
-│       └── CarPlayReceiver.jsx   # CarPlay placeholder (real UI = upstream Electron app)
+│       └── CarPlayReceiver.jsx   # “Open CarPlay” → POST /api → cage + Electron AppImage
 ├── public/
 │   └── BMW-Logo-1970-1989.png
 ├── setup.sh                      # Pi OS Lite + cage + nginx (one shot)
-├── carplay-server.js             # CarPlay backend (placeholder)
+├── carplay-server.cjs            # Launcher API (localhost + nginx /api/)
 ├── SHOPPING_LIST.md
 └── PROJECT_BRIEF.md
 ```
@@ -165,7 +165,7 @@ DevTools → Device toolbar → Custom → **320 × 480**
 bash setup.sh
 sudo reboot
 
-# 4. CarPlay UI: upstream Electron app — not npm-installable into this repo:
-#    https://github.com/rhysmorgan134/react-carplay (Releases AppImage or setup-pi.sh).
-#    In-browser integration in e30piplay is still TBD (placeholder only).
+# 4. CarPlay UI: upstream Electron (AppImage). From the kiosk CarPlay screen,
+#    POST /api/launch-react-carplay switches cage from Chromium to Electron;
+#    quitting Electron restores the kiosk (see README).
 ```

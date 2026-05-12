@@ -11,7 +11,7 @@ Single supported stack for this repo:
 - **`cage`** runs full-screen Wayland; **`s52-kiosk-inner.sh`** starts Chromium (`--ozone-platform=wayland --no-sandbox`) against **`http://localhost`** (nginx).
 - **`seatd`** + **`loginctl enable-linger`** so `/run/user/$UID` exists without a desktop login.
 - **Display rotation / custom HDMI timings:** written into **`/boot/firmware/config.txt`** by **`setup.sh`** (marker block `# --- S52 e30piplay begin` … `end`). Override defaults with env vars before running setup — see header comments in **`setup.sh`** (`S52_DISPLAY_ROTATE`, `S52_CUSTOM_HDMI`).
-- **CarPlay placeholder:** **`s52-carplay`** systemd service + nginx **`/ws`** proxy (same pattern as before).
+- **CarPlay launcher:** **`s52-carplay`** (**`carplay-server.cjs`** on **127.0.0.1:3001**) + nginx **`location /api/`** (POST switches **`s52-cage-kiosk`** ↔ **`s52-cage-react-carplay`**). Optional **`/ws`** proxy remains for future use.
 
 **Docker on Mac** cannot validate USB Carlinkit or Pi GPU; use **`docker compose up --build`** for nginx + static UI only.
 
