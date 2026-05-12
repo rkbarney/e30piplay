@@ -175,7 +175,25 @@ sudo visudo -cf /etc/sudoers.d/s52-carplay-launcher
 
 sudo systemctl daemon-reload
 sudo systemctl enable s52-carplay
-sudo systemctl restart s52-carplay || true
+sudo systemctl restart s52-carplay
+
+# Wait up to 10 s for the API to be reachable
+_carplay_ok=0
+for _i in {1..10}; do
+  sleep 1
+  _code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001/api/health 2>/dev/null || echo "000")
+  if [[ "$_code" == "200" ]]; then
+    echo "    carplay-server: ready (HTTP $_code)"
+    _carplay_ok=1
+    break
+  fi
+done
+if [[ "$_carplay_ok" == "0" ]]; then
+  echo "    WARNING: carplay-server did not come up within 10 s." >&2
+  echo "             journalctl -u s52-carplay -n 30 --no-pager" >&2
+  systemctl status s52-carplay --no-pager >&2 || true
+fi
+unset _carplay_ok _i _code
 
 # ── 6. Carlinkit udev ─────────────────────────────────────────────────────────
 echo "[6/10] Carlinkit udev rules…"
