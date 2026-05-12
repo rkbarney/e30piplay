@@ -81,15 +81,30 @@ npm run build
 
 ## Raspberry Pi deployment
 
-**Image:** [Raspberry Pi Imager](https://www.raspberrypi.com/software/) → **Raspberry Pi OS Lite (64-bit)** → enable **SSH**, user, hostname → flash SD.
+**Image:** [Raspberry Pi Imager](https://www.raspberrypi.com/software/) → **Raspberry Pi OS Lite (64-bit)** → flash SD.
+
+**SSH:** Turn **SSH** on in Imager’s **gear icon** (set hostname, username, and password there too). If you skipped it, `ssh user@pi-ip` will fail or **connection refused** until SSH is enabled (easiest fix: re-flash with SSH on, or enable from local keyboard on the Pi: `sudo systemctl enable --now ssh` after installing `openssh-server`).
+
+**Ethernet:** Works independently of Wi‑Fi; ignore rfkill Wi‑Fi messages if you’re on wired LAN.
+
+**First login:** Raspberry Pi OS Lite does **not** always ship with **`git`** installed. After SSH works:
+
+```bash
+sudo apt update
+sudo apt install -y git
+```
 
 **Install path:** clone this repo to **`~/e30piplay`** (default used by `setup.sh`). To use another directory, run `APP_DIR=/path/to/repo bash setup.sh`.
 
 ```bash
-cd ~/e30piplay   # your clone
+git clone -b experiment/pios-lite-cage https://github.com/rkbarney/e30piplay.git ~/e30piplay
+cd ~/e30piplay
 bash setup.sh
 sudo reboot
 ```
+
+(Use `main` instead of `experiment/pios-lite-cage` if you deploy from that branch.)
+
 
 `setup.sh` installs **cage**, **seatd**, **Chromium**, **nginx**, **Node**, publishes `dist/` to `/var/www/s52-display`, applies **`display_rotate`** (and optional custom HDMI mode) in **`/boot/firmware/config.txt`**, enables **`s52-cage-kiosk`** (kiosk at boot), and scaffolds CarPlay placeholder + udev. Override rotation before setup: `S52_DISPLAY_ROTATE=0 bash setup.sh`. Custom 480×320-style mode: `S52_CUSTOM_HDMI=1 bash setup.sh`.
 
