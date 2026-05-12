@@ -1,0 +1,6 @@
+#!/bin/bash
+# Restart the kiosk compositor (SSH / serial). Requires sudo.
+if [[ "${EUID}" -eq 0 ]]; then
+  exec systemctl restart s52-cage-kiosk.service
+fi
+exec sudo systemctl restart s52-cage-kiosk.service

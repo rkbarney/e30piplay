@@ -1,0 +1,13 @@
+# Copy to ~/.config/s52-display-layout.conf and adjust.
+# Pi OS Lite + cage: rotation is set in /boot/firmware/config.txt by setup.sh (display_rotate).
+# This file only tweaks kiosk URL / exit helper port.
+
+# Local POST target for in-app "Exit kiosk" (launcher passes this via URL query).
+# S52_KIOSK_EXIT_PORT=8765
+
+# Serve latest dist/ without rsync to /var/www (python http.server, dev only):
+# S52_KIOSK_STATIC_PORT=8899
+# S52_KIOSK_STATIC_ROOT=/home/admin/e30piplay/dist
+
+# Optional: seconds to wait for nginx before opening Chromium (default 90)
+# S52_HTTP_RETRIES=90
