@@ -1,20 +1,21 @@
 /**
- * CarPlayReceiver — launches upstream Electron react-carplay from the Pi kiosk.
+ * CarPlayReceiver — hands display to upstream Electron react-carplay from the Pi kiosk.
  *
- * On device: nginx proxies POST /api/* → carplay-server.cjs (see setup.sh).
- * Requires ~/.local/bin/react-carplay (install-react-carplay-appimage.sh).
+ * Opens automatically when this screen is shown (+). nginx proxies POST /api/* → carplay-server.cjs.
+ * Requires ~/.local/bin/react-carplay (setup.sh or install-react-carplay-appimage.sh).
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
 export default function CarPlayReceiver({ onBack }) {
-  const [phase, setPhase] = useState('idle');
+  const [phase, setPhase] = useState('starting');
   const [err, setErr] = useState('');
+  const devGuardRef = useRef(false);
 
-  const launchElectron = useCallback(async () => {
+  const runLaunch = useCallback(async () => {
     setErr('');
     setPhase('starting');
     try {
@@ -37,6 +38,15 @@ export default function CarPlayReceiver({ onBack }) {
       );
     }
   }, []);
+
+  useEffect(() => {
+    // React 18 Strict Mode (dev only) runs effects twice; avoid double POST to the Pi launcher.
+    if (import.meta.env.DEV) {
+      if (devGuardRef.current) return;
+      devGuardRef.current = true;
+    }
+    runLaunch();
+  }, [runLaunch]);
 
   return (
     <div style={styles.root}>
@@ -76,19 +86,15 @@ export default function CarPlayReceiver({ onBack }) {
         <div style={styles.col}>
           <div style={styles.instructions}>
             <div style={styles.step}>1  Plug Carlinkit dongle into Pi USB</div>
-            <div style={styles.step}>2  Install Electron app: bash ~/e30piplay/scripts/install-react-carplay-appimage.sh</div>
-            <div style={styles.step}>3  Tap Open CarPlay below — kiosk hands display to react-carplay</div>
-            <div style={styles.step}>4  Quit Electron when done — kiosk restarts automatically</div>
+            <div style={styles.step}>2  Electron opens automatically — kiosk hands off the display</div>
+            <div style={styles.step}>3  Quit Electron when done — kiosk returns</div>
           </div>
 
-          <button
-            type="button"
-            style={styles.primaryBtn}
-            disabled={phase === 'starting' || phase === 'handoff'}
-            onClick={launchElectron}
-          >
-            {phase === 'starting' ? 'Starting…' : phase === 'handoff' ? 'Handoff…' : 'Open CarPlay (Electron)'}
-          </button>
+          {err ? (
+            <button type="button" style={styles.primaryBtn} onClick={runLaunch}>
+              Retry Open CarPlay
+            </button>
+          ) : null}
 
           {err ? <div style={styles.error}>{err}</div> : null}
 
@@ -102,7 +108,13 @@ export default function CarPlayReceiver({ onBack }) {
       <div style={styles.footer}>
         <span style={styles.footerLeft}>CARLINKIT WIRELESS DONGLE</span>
         <span style={styles.footerRight}>
-          {phase === 'handoff' ? 'SWITCHING DISPLAY…' : 'READY'}
+          {phase === 'starting'
+            ? 'STARTING…'
+            : phase === 'handoff'
+              ? 'SWITCHING DISPLAY…'
+              : err
+                ? 'ERROR'
+                : 'READY'}
         </span>
       </div>
       <div style={styles.waitDot} />
