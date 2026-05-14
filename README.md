@@ -246,6 +246,28 @@ What is configured on the Pi:
 
 **Phone calls (they hear music but not you):** react-carplay defaults to **`micType: "os"`** — your voice is sent from **Linux**. If **`arecord -l`** is empty or PipeWire **Sources** has no USB line, there is **no uplink**; a speaker-only USB DAC cannot fix that. Add hardware with **capture**, re-run **`pi-audio-usb-default.sh`**, restart the kiosk, then choose the mic in **react-carplay → Settings**. Electron on Linux may still hit **`askForMediaAccess` is not a function** until fixed upstream ([react-carplay#107](https://github.com/rhysmorgan134/react-carplay/issues/107)).
 
+### Two identical-looking USB dongles (speaker out + mic in) — handoff notes
+
+**Short answer:** **It is usable only if the “mic” dongle is actually an audio-input device to Linux.** Same plastic shell does **not** guarantee that. If it is usable, you may still need **explicit** sink/source routing so CarPlay does not attach the wrong dongle.
+
+| Question | Yes | No |
+|----------|-----|-----|
+| Can I use one USB dongle for speakers and a **second** USB dongle for the mic? | **Yes**, this is a normal Linux layout (two USB Audio Class cards). | **Not if** the second stick is **playback-only** (very common): it will never show up under **`arecord -l`**, so there is **no** capture path. |
+| Does “identical product” to the speaker dongle mean it works for mic? | **Only if** that SKU includes an **ADC** / mic or line **input** and the kernel exposes **capture** endpoints. | **Often no:** many SKUs are **DAC-only** in the same enclosure; marketing looks the same, silicon differs. |
+
+**Why it can still fail even with two “good” dongles**
+
+1. **Wrong device chosen:** PipeWire names both something like `alsa_*_usb-Generic_USB_Audio-*`. Heuristics (and `pi-audio-usb-default.sh`) may bind **sink and source to the same physical dongle** or to the speaker dongle only. Fix: copy exact names from **`pactl list sinks short`** / **`pactl list sources short`** (or `wpctl inspect <id>` → `node.name`) into **`~/.config/s52-carplay-audio.env`** as **`PULSE_SINK`** and **`PULSE_SOURCE`**, then **`sudo systemctl restart s52-cage-kiosk`**.
+2. **Application layer:** **`~/.config/react-carplay/config.json`** uses **`micType: "os"`** and often **`microphone: ""`**. The upstream **Electron** path can fail on Linux with **`askForMediaAccess` is not a function** ([react-carplay#107](https://github.com/rhysmorgan134/react-carplay/issues/107)), so the OS may have audio while **react-carplay** still does not open the mic.
+3. **Exclusive ALSA use:** rare conflicts if something opens **`hw:`** directly; prefer PipeWire/Pulse defaults for CarPlay.
+
+**Minimal evidence another person should ask for**
+
+- Output of **`aplay -l`** and **`arecord -l`** (proves whether the mic dongle has **capture** at all).
+- **`wpctl status`** (Audio → Sinks / Sources) or **`pactl list sinks short`** / **`pactl list sources short`** after both dongles are plugged in.
+- **`~/.config/s52-carplay-audio.env`** and **`~/.config/react-carplay/config.json`** (mic-related keys).
+- Last lines of **`/tmp/react-carplay.log`** around a test call.
+
 **If you add the DAC later** (or changed USB ports), SSH to the Pi and run (as the kiosk user, from the repo clone):
 
 ```bash
