@@ -244,6 +244,8 @@ What is configured on the Pi:
 
 **Microphone (simple 3.5mm):** the Pi **has no built-in mic jack**. Plug the mic into a **USB audio adapter that includes an input** (combined headset **TRRS** jack, or a second **mic** port). Then run **`bash ~/e30piplay/scripts/pi-audio-usb-default.sh`** so **`PULSE_SOURCE`** is written and **`arecord -l`** shows a capture device. Wireless CarPlay often still uses the **phone’s microphones** for Siri/calls; the USB mic is for anything that records on the Pi side.
 
+**Phone calls (they hear music but not you):** react-carplay defaults to **`micType: "os"`** — your voice is sent from **Linux**. If **`arecord -l`** is empty or PipeWire **Sources** has no USB line, there is **no uplink**; a speaker-only USB DAC cannot fix that. Add hardware with **capture**, re-run **`pi-audio-usb-default.sh`**, restart the kiosk, then choose the mic in **react-carplay → Settings**. Electron on Linux may still hit **`askForMediaAccess` is not a function** until fixed upstream ([react-carplay#107](https://github.com/rhysmorgan134/react-carplay/issues/107)).
+
 **If you add the DAC later** (or changed USB ports), SSH to the Pi and run (as the kiosk user, from the repo clone):
 
 ```bash
