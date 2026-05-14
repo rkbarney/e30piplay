@@ -239,8 +239,10 @@ curl -fsSL https://raw.githubusercontent.com/rkbarney/e30piplay/main/scripts/ins
 
 What is configured on the Pi:
 
-- **`~/.config/labwc/autostart`** — before each react-carplay start: unmutes common USB DAC mixers (**PCM** then **Extension Unit**), sources **`~/.config/s52-carplay-audio.env`** if present.
-- **`~/.config/s52-carplay-audio.env`** — `PULSE_SINK` and/or `ALSA_CARD`; template: **`~/.config/s52-carplay-audio.env.example`** (also under `scripts/s52-carplay-audio.env.example` in the repo).
+- **`~/.config/labwc/autostart`** — before each react-carplay start: unmutes common USB **playback** (PCM / Extension Unit) and **capture** (Mic / Capture) where those controls exist, then sources **`~/.config/s52-carplay-audio.env`** if present.
+- **`~/.config/s52-carplay-audio.env`** — `PULSE_SINK`, optional **`PULSE_SOURCE`** (mic), and/or `ALSA_CARD`; template: **`~/.config/s52-carplay-audio.env.example`** (also under `scripts/s52-carplay-audio.env.example` in the repo).
+
+**Microphone (simple 3.5mm):** the Pi **has no built-in mic jack**. Plug the mic into a **USB audio adapter that includes an input** (combined headset **TRRS** jack, or a second **mic** port). Then run **`bash ~/e30piplay/scripts/pi-audio-usb-default.sh`** so **`PULSE_SOURCE`** is written and **`arecord -l`** shows a capture device. Wireless CarPlay often still uses the **phone’s microphones** for Siri/calls; the USB mic is for anything that records on the Pi side.
 
 **If you add the DAC later** (or changed USB ports), SSH to the Pi and run (as the kiosk user, from the repo clone):
 
