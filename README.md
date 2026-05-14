@@ -168,6 +168,7 @@ EGL warnings from cage alone are often harmless.
 Runtime references:
 
 - labwc autostart (launches Chromium + AppImage as siblings): `scripts/s52-labwc-autostart.sh` → `~/.config/labwc/autostart`
+- CarPlay USB audio template: `scripts/s52-carplay-audio.env.example` → `~/.config/s52-carplay-audio.env.example` (see **USB audio** below)
 - labwc rc.xml (windowRule iconifies AppImage on first map): `scripts/s52-labwc-rc.xml` → `~/.config/labwc/rc.xml`
 - Chromium wrapper (foreground kiosk window): `scripts/s52-kiosk-inner.sh` (installed to `~/.local/bin`)
 - CarPlay focus bridge: **`carplay-server.cjs`** + **`scripts/s52-carplay-switch.sh`** → **`/usr/local/bin/s52-carplay-switch.sh`** (`wlrctl toplevel focus|minimize app_id:react-carplay`)
@@ -226,11 +227,29 @@ sudo reboot
 bash ~/e30piplay/scripts/install-react-carplay-appimage.sh
 ```
 
-Or fetch the installer raw from GitHub (replace branch if yours differs):
+Or fetch the installer raw from GitHub (use your branch or `main` if unsure):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rkbarney/e30piplay/experiment/pios-lite-cage/scripts/install-react-carplay-appimage.sh | bash
+curl -fsSL https://raw.githubusercontent.com/rkbarney/e30piplay/main/scripts/install-react-carplay-appimage.sh | bash
 ```
+
+## USB audio (CarPlay / Spotify)
+
+**`setup.sh`** installs **PipeWire** (`pipewire-pulse`, `wireplumber`), **`pulseaudio-utils`** (`pactl`), and **`alsa-utils`**, then tries **`scripts/pi-audio-usb-default.sh`** so a **USB→3.5mm DAC** is the default for **react-carplay** (Electron). **Plug the DAC before or during setup** if you want that step to succeed on the first run.
+
+What is configured on the Pi:
+
+- **`~/.config/labwc/autostart`** — before each react-carplay start: unmutes common USB DAC mixers (**PCM** then **Extension Unit**), sources **`~/.config/s52-carplay-audio.env`** if present.
+- **`~/.config/s52-carplay-audio.env`** — `PULSE_SINK` and/or `ALSA_CARD`; template: **`~/.config/s52-carplay-audio.env.example`** (also under `scripts/s52-carplay-audio.env.example` in the repo).
+
+**If you add the DAC later** (or changed USB ports), SSH to the Pi and run (as the kiosk user, from the repo clone):
+
+```bash
+bash ~/e30piplay/scripts/pi-audio-usb-default.sh
+sudo systemctl restart s52-cage-kiosk
+```
+
+**Do not** run `pi-audio-usb-default.sh` on your Mac; it is Pi-only (the script exits on non-Linux).
 
 ## Notes
 
