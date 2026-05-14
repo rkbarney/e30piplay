@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
-const SIZE = 312;      // SVG canvas — nearly full 320px width
+const SIZE = 316;      // SVG canvas — nearly full 320px width
 const CX   = SIZE / 2; // center x
 const CY   = SIZE / 2; // center y
-const R    = 142;      // outer face radius (keeps ~same proportion as original)
+const R    = 144;      // outer face radius
 
 function polarToXY(angleDeg, radius) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -140,16 +140,16 @@ export default function AnalogClock({ onMinus, onPlus }) {
         })}
 
         {/* Hour hand (shadow + fill) */}
-        <Hand angleDeg={hourAngle} length={65}  width={7} color="#ffb300" shadow />
-        <Hand angleDeg={hourAngle} length={65}  width={6} color="#ffb300" />
+        <Hand angleDeg={hourAngle} length={67}  width={7} color="#ffb300" shadow />
+        <Hand angleDeg={hourAngle} length={67}  width={6} color="#ffb300" />
 
         {/* Minute hand */}
-        <Hand angleDeg={minAngle}  length={86}  width={5} color="#ffb300" shadow />
-        <Hand angleDeg={minAngle}  length={86}  width={4} color="#ffb300" />
+        <Hand angleDeg={minAngle}  length={88}  width={5} color="#ffb300" shadow />
+        <Hand angleDeg={minAngle}  length={88}  width={4} color="#ffb300" />
 
         {/* Second hand */}
-        <Hand angleDeg={secAngle}  length={94}  width={2.5} color="#ff3333" shadow />
-        <Hand angleDeg={secAngle}  length={94}  width={2} color="#ff3333" />
+        <Hand angleDeg={secAngle}  length={96}  width={2.5} color="#ff3333" shadow />
+        <Hand angleDeg={secAngle}  length={96}  width={2} color="#ff3333" />
 
         {/* Center cap */}
         <circle cx={CX} cy={CY} r={6} fill="#ffb300" />
@@ -188,15 +188,15 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '2px',
+    gap: '0px',
     fontFamily: "'Courier New', monospace",
   },
   topLabel: {
     color: '#ffb300',
-    fontSize: '12px',
+    fontSize: '11px',
     letterSpacing: '0.3em',
     fontWeight: 'bold',
-    marginBottom: '4px',
+    marginBottom: '2px',
   },
   svg: {
     filter: 'drop-shadow(0 0 6px #ffb30060)',
@@ -205,7 +205,7 @@ const styles = {
     display: 'flex',
     alignItems: 'baseline',
     gap: '4px',
-    marginTop: '2px',
+    marginTop: '0px',
   },
   digitalTime: {
     color: '#ffb300',
@@ -225,17 +225,17 @@ const styles = {
     color: '#3a2800',
     fontSize: '10px',
     letterSpacing: '0.25em',
-    marginTop: '4px',
+    marginTop: '2px',
   },
   buttons: {
     width: '288px',
     display: 'flex',
     justifyContent: 'space-between',
-    marginTop: '10px',
+    marginTop: '6px',
   },
   btn: {
     width: '92px',
-    height: '52px',
+    height: '44px',
     background: '#1a1000',
     border: '2px solid #7a5500',
     borderRadius: '8px',

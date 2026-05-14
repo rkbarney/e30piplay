@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
-const SIZE = 260;
+const SIZE = 318;
 const CX   = SIZE / 2;
 const CY   = SIZE / 2;
-const R    = 118;
+const R    = 145;
 
 function polarToXY(angleDeg, radius) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -123,6 +123,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingBottom: '80px',
   },
   svg: {
     filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.08))',

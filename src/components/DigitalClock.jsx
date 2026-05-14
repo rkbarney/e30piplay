@@ -78,16 +78,16 @@ const styles = {
     justifyContent: 'center',
   },
 
-  // The whole OEM unit — compact, not full-screen
+  // The whole OEM unit — expanded to fill most of the screen width
   unit: {
-    width: '210px',
+    width: '296px',
     background: '#0d0d0d',
     border: '1px solid #2a2a2a',
-    borderRadius: '6px',
-    padding: '10px 12px 12px',
+    borderRadius: '8px',
+    padding: '14px 16px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '10px',
   },
 
   displayRow: {
@@ -119,23 +119,23 @@ const styles = {
   },
   digits: {
     color: LED,
-    fontSize: '44px',
+    fontSize: '80px',
     fontFamily: "'Courier New', monospace",
     fontWeight: 'bold',
     lineHeight: 1,
-    textShadow: `0 0 8px ${LED}99`,
-    letterSpacing: '-1px',
-    minWidth: '34px',
+    textShadow: `0 0 12px ${LED}99`,
+    letterSpacing: '-2px',
+    minWidth: '58px',
     textAlign: 'right',
   },
   colon: {
     color: LED,
-    fontSize: '38px',
+    fontSize: '70px',
     fontFamily: "'Courier New', monospace",
     fontWeight: 'bold',
     lineHeight: 1,
-    textShadow: `0 0 8px ${LED}`,
-    paddingBottom: '3px',
+    textShadow: `0 0 12px ${LED}`,
+    paddingBottom: '4px',
     animation: 'blink 1s step-end infinite',
   },
 
