@@ -55,6 +55,15 @@ fi
 if [ -x "${CARPLAY_LAUNCHER}" ]; then
   (
     sleep "${CARPLAY_START_DELAY}"
+    # Optional: ~/.config/s52-carplay-audio.env (e.g. PULSE_SINK=...) so
+    # react-carplay uses the USB DAC instead of HDMI. See
+    # scripts/s52-carplay-audio.env.example in the repo.
+    CARPLAY_AUDIO_ENV="${HOME}/.config/s52-carplay-audio.env"
+    if [ -f "${CARPLAY_AUDIO_ENV}" ]; then
+      echo "[$(date)] sourcing ${CARPLAY_AUDIO_ENV}"
+      # shellcheck disable=SC1090
+      . "${CARPLAY_AUDIO_ENV}"
+    fi
     GPU_FLAG="--disable-gpu"
     if [ "${S52_CARPLAY_GPU:-0}" = "1" ]; then
       GPU_FLAG=""

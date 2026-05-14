@@ -272,6 +272,8 @@ if [[ ! -f "/home/$SERVICE_USER/.config/s52-display-layout.conf" ]]; then
   cp "/home/$SERVICE_USER/.config/s52-display-layout.conf.example" "/home/$SERVICE_USER/.config/s52-display-layout.conf"
 fi
 
+install -m 644 "$SOURCE_DIR/scripts/s52-carplay-audio.env.example" "/home/$SERVICE_USER/.config/s52-carplay-audio.env.example"
+
 install -m 755 "$SOURCE_DIR/scripts/s52-boot-branding.sh" "/home/$SERVICE_USER/.local/bin/s52-boot-branding.sh" 2>/dev/null || true
 
 # s52-cage-kiosk has NO network dependency on purpose — nginx serves
