@@ -42,10 +42,61 @@ EOF
 sudo udevadm control --reload-rules
 sudo usermod -aG plugdev "$USER" || true
 
-cat > "${HOME}/.local/bin/react-carplay" <<EOF
+# --- Linux patch: electron.systemPreferences.askForMediaAccess is macOS-only.
+# On Linux this call throws an unhandled rejection that prevents mic streams
+# from initialising (react-carplay#107). We extract the AppImage, guard the
+# call, and run from the extracted tree so the patch survives future kiosk
+# restarts without re-downloading. Re-running this script re-applies the patch.
+EXTRACTED="${APP_DIR}/react-carplay-${VERSION}-arm64-extracted"
+PATCH_OK=0
+echo "Applying Linux mic patch (react-carplay#107)..."
+if command -v node >/dev/null 2>&1; then
+  # Extract AppImage into versioned directory (safe to re-run — rm first).
+  rm -rf "${EXTRACTED}"
+  mkdir -p "${EXTRACTED}"
+  cd "${EXTRACTED}"
+  "${IMAGE}" --appimage-extract >/dev/null 2>&1 && mv squashfs-root/* . && rmdir squashfs-root 2>/dev/null || true
+  cd "$APP_DIR"
+  ASAR="${EXTRACTED}/resources/app.asar"
+  if [ -f "${ASAR}" ]; then
+    PATCH_WORK="/tmp/rc-app-patch-$$"
+    rm -rf "${PATCH_WORK}"
+    if npx --yes @electron/asar extract "${ASAR}" "${PATCH_WORK}" 2>/dev/null; then
+      MAIN_JS="${PATCH_WORK}/out/main/index.js"
+      if [ -f "${MAIN_JS}" ]; then
+        node -e "
+const fs = require('fs');
+const f = process.argv[1];
+let s = fs.readFileSync(f, 'utf8');
+const before = 'electron.systemPreferences.askForMediaAccess(\"microphone\");';
+const after  = 'if (typeof electron.systemPreferences.askForMediaAccess === \"function\") { electron.systemPreferences.askForMediaAccess(\"microphone\"); }';
+if (s.includes(before)) { fs.writeFileSync(f, s.replace(before, after)); process.stdout.write('patched\n'); }
+else if (s.includes(after)) { process.stdout.write('already patched\n'); }
+else { process.stdout.write('line not found — skipping\n'); }
+" "${MAIN_JS}"
+        npx @electron/asar pack "${PATCH_WORK}" "${ASAR}" 2>/dev/null && PATCH_OK=1 || true
+      fi
+      rm -rf "${PATCH_WORK}"
+    fi
+  fi
+fi
+
+if [ "${PATCH_OK}" -eq 1 ]; then
+  cat > "${HOME}/.local/bin/react-carplay" <<EOF
+#!/bin/bash
+APPDIR="${EXTRACTED}"
+export APPDIR
+exec "\${APPDIR}/AppRun" "\$@"
+EOF
+  echo "Launcher points to patched extracted build."
+else
+  echo "Warning: mic patch could not be applied (node/npx missing or AppImage layout changed)." >&2
+  echo "         Falling back to unpatched AppImage — mic may not work on Linux." >&2
+  cat > "${HOME}/.local/bin/react-carplay" <<EOF
 #!/bin/bash
 exec "${IMAGE}" "\$@"
 EOF
+fi
 chmod +x "${HOME}/.local/bin/react-carplay"
 
 echo ""
