@@ -54,6 +54,8 @@ sudo apt-get install -y -qq \
   unclutter \
   alsa-utils \
   pulseaudio-utils \
+  pipewire-pulse \
+  wireplumber \
   openssh-server \
   avahi-daemon \
   python3 \
@@ -274,6 +276,23 @@ if [[ ! -f "/home/$SERVICE_USER/.config/s52-display-layout.conf" ]]; then
 fi
 
 install -m 644 "$SOURCE_DIR/scripts/s52-carplay-audio.env.example" "/home/$SERVICE_USER/.config/s52-carplay-audio.env.example"
+
+# PipeWire user stack + USB DAC defaults for react-carplay (Electron). Idempotent.
+S52_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
+if [[ -x "$SOURCE_DIR/scripts/pi-audio-usb-default.sh" ]]; then
+  echo "    CarPlay audio: PipeWire / USB DAC defaults (best effort)…"
+  for ((_s = 0; _s < 15; _s++)); do
+    [[ -S "/run/user/${S52_UID}/pulse/native" ]] && break
+    sleep 1
+  done
+  if sudo -u "$SERVICE_USER" env HOME="$S52_HOME" XDG_RUNTIME_DIR="/run/user/${S52_UID}" \
+    bash "$SOURCE_DIR/scripts/pi-audio-usb-default.sh"; then
+    :
+  else
+    echo "    (No USB DAC yet, or PipeWire not ready — plug DAC then: bash $APP_DIR/scripts/pi-audio-usb-default.sh)"
+  fi
+  unset _s
+fi
 
 install -m 755 "$SOURCE_DIR/scripts/s52-boot-branding.sh" "/home/$SERVICE_USER/.local/bin/s52-boot-branding.sh" 2>/dev/null || true
 
