@@ -64,13 +64,26 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
       # shellcheck disable=SC1090
       . "${CARPLAY_AUDIO_ENV}"
     fi
+    # USB class-compliant DACs often expose an "Extension Unit" that defaults
+    # to off — analog out stays silent until turned on (resets on reboot).
+    USB_ALSA_CARD="${ALSA_CARD:-${S52_USB_ALSA_CARD:-Audio}}"
+    CARPLAY_ALSA_FLAG=""
+    if command -v amixer >/dev/null 2>&1 && amixer -c "${USB_ALSA_CARD}" info >/dev/null 2>&1; then
+      CARPLAY_ALSA_FLAG="--alsa-output-device=plughw:CARD=${USB_ALSA_CARD},DEV=0"
+    fi
     GPU_FLAG="--disable-gpu"
     if [ "${S52_CARPLAY_GPU:-0}" = "1" ]; then
       GPU_FLAG=""
     fi
     while true; do
+      if command -v amixer >/dev/null 2>&1; then
+        # Some USB DACs flip "Extension Unit" off when PCM is touched — set PCM first, unmute last.
+        amixer -c "${USB_ALSA_CARD}" sset PCM 100% >/dev/null 2>&1 || true
+        amixer -c "${USB_ALSA_CARD}" sset 'Extension Unit' on >/dev/null 2>&1 || true
+      fi
       "${CARPLAY_LAUNCHER}" --no-sandbox \
         ${GPU_FLAG} \
+        ${CARPLAY_ALSA_FLAG} \
         --ozone-platform=wayland \
         --enable-features=UseOzonePlatform \
         --password-store=basic \
