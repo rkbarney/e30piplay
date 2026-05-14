@@ -53,6 +53,7 @@ sudo apt-get install -y -qq \
   curl \
   unclutter \
   alsa-utils \
+  pulseaudio-utils \
   openssh-server \
   avahi-daemon \
   python3 \
