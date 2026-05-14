@@ -67,8 +67,10 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
     # USB class-compliant DACs often expose an "Extension Unit" that defaults
     # to off — analog out stays silent until turned on (resets on reboot).
     USB_ALSA_CARD="${ALSA_CARD:-${S52_USB_ALSA_CARD:-Audio}}"
+    # When PULSE_SINK is set (PipeWire + libpulse), let Electron use Pulse; do not
+    # also pass --alsa-output-device or Chromium can bypass the Pulse default.
     CARPLAY_ALSA_FLAG=""
-    if command -v amixer >/dev/null 2>&1 && amixer -c "${USB_ALSA_CARD}" info >/dev/null 2>&1; then
+    if [ -z "${PULSE_SINK:-}" ] && command -v amixer >/dev/null 2>&1 && amixer -c "${USB_ALSA_CARD}" info >/dev/null 2>&1; then
       CARPLAY_ALSA_FLAG="--alsa-output-device=plughw:CARD=${USB_ALSA_CARD},DEV=0"
     fi
     GPU_FLAG="--disable-gpu"
