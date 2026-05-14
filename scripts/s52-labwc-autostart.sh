@@ -82,6 +82,13 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
         # Some USB DACs flip "Extension Unit" off when PCM is touched — set PCM first, unmute last.
         amixer -c "${USB_ALSA_CARD}" sset PCM 100% >/dev/null 2>&1 || true
         amixer -c "${USB_ALSA_CARD}" sset 'Extension Unit' on >/dev/null 2>&1 || true
+        # 3.5mm mic / line-in on the same USB sound card (best-effort unmute).
+        amixer -c "${USB_ALSA_CARD}" sset Capture 90% >/dev/null 2>&1 || true
+        amixer -c "${USB_ALSA_CARD}" sset Capture cap >/dev/null 2>&1 || true
+        amixer -c "${USB_ALSA_CARD}" sset Capture on >/dev/null 2>&1 || true
+        amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' 90% >/dev/null 2>&1 || true
+        amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' cap >/dev/null 2>&1 || true
+        amixer -c "${USB_ALSA_CARD}" sset Mic 90% >/dev/null 2>&1 || true
       fi
       "${CARPLAY_LAUNCHER}" --no-sandbox \
         ${GPU_FLAG} \
