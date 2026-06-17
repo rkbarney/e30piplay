@@ -42,11 +42,23 @@ EOF
 sudo udevadm control --reload-rules
 sudo usermod -aG plugdev "$USER" || true
 
-# --- Linux patch: electron.systemPreferences.askForMediaAccess is macOS-only.
-# On Linux this call throws an unhandled rejection that prevents mic streams
-# from initialising (react-carplay#107). We extract the AppImage, guard the
-# call, and run from the extracted tree so the patch survives future kiosk
-# restarts without re-downloading. Re-running this script re-applies the patch.
+# --- Linux patches applied to the extracted asar (re-run re-applies both):
+#
+# 1) electron.systemPreferences.askForMediaAccess is macOS-only. On Linux this
+#    call throws an unhandled rejection that prevents mic streams from
+#    initialising (react-carplay#107). We guard the call.
+#
+# 2) The BrowserWindow is created with `show: false` and only revealed on
+#    `ready-to-show`. That event fires when the compositor presents the first
+#    frame — which works with hardware GBM, but under the software-GL path we
+#    use to dodge the Mesa 25.0.7 GBM/dma_buf regression (see
+#    s52-labwc-autostart.sh), the frame callback on a hidden/unmapped Wayland
+#    surface never completes, so ready-to-show never fires and no window maps.
+#    We flip `show: false` -> `show: true` so the toplevel maps unconditionally;
+#    labwc's windowRule iconifies it until the user taps `+`.
+#
+# We extract the AppImage, patch, and run from the extracted tree so the patch
+# survives future kiosk restarts without re-downloading.
 EXTRACTED="${APP_DIR}/react-carplay-${VERSION}-arm64-extracted"
 PATCH_OK=0
 echo "Applying Linux mic patch (react-carplay#107)..."
@@ -68,11 +80,18 @@ if command -v node >/dev/null 2>&1; then
 const fs = require('fs');
 const f = process.argv[1];
 let s = fs.readFileSync(f, 'utf8');
+// Patch 1: guard macOS-only askForMediaAccess (react-carplay#107).
 const before = 'electron.systemPreferences.askForMediaAccess(\"microphone\");';
 const after  = 'if (typeof electron.systemPreferences.askForMediaAccess === \"function\") { electron.systemPreferences.askForMediaAccess(\"microphone\"); }';
-if (s.includes(before)) { fs.writeFileSync(f, s.replace(before, after)); process.stdout.write('patched\n'); }
-else if (s.includes(after)) { process.stdout.write('already patched\n'); }
-else { process.stdout.write('line not found — skipping\n'); }
+if (s.includes(before)) { s = s.replace(before, after); process.stdout.write('mic: patched\n'); }
+else if (s.includes(after)) { process.stdout.write('mic: already patched\n'); }
+else { process.stdout.write('mic: line not found — skipping\n'); }
+// Patch 2: show window unconditionally (software-GL path never fires ready-to-show).
+const m = s.match(/show:\s*false,/);
+if (m) { s = s.replace(/show:\s*false,/, 'show: true,'); process.stdout.write('show: patched\n'); }
+else if (/show:\s*true,/.test(s)) { process.stdout.write('show: already patched\n'); }
+else { process.stdout.write('show: pattern not found — skipping\n'); }
+fs.writeFileSync(f, s);
 " "${MAIN_JS}"
         npx @electron/asar pack "${PATCH_WORK}" "${ASAR}" 2>/dev/null && PATCH_OK=1 || true
       fi

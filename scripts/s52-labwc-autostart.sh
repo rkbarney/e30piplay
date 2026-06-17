@@ -73,9 +73,31 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
     if [ -z "${PULSE_SINK:-}" ] && command -v amixer >/dev/null 2>&1 && amixer -c "${USB_ALSA_CARD}" info >/dev/null 2>&1; then
       CARPLAY_ALSA_FLAG="--alsa-output-device=plughw:CARD=${USB_ALSA_CARD},DEV=0"
     fi
+    # Mesa 25.0.7 (rpt) broke the GBM RGBA_8888 -> dma_buf export path on the
+    # Pi's V3D. Even with --disable-gpu, Ozone/Wayland still asks Mesa's GBM to
+    # allocate the presentation buffer, the export fails ("Failed to export
+    # buffer to dma_buf: No such file or directory"), the GPU process dies
+    # ("GPU process isn't usable. Goodbye."), and the AppImage crash-loops so
+    # ready-to-show never fires and no toplevel appears. Forcing Mesa itself to
+    # software (llvmpipe — far faster than softpipe) bypasses GBM/dma_buf
+    # entirely; CarPlay video is decoded inside the dongle, so CPU paint of the
+    # surrounding chrome is fine. Set S52_CARPLAY_GPU=1 to opt back into V3D
+    # once Mesa is fixed upstream.
+    # LIBGL_ALWAYS_SOFTWARE only forces software GL — Chromium/Dawn still probes
+    # the hardware V3DV Vulkan driver, which on Mesa 25.0.7 reports insufficient
+    # limits ("maxTextureDimension1D must be at least 8192") and wedges the
+    # renderer at InitializeSupportedLimitsImpl, so ready-to-show never fires
+    # and no window maps. Disabling Vulkan/WebGPU keeps everything on the
+    # software GL path. react-carplay renders video via WebGL/JMuxer, not
+    # WebGPU, so this is safe.
     GPU_FLAG="--disable-gpu"
+    VULKAN_FLAG="--disable-features=Vulkan,WebGPU"
     if [ "${S52_CARPLAY_GPU:-0}" = "1" ]; then
       GPU_FLAG=""
+      VULKAN_FLAG=""
+    else
+      export LIBGL_ALWAYS_SOFTWARE=1
+      export GALLIUM_DRIVER="${S52_CARPLAY_GALLIUM_DRIVER:-llvmpipe}"
     fi
     while true; do
       if command -v amixer >/dev/null 2>&1; then
@@ -92,6 +114,7 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
       fi
       "${CARPLAY_LAUNCHER}" --no-sandbox \
         ${GPU_FLAG} \
+        ${VULKAN_FLAG} \
         ${CARPLAY_ALSA_FLAG} \
         --ozone-platform=wayland \
         --enable-features=UseOzonePlatform \
