@@ -238,11 +238,17 @@ sudo sed -i '/^hdmi_group=/d' "$CONFIG"
 sudo sed -i '/^hdmi_mode=/d' "$CONFIG"
 sudo sed -i '/^hdmi_cvt=/d' "$CONFIG"
 sudo sed -i '/^hdmi_drive=/d' "$CONFIG"
+sudo sed -i '/^usb_max_current_enable=/d' "$CONFIG"
 
 {
   echo ""
   echo "# --- S52 e30piplay begin (re-run setup.sh to regenerate; or set S52_DISPLAY_ROTATE / S52_CUSTOM_HDMI)"
   echo "display_rotate=${S52_DISPLAY_ROTATE}"
+  # Tell Pi 5 firmware the supply can deliver 5A. Our car install uses a
+  # dedicated 25W (5V/5A) buck with no USB-PD handshake, so without this the
+  # firmware assumes a 3A supply, caps total USB current, and warns about
+  # under-power. Only valid because the supply genuinely sources 5A.
+  echo "usb_max_current_enable=1"
   if [[ "${S52_CUSTOM_HDMI}" == "1" ]]; then
     echo "hdmi_group=2"
     echo "hdmi_mode=87"
