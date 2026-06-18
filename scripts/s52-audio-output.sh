@@ -85,6 +85,18 @@ if [ "$TARGET" = "status" ]; then
   exit 0
 fi
 
+# Machine-readable: print just the current output token (aux|bt|hdmi|unknown).
+if [ "$TARGET" = "current" ]; then
+  cur="$(pactl get-default-sink 2>/dev/null || true)"
+  case "$cur" in
+    bluez_output.*)            echo bt ;;
+    *hdmi*|*vc4*)              echo hdmi ;;
+    *analog*|*c-media*|*usb*)  echo aux ;;
+    *)                         echo unknown ;;
+  esac
+  exit 0
+fi
+
 NAME="$(resolve_sink "$TARGET" || true)"
 
 if [ -z "${NAME:-}" ]; then
