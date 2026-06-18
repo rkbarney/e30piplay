@@ -56,7 +56,6 @@ sudo apt-get install -y -qq \
   pulseaudio-utils \
   pipewire-pulse \
   wireplumber \
-  bluez \
   openssh-server \
   avahi-daemon \
   python3 \
@@ -268,8 +267,6 @@ mkdir -p "/home/$SERVICE_USER/.config/labwc"
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-inner.sh"
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-exit-server.py" "/home/$SERVICE_USER/.local/bin/s52-kiosk-exit-server.py"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
-install -m 755 "$SOURCE_DIR/scripts/s52-audio-output.sh" "/home/$SERVICE_USER/.local/bin/s52-audio-output.sh"
-install -m 755 "$SOURCE_DIR/scripts/s52-bt.sh" "/home/$SERVICE_USER/.local/bin/s52-bt.sh"
 
 # labwc autostart + rc.xml. We always write these — they are appliance config,
 # not user prefs. Comment out the install if you want to customise rc.xml by hand.
