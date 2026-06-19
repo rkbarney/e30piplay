@@ -1,5 +1,4 @@
-import { useState, useCallback } from 'react';
-import BootScreen      from './BootScreen';
+import { useState, useCallback, useEffect } from 'react';
 import LogoIntro       from './LogoIntro';
 import FactoryClock    from './FactoryClock';
 import DigitalClock    from './DigitalClock';
@@ -10,11 +9,11 @@ import CarPlayReceiver from './CarPlayReceiver';
 const CLOCK_FACES = ['factory', 'digital', 'clock'];
 
 export default function DisplaySwitcher() {
-  const [screen,    setScreen]    = useState('boot');
+  // Boot goes straight to the spinning roundel ('logo'), then to the clock.
+  const [screen,    setScreen]    = useState('logo');
   const [clockFace, setClockFace] = useState('factory');
 
-  const handleBootComplete = useCallback(() => setScreen('logo'),    []);
-  const handleLogoComplete = useCallback(() => setScreen('clock'),   []);
+  const handleLogoComplete = useCallback(() => setScreen('clock'), []);
 
   // − cycles through clock faces
   const handleMinus = useCallback((e) => {
@@ -33,9 +32,16 @@ export default function DisplaySwitcher() {
 
   const isClockScreen = screen === 'clock';
 
+  // Boot timeline (spinning roundel) is white so the startup white flash blends
+  // in; the screen flips to black once the clock / CarPlay surface takes over.
+  const darkScreen = screen === 'clock' || screen === 'carplay';
+  useEffect(() => {
+    document.body.classList.toggle('clock-active', darkScreen);
+    return () => document.body.classList.remove('clock-active');
+  }, [darkScreen]);
+
   return (
-    <div style={styles.container}>
-      {screen === 'boot'    && <BootScreen onComplete={handleBootComplete} />}
+    <div style={{ ...styles.container, background: darkScreen ? '#000' : '#fff' }}>
       {screen === 'logo'    && <LogoIntro  onComplete={handleLogoComplete} />}
       {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
 
@@ -54,7 +60,6 @@ const styles = {
     width: '320px',
     height: '480px',
     position: 'relative',
-    background: '#000',
     userSelect: 'none',
     WebkitTapHighlightColor: 'transparent',
   },
