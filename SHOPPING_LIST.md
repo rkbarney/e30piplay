@@ -16,7 +16,7 @@
 
 | Item | Notes |
 |---|---|
-| **OSOYOO 3.5" HDMI Capacitive Touch** (480×320) | Replaces Hosyond. HDMI = 60fps CarPlay. Micro HDMI cable included. ASIN: B0DRF9Q566 |
+| ✅ **Waveshare 2.8" HDMI Capacitive Touch** (480×640) | Installed. HDMI = 60fps CarPlay. |
 | **MicroSD card — 32GB+ A2 rated** | SanDisk Extreme or Samsung Pro Endurance. A2 rating matters for Pi boot speed |
 | **Short USB-A cables ×2 (~6")** | Carlinkit dongle + audio DAC to Pi USB ports |
 | **3.5mm PC microphone (for CarPlay phone calls)** | Needed for call/Siri **uplink** — the other side can't hear you without a Pi-side mic. **Uses no extra USB port:** plug into the **mic-in jack of the existing C-Media/Unitek USB audio adapter** (it does speaker-out *and* mic-in on one port; its USB descriptor confirms a real biased Microphone input). Must be a **PC mic with a TRS/TS plug** ("for computer / PC mic jack"). **Avoid 4-ring TRRS smartphone lavs** — they mis-mate with a dedicated PC mic jack (dead silent, the exact failure we hit). Search: **"3.5mm computer microphone"**, **"3.5mm lavalier microphone for PC"** (best car fit — clip near visor), or "mini 3.5mm electret PC mic". $5–15 at Best Buy/Walmart/Target/Staples. **Do NOT reuse the Kenwood car mic** — see note below. |
@@ -28,6 +28,7 @@
 | Item | Notes |
 |---|---|
 | ✅ **25W buck converter (12/24V in → 5V/5A out, USB-C)** | **Have it.** Dedicated to the Pi — correct spec for a Pi 5 + peripherals. Note: it outputs "dumb" 5V (no USB-PD), so the Pi needs `usb_max_current_enable=1` in `config.txt` to use the full 5A (already set by `setup.sh`). |
+| **UPS HAT for crank ride-through** (Geekworm **X1200**, 2-cell) | **Fixes "Pi won't auto-boot after engine crank" — see HANDOFF issue #1.** Sits between the buck and the Pi: rides through the ~1s ACC cut during cranking so the Pi never reboots, and auto-powers-on if it ever fully loses power. Amazon, ~$40 + **X1200-C1 case** + 2 quality 18650s + a low-profile cooler (NEO lid is gone). Feed power **only into the HAT**, never the Pi's USB-C. **Lithium caveat:** mount in the coolest spot (glove box, *not* behind HVAC) and check yearly. Heat-ideal but EU-only alternative: AQEX **qUPS-P-SC** supercap HAT. Simplest no-battery alternative: a 12V **delay relay** (3–5s) ahead of the buck. |
 | **Add-a-Circuit fuse tap (ATO/ATC) + 5A fuse** | **The no-solder way to get switched 12V.** Plugs into a switched (ACC) slot in the car's fuse box and gives a fused, switched +12V lead — no cutting or soldering the harness. Search: "add-a-circuit fuse tap ATO". |
 | ✅ **Solderless wire connectors** (have a 2-pair set) | Any solid solderless connector works — brand doesn't matter. Use to join the buck's input leads to the fuse-tap lead + a ground ring, and as the **disconnect point** when pulling the unit. For car vibration, prefer locking/lever types; just make sure they grip tight. |
 | **Ring terminal (crimp-on or Posi) for ground** | Ground to a clean chassis bolt. Solderless ring terminals push/screw on. |
