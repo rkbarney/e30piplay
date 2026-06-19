@@ -49,7 +49,8 @@ const styles = {
   root: {
     width: '320px',
     height: '480px',
-    background: '#000',
+    // White during boot so the unavoidable startup white flash blends in.
+    background: '#fff',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -67,10 +68,12 @@ const styles = {
     animation: `logoFadeOut ${FADE_MS}ms ease-in ${SPIN_MS + HOLD_MS}ms both`,
   },
   logo: {
-    // Match clock face diameter: R=118 * 2 = 236px
-    width: '236px',
-    height: '236px',
+    // Large roundel — only slightly smaller than the 320px screen width.
+    width: '300px',
+    height: '300px',
     objectFit: 'contain',
+    // Soft shadow gives the white roundel segments definition on white.
+    filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.30))',
     // linear so each keyframe's rotation value controls pacing directly
     animation: `spinSettle ${SPIN_MS}ms linear 0.1s both`,
   },

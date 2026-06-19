@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
-const SIZE = 316;      // SVG canvas — nearly full 320px width
+const SIZE = 300;      // SVG canvas — bezel reaches near the 320px edge
 const CX   = SIZE / 2; // center x
 const CY   = SIZE / 2; // center y
-const R    = 144;      // outer face radius
+const R    = 143;      // outer face radius
 
 function polarToXY(angleDeg, radius) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -92,21 +92,21 @@ export default function AnalogClock({ onMinus, onPlus }) {
         </defs>
 
         {/* Outer bezel */}
-        <circle cx={CX} cy={CY} r={R + 6} fill="#111" stroke="#333" strokeWidth="2" />
+        <circle cx={CX} cy={CY} r={R + 6} fill="#111" stroke="#444" strokeWidth="4" />
         {/* Face */}
-        <circle cx={CX} cy={CY} r={R} fill="url(#faceGrad)" stroke="#ffb300" strokeWidth="0.5" opacity="0.6" />
+        <circle cx={CX} cy={CY} r={R} fill="url(#faceGrad)" stroke="#ffb300" strokeWidth="2" opacity="0.85" />
 
         {/* Minor ticks */}
         {minorTicks.map(angle => {
-          const outer = polarToXY(angle, R - 3);
-          const inner = polarToXY(angle, R - 11);
+          const outer = polarToXY(angle, R - 4);
+          const inner = polarToXY(angle, R - 13);
           return (
             <line
               key={angle}
               x1={outer.x} y1={outer.y}
               x2={inner.x} y2={inner.y}
-              stroke="#3a2800"
-              strokeWidth="1.2"
+              stroke="#6b4a00"
+              strokeWidth="2.2"
             />
           );
         })}
@@ -114,22 +114,23 @@ export default function AnalogClock({ onMinus, onPlus }) {
         {/* Major markers (12/3/6/9) */}
         {majorMarkers.map((angle, i) => {
           const outer = polarToXY(angle, R - 3);
-          const inner = polarToXY(angle, R - 15);
-          const lPos  = polarToXY(angle, R - 25);
+          const inner = polarToXY(angle, R - 18);
+          const lPos  = polarToXY(angle, R - 30);
           return (
             <g key={angle}>
               <line
                 x1={outer.x} y1={outer.y}
                 x2={inner.x} y2={inner.y}
                 stroke="#ffb300"
-                strokeWidth="3"
+                strokeWidth="5"
+                strokeLinecap="round"
               />
               <text
                 x={lPos.x} y={lPos.y}
                 textAnchor="middle"
                 dominantBaseline="central"
                 fill="#ffb300"
-                fontSize="15"
+                fontSize="18"
                 fontFamily="'Courier New', monospace"
                 fontWeight="bold"
               >
@@ -140,20 +141,20 @@ export default function AnalogClock({ onMinus, onPlus }) {
         })}
 
         {/* Hour hand (shadow + fill) */}
-        <Hand angleDeg={hourAngle} length={67}  width={7} color="#ffb300" shadow />
-        <Hand angleDeg={hourAngle} length={67}  width={6} color="#ffb300" />
+        <Hand angleDeg={hourAngle} length={66}  width={11} color="#ffb300" shadow />
+        <Hand angleDeg={hourAngle} length={66}  width={9} color="#ffb300" />
 
         {/* Minute hand */}
-        <Hand angleDeg={minAngle}  length={88}  width={5} color="#ffb300" shadow />
-        <Hand angleDeg={minAngle}  length={88}  width={4} color="#ffb300" />
+        <Hand angleDeg={minAngle}  length={88}  width={8} color="#ffb300" shadow />
+        <Hand angleDeg={minAngle}  length={88}  width={6} color="#ffb300" />
 
         {/* Second hand */}
-        <Hand angleDeg={secAngle}  length={96}  width={2.5} color="#ff3333" shadow />
-        <Hand angleDeg={secAngle}  length={96}  width={2} color="#ff3333" />
+        <Hand angleDeg={secAngle}  length={96}  width={4} color="#ff3333" shadow />
+        <Hand angleDeg={secAngle}  length={96}  width={3} color="#ff3333" />
 
         {/* Center cap */}
-        <circle cx={CX} cy={CY} r={6} fill="#ffb300" />
-        <circle cx={CX} cy={CY} r={3} fill="#000" />
+        <circle cx={CX} cy={CY} r={9} fill="#ffb300" />
+        <circle cx={CX} cy={CY} r={4.5} fill="#000" />
       </svg>
 
       {/* Digital readout */}
@@ -162,13 +163,10 @@ export default function AnalogClock({ onMinus, onPlus }) {
         <span style={styles.digitalSec}>{ss}</span>
       </div>
 
-      {/* Bottom label */}
-      <div style={styles.bottomLabel}>M-TECH · E30 · S52</div>
-
       {/* OEM-style buttons */}
       <div style={styles.buttons}>
-        <button style={styles.btn} onClick={onMinus}>−</button>
-        <button style={styles.btn} onClick={onPlus}>+</button>
+        <button style={styles.btn} onClick={onMinus} type="button">−</button>
+        <button style={styles.btn} onClick={onPlus} type="button">+</button>
       </div>
     </div>
   );
@@ -188,7 +186,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '0px',
+    gap: '8px',
     fontFamily: "'Courier New', monospace",
   },
   topLabel: {
@@ -196,7 +194,6 @@ const styles = {
     fontSize: '11px',
     letterSpacing: '0.3em',
     fontWeight: 'bold',
-    marginBottom: '2px',
   },
   svg: {
     filter: 'drop-shadow(0 0 6px #ffb30060)',
@@ -205,11 +202,10 @@ const styles = {
     display: 'flex',
     alignItems: 'baseline',
     gap: '4px',
-    marginTop: '0px',
   },
   digitalTime: {
     color: '#ffb300',
-    fontSize: '32px',
+    fontSize: '30px',
     fontWeight: 'bold',
     letterSpacing: '0.12em',
     fontFamily: "'Courier New', monospace",
@@ -221,26 +217,20 @@ const styles = {
     letterSpacing: '0.05em',
     fontFamily: "'Courier New', monospace",
   },
-  bottomLabel: {
-    color: '#3a2800',
-    fontSize: '10px',
-    letterSpacing: '0.25em',
-    marginTop: '2px',
-  },
   buttons: {
-    width: '288px',
+    width: '300px',
     display: 'flex',
     justifyContent: 'space-between',
-    marginTop: '6px',
+    alignItems: 'center',
   },
   btn: {
-    width: '92px',
-    height: '44px',
+    width: '128px',
+    height: '66px',
     background: '#1a1000',
     border: '2px solid #7a5500',
-    borderRadius: '8px',
+    borderRadius: '12px',
     color: '#ffb300',
-    fontSize: '32px',
+    fontSize: '44px',
     lineHeight: 1,
     cursor: 'pointer',
     fontFamily: "'Courier New', monospace",
