@@ -25,7 +25,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Component | Model | Status |
 |---|---|---|
-| Display | OSOYOO 3.5" HDMI Capacitive Touch, 480×320 | 🛒 Order |
+| Display | Waveshare 2.8" HDMI Capacitive Touch, 480×640 | ✅ Installed |
 | Computer | Raspberry Pi 5 (8GB) | ✅ Ordered |
 | Pi case | Official Pi 5 case with fan | ✅ Ordered |
 | CarPlay dongle | Carlinkit Wireless CarPlay (USB) | ✅ Ordered |
@@ -49,15 +49,14 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 ## Display Screens
 
-### Boot Sequence
-- ASCII terminal aesthetic, Courier New font
-- M-TECH logo + S52 Solutions branding
-- Scrolling system init messages
-- Progress bar 0→100%
-
-### Logo Intro
-- BMW logo (1970–1989 era) spins in fast, decelerates, settles
-- Fades into clock face
+### Boot / Logo Intro
+- **No terminal boot screen.** The old ASCII "S52 Solutions" boot sequence was
+  removed (2026-06-19); boot goes straight to the spinning roundel.
+- BMW logo (1970–1989 era) spins in fast, decelerates, settles, then cross-fades
+  into the clock face (~5.2 s total).
+- Roundel is scaled near edge-to-edge (`objectFit: cover`) on a **white**
+  background — the screen flips to **black** when the clock face mounts.
+- Roundel center is aligned to the clock face center (no jump on transition).
 
 ### OEM Clock (default)
 - White on black, no numbers
@@ -128,8 +127,7 @@ e30piplay/
 │   ├── global.css
 │   └── components/
 │       ├── DisplaySwitcher.jsx   # Screen routing, button logic
-│       ├── BootScreen.jsx        # ASCII terminal boot
-│       ├── LogoIntro.jsx         # BMW logo spin animation
+│       ├── LogoIntro.jsx         # BMW roundel spin animation (boot)
 │       ├── FactoryClock.jsx      # OEM white analog clock
 │       ├── DigitalClock.jsx      # OEM red LED digital clock
 │       ├── AnalogClock.jsx       # S52 amber analog clock
@@ -152,7 +150,7 @@ npm run build      # Production build → dist/
 ```
 
 Test at exact screen resolution in Chrome:
-DevTools → Device toolbar → Custom → **320 × 480**
+DevTools → Device toolbar → Custom → **480 × 640**
 
 ---
 
