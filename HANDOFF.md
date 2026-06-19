@@ -159,6 +159,133 @@ ssh s52 'cd ~/e30piplay && npm run build && \
 
 ---
 
+## Known issues & their fixes (post-install)
+
+### 1. Pi 5 does not auto-boot after engine crank (needs PWR button press)
+**Root cause (confirmed — retested 2026-06-19):** During engine cranking the ACC line is
+cut and the 12 V sags. The 25 W buck's output capacitors hold just enough 5 V to keep the
+Pi 5's PMIC (DA9091) alive but not enough to keep the SoC running. The Pi dies, but the
+PMIC never sees a clean 5 V → 0 → 5 V edge, so it sits in a "was running, now stalled"
+state waiting for the PWR button instead of cold-booting on the restored 5 V.
+
+**Confirmed NOT a software/firmware fix.** A failed crank happens while the Pi has no
+power, so nothing is running to recover it — no daemon, watchdog, or config can power on a
+dead board. The one firmware lever was tested and ruled out:
+- `POWER_OFF_ON_HALT` — a previous note claimed this was reverted, but it was still set to
+  `1` in EEPROM. It was properly removed and re-flashed on 2026-06-19, then tested over
+  several key → ACC → crank cycles: the Pi **still** required the button. Confirms the flag
+  is irrelevant to the mid-crank brown-out. EEPROM no longer contains it.
+
+**Diagnostics now in place** (so the next person has evidence): `scripts/s52-logging-setup.sh`
+enables persistent journald, installs the `s52-bootmarker` service (logs throttle/under-volt
+flags once per boot), and removes `POWER_OFF_ON_HALT`. Inspect with `journalctl -t s52-boot`
+and `journalctl --list-boots`. In the failed-crank tests, every completed boot showed
+`throttled=0x0` (clean 5 V) and the failed cranks left *no* boot entry at all — i.e. the Pi
+never powered on, which is exactly the PMIC-limbo signature above.
+
+**Fix — ride-through UPS HAT (chosen direction).** Keep the Pi powered *through* the crank
+so it never reboots, and let it auto-boot if it ever does fully lose power. Feed it from the
+existing buck so the buck still provides automotive input protection (no TVS needed):
+```
+ACC fuse tap → 25W buck (12V→5V) → UPS HAT (5V in) → Pi 5 (powered via HAT)
+```
+Power **only** into the HAT — never also into the Pi's USB-C. `usb_max_current_enable=1`
+(already set) keeps the USB budget intact when the Pi is fed over the GPIO/pogo pins.
+
+- **Amazon / "done now" pick:** Geekworm **X1200** (2-cell 18650, 5.1 V/5 A, auto-power-on,
+  safe-shutdown) + matching **X1200-C1** case + 2 quality 18650s + a low-profile cooler (the
+  NEO heatsink lid is gone). Caveat: **lithium in a hot car degrades/swells over time** —
+  mount it in the coolest spot (glove box, *not* behind the HVAC) and inspect yearly. 2 cells
+  is plenty; you only need ~1 s of ride-through.
+- **Heat-ideal alternative:** AQEX **qUPS-P-SC** supercap HAT (−40…+65 °C, maintenance-free,
+  has explicit "power-returned-during-shutdown" + "avoid restart cycle" logic). EU-only
+  (Tindie/Lectronz, ~$55–72), slower to source. 2.5 A continuous — fine for this ~2 A load.
+
+**Simplest no-battery alternative** (if you'd rather the Pi cold-boot once per start): a 12 V
+delay relay (~$8–15) between the ACC tap and the buck, set to 3–5 s, so the Pi gets no power
+until the engine is running and the crank is over. Or tap a 12 V source only live after start
+(alternator charge-light / terminal 15a). Trade-off: ~30 s boot after each start vs. staying
+alive through the crank.
+
+### 2. CarPlay audio (music/media) drops ~1 s at a time; calls are fine
+Two separate root causes were fixed (both 2026-06-18):
+
+**a) Chromium autoplay policy (first-connect drop):** Electron's autoplay restrictions
+block the media audio thread on the first unsolicited event. Fix: added
+`--autoplay-policy=no-user-gesture-required` and `--disable-web-security` to the
+react-carplay launch in `scripts/s52-labwc-autostart.sh`.
+
+**b) PipeWire quantum underruns (intermittent drops during playback):** The Pi runs
+software GL (llvmpipe) which causes CPU spikes. The default quantum of 1024 samples
+(~21 ms) is too small — the audio thread gets starved and the buffer drains, producing
+a ~1 s gap. Fix: `/etc/pipewire/pipewire.conf.d/99-s52-quantum.conf` sets quantum=4096
+(~85 ms). This file is NOT in the repo; re-create it on re-provision:
+```bash
+sudo mkdir -p /etc/pipewire/pipewire.conf.d
+sudo tee /etc/pipewire/pipewire.conf.d/99-s52-quantum.conf << 'EOF'
+context.properties = {
+    default.clock.quantum      = 4096
+    default.clock.min-quantum  = 2048
+    default.clock.max-quantum  = 8192
+}
+EOF
+systemctl --user restart pipewire pipewire-pulse wireplumber
+```
+
+**Physical layout note:** Carlinkit is always plugged directly into the Pi (in the glove
+box). The USB3 hub is in the HVAC area — physically separated, so USB3 2.4 GHz
+interference is not a concern for this install.
+
+### 3. CarPlay maps zoomed out and off-center
+**Screen:** Waveshare 2.8" HDMI Capacitive Touch, **480×640** (portrait-native). The
+PROJECT_BRIEF previously listed an OSOYOO 480×320 — that was the original plan; the actual
+installed screen is the Waveshare 480×640.
+
+**Root cause:** The react-carplay settings had `width: 800, height: 640` — wider than the
+480-pixel screen. CarPlay rendered an 800×640 frame; react-carplay letterboxed it to fit the
+480-wide display, producing black bars and shifting the car indicator off-center. Zoom felt
+off because the wide frame was compressed horizontally.
+
+**Fix (applied 2026-06-18):** Updated `~/.config/react-carplay/config.json` on the Pi to
+match the physical screen exactly:
+- `width: 480, height: 640`
+- `dpi: 165`
+
+CarPlay now renders a 480×640 portrait frame that fills the screen with no letterboxing.
+
+Edit the config directly on the Pi:
+```bash
+ssh s52
+python3 -c "
+import json
+with open('/home/admin/.config/react-carplay/config.json') as f: c=json.load(f)
+c['width'], c['height'], c['dpi'] = 480, 640, 165
+with open('/home/admin/.config/react-carplay/config.json', 'w') as f: json.dump(c, f, indent=2)
+"
+sudo systemctl restart s52-cage-kiosk
+```
+
+### 4. AUX ground-loop hum (low hum at idle, louder with volume up)
+**Root cause:** Classic ground loop. The Pi's buck converter and the Kenwood head unit share
+the AUX cable shield as a ground path. A slight potential difference (from different chassis
+ground return paths) causes 50/60 Hz + alternator-frequency noise to appear on the audio.
+
+**Definitive fix — ground loop isolator (~$10–15):** Inline transformer-coupled passive
+device between the Pi USB DAC headphone jack and the Kenwood AUX input. Breaks the
+electrical path through the shield without degrading audio quality.
+- Search: "ground loop isolator 3.5mm car audio" — Mpow, Besign BK01, or generic.
+- Install inline: `[USB DAC] → [3.5mm male] → [GL isolator] → [3.5mm male] → [Kenwood AUX]`
+
+**Secondary check:** Ensure the buck converter's negative input terminal and the Kenwood's
+chassis ground both terminate at the same chassis bolt. Different ground points separated by
+body metal create the voltage difference that drives the loop.
+
+**What won't fix it:** A ferrite choke on the AUX cable reduces RF interference but does
+not help with 50/120 Hz ground loops from the power supply. Shielded cable helps slightly
+but not enough.
+
+---
+
 ## Outstanding / possible next tasks
 
 - (Optional) Oil-pressure **Arduino**: the owner has a personal Arduino gauge
