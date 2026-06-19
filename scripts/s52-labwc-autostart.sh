@@ -123,6 +123,8 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
         --ozone-platform=wayland \
         --enable-features=UseOzonePlatform \
         --password-store=basic \
+        --autoplay-policy=no-user-gesture-required \
+        --disable-web-security \
         >>"${CARPLAY_LOG}" 2>&1 || true
       sleep 3
     done
