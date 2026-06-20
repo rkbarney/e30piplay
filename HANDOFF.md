@@ -137,29 +137,43 @@ build and an **INSTALL** button when `origin` is ahead. It calls
 The UI then reloads itself (Vite hash-named assets), so `s52-cage-kiosk` is **not**
 restarted.
 
-- Needs internet (home wifi when parked, or the phone hotspot below on the road).
+- Needs internet (home wifi when parked). **Phone hotspot auto-connect is
+  rolled back** — it conflicted with wireless CarPlay (see issue #6).
 - **Refuses to run if the working tree is dirty.** The Pi has known local mods
   (see the caveat above), so resolve those over SSH first or the button reports
   the dirty tree and changes nothing.
 - The only privileged piece is `s52-deploy.sh`, allow-listed in
   `/etc/sudoers.d/s52-carplay-launcher` (same pattern as `s52-carplay-switch.sh`).
 
-### Phone hotspot (internet on the road)
+### Phone hotspot (internet on the road) — **rolled back**
 
-NetworkManager auto-joins the highest-priority network in range, so the Pi
-prefers home wifi (`biscuit`) when parked and falls back to the phone hotspot
-elsewhere. Add the hotspot **once**, on the Pi (credentials live only in NM,
-never committed):
+**Do not use `s52-add-hotspot.sh` yet.** In-car testing showed Personal Hotspot
+on the phone conflicts with wireless CarPlay (same WiFi radio) — disconnects and
+audio skips. The Pi must not auto-join the phone hotspot while CarPlay is active.
+
+**Remove an existing hotspot profile on the Pi:**
 
 ```bash
+ssh s52 'bash -s' < scripts/s52-remove-hotspot.sh
+```
+
+That deletes every NetworkManager wifi profile except `biscuit` (override with
+`S52_HOME_CONN` if your home SSID differs). Credentials are only in NM on the
+Pi — removing the profile clears them.
+
+**Future (issue #6):** reintroduce hotspot only on demand — e.g. when the user
+starts a GitHub OTA update from the System screen, not as always-on
+autoconnect. Until then, use home wifi (`biscuit`) for OTA/SSH when parked.
+
+<details>
+<summary>Original add-hotspot approach (disabled)</summary>
+
+```bash
+# DO NOT RUN until issue #6 is fixed:
 ssh s52 'bash -s' "<SSID>" "<PASSWORD>" < scripts/s52-add-hotspot.sh
 ```
 
-- iPhone: enable **Maximize Compatibility** (2.4 GHz). An idle iPhone hotspot
-  sleeps until a device asks for it, so expect a short reconnect delay; Android
-  hotspots are more reliably always-on.
-- `NetworkManager-wait-online` stays disabled — the kiosk must not gate boot on
-  the network.
+</details>
 
 ---
 
@@ -217,6 +231,12 @@ the `PCM`/`Extension Unit` the autostart historically targeted. The autostart
 now explicitly runs `amixer ... sset Speaker 100% unmute` (best-effort,
 alongside the legacy `PCM`/`Extension Unit` calls) on every react-carplay
 (re)launch, so the analog output can't come up muted.
+- **Invisible mouse at the bench:** a live-only systemd drop-in
+  `s52-cage-kiosk.service.d/cursor.conf` with `XCURSOR_THEME=blank` /
+  `XCURSOR_SIZE=1` hides the pointer entirely — worse than `unclutter`.
+  Remove it (`sudo rm …/cursor.conf && sudo systemctl restart s52-cage-kiosk`).
+  `setup.sh` now deletes that file; in-car hiding uses autostart `unclutter`
+  only when a touchscreen is detected.
 
 ---
 
@@ -529,7 +549,8 @@ but not enough.
 ## Outstanding / possible next tasks
 
 - **Feature backlog is tracked as GitHub issues** (`gh issue list`): phone
-  hotspot (#6, done), in-UI OTA (#7, done), GPS "Track Mode" (#8), NES/Game Boy
+  hotspot (#6, **blocked** — conflicts with wireless CarPlay; use on-demand only
+  when reimplemented), in-UI OTA (#7, done), GPS "Track Mode" (#8), NES/Game Boy
   emulator (#9), in-car AI (#10), USB dashcam (#11), radar/speed-trap research
   (#12). Each is self-contained — pick one at a time. OBD-II is out (the car is
   OBD1; ELM327 tooling doesn't apply).
