@@ -217,11 +217,12 @@ and `journalctl --list-boots`. In the failed-crank tests, every completed boot s
 `throttled=0x0` (clean 5 V) and the failed cranks left *no* boot entry at all — i.e. the Pi
 never powered on, which is exactly the PMIC-limbo signature above.
 
-**Fix — supercap UPS + TVS diodes (CHOSEN & ORDERED 2026-06-19).** Replace the plain buck
-*entirely* with a supercapacitor UPS that bridges the crank sag directly (its caps hold 5 V
-through the dip), and clamp transients with a TVS diode on each side. No battery, no button,
-no charge-timing — just continuous 5 V. Feed it from the existing switched-ignition tap (no
-fuse change — every switched circuit sags equally, so relocating wouldn't help):
+**Fix — supercap UPS + TVS diodes (CHOSEN & ORDERED 2026-06-19; install pending).**
+Replace the plain buck *entirely* with a supercapacitor UPS that bridges the crank sag directly
+(its caps hold 5 V through the dip), and clamp transients with a TVS diode on each side. No
+battery, no button, no charge-timing — just continuous 5 V. Feed it from the existing
+switched-ignition tap (no fuse change — every switched circuit sags equally, so relocating
+wouldn't help):
 
 ```
 switched-ignition tap (purple accessory wire / terminal 15)
@@ -230,54 +231,75 @@ switched-ignition tap (purple accessory wire / terminal 15)
           └─[TVS P6KE6.8A across DC_OUT] ←── output-side, clamps regulator drift
 ```
 
+**Goal:** fix Pi 5 not auto-booting after engine crank. Root cause: plain buck converter browns
+out during crank voltage sag, leaving Pi 5 PMIC in a state that needs manual PWR button press.
+Fix: replace buck with supercap UPS (rides through sag) + add TVS diodes for transient
+protection on both sides.
+
 **Parts (all ordered):**
-- **Fockety Super Capacitor UPS for RPi** — DC 9–24 V in, DC 5 V/3 A out, 4S model. Replaces
-the 25 W buck (remove the buck entirely — it is replaced, not supplemented).
-- **Chanzon 1.5KE24A** TVS diode (DO-201AD axial, unidirectional, 24 V/1500 W) — input-side
-load-dump protection.
-- **P6KE6.8A** TVS diode (DO-15 axial, unidirectional, 6.8 V/600 W) — output-side; clamps any
-regulator drift toward 5.4 V before it reaches the Pi.
+1. **Fockety Super Capacitor UPS for RPi** — DC 9–24 V in, DC 5 V/3 A out, 4S model
+2. **Chanzon 1.5KE24A TVS diode** (DO-201AD, axial, unidirectional, 24 V/1500 W) — input-side
+   protection
+3. **P6KE6.8A TVS diode** (DO-15, axial, unidirectional, 6.8 V/600 W) — output-side protection
 
-**Install checklist (solderless — TVS leads clamp into the board's screw terminals):**
-- **Pre-install:** confirm the Fockety 5 V output connector type (USB-A vs barrel vs bare screw
-terminal) and get the matching cable to the Pi's USB-C — may need a USB-A→USB-C cable or a
-separate USB-C PD-trigger breakout depending on the board. **Disconnect the battery negative**
-before working in the dash.
-- **Remove** the old 25 W buck from the circuit entirely.
-- **Power chain:** switched-ignition tap (purple accessory wire) → Fockety `DC_IN`; Fockety
-`DC_OUT` (5 V) → Pi USB-C (4 A-rated cable/connector); Fockety `GND` ties to the same chassis
-ground as the ignition-tap reference.
-- **Input TVS (1.5KE24A, load-dump):** loosen `DC_IN +`, insert the banded (cathode) lead
-alongside the existing 12 V wire, tighten; loosen `DC_IN GND`, insert the other (anode) lead
-alongside the existing GND wire, tighten.
-- **Output TVS (P6KE6.8A, regulator-drift):** loosen `DC_OUT +`, insert the banded (cathode)
-lead alongside the 5 V wire to the Pi; loosen `DC_OUT GND`, insert the other lead alongside the
-GND wire.
-- **Trim/bend all diode leads short** after clamping — no bare lead should be able to touch
-anything else once buttoned up in the dash.
+**Pre-install**
+- [ ] Confirm Fockety board's 5 V output connector type (USB-A vs barrel vs bare screw terminal)
+      and get the matching cable to the Pi 5 USB-C port — may need a USB-A-to-USB-C cable or a
+      separate USB-C PD trigger breakout depending on what's on the board
+- [ ] Disconnect battery negative before working in the dash (standard safety)
 
-**Post-install testing:**
-- Key to ON/ACC, engine off — confirm the Pi auto-boots (should already work).
-- Crank the engine — confirm the Pi stays powered through the crank and does **not** require a
-manual PWR button press afterward.
-- Repeat the crank test several times (cold start, warm start) for consistency.
-- Check the throttle/volts log (the `s52-boot` marker + `vcgencmd` diagnostics already in place)
-to confirm **clean 5 V across crank events** — not just "Pi survived" but "Pi never saw a
-brownout at all."
-- Over the first few weeks, periodically meter `DC_OUT` — watch for any drift toward 5.4 V+ (a
-review reports exactly that failure mode after ~15 startups). The P6KE6.8A should clamp it, but
-confirm it isn't silently clamping/dissipating on every cycle.
+**Remove**
+- [ ] Remove old plain 25 W buck converter from the circuit entirely — it's being replaced, not
+      supplemented
 
-**Why supercap + TVS (rationale):**
-- **Supercap over a (buck-)boost converter:** bridges the sag directly rather than depending on a
-converter's input floor surviving an uncertain dip depth.
-- **Supercap over a lithium UPS** (e.g. the earlier Geekworm X1200 idea): avoids Li-ion
-thermal/longevity risk in a hot, unmanaged car cabin, and we only need ~a few seconds of crank
-bridging — not the extended runtime lithium would add. (The AQEX/lithium-HAT options noted in
-earlier drafts are superseded by this.)
-- **Output-side TVS added specifically** because of a user review reporting the Fockety
-regulator drifting to 5.4 V after ~15 startup cycles — cheap insurance against that exact
-failure reaching the Pi.
+**Install — power chain**
+- [ ] Existing switched-ignition tap (purple accessory wire) → Fockety DC_IN terminal (no fuse
+      relocation needed — confirmed sag affects all switched circuits equally, not
+      circuit-specific)
+- [ ] Fockety DC_OUT (5 V) → Pi 5 USB-C power in (4 A-rated cable/connector)
+- [ ] Common ground: Fockety GND ties to same chassis ground as the ignition tap reference
+
+**Install — TVS diodes (screw terminal clamp, no soldering needed)**
+
+*Input side (1.5KE24A, load-dump protection):*
+- [ ] Loosen DC_IN + screw terminal, insert diode's banded lead (cathode) alongside the existing
+      12 V wire, tighten
+- [ ] Loosen DC_IN GND screw terminal, insert diode's other lead (anode) alongside existing GND
+      wire, tighten
+
+*Output side (P6KE6.8A, regulator-drift protection):*
+- [ ] Loosen DC_OUT + screw terminal, insert diode's banded lead (cathode) alongside the 5 V wire
+      to the Pi, tighten
+- [ ] Loosen DC_OUT GND screw terminal, insert diode's other lead (anode) alongside GND wire,
+      tighten
+
+- [ ] Trim/bend all diode leads short after clamping — no bare wire should be able to touch
+      anything else once buttoned up in the dash
+
+**Post-install testing**
+- [ ] Key to ON/ACC, engine off — confirm Pi auto-boots (should already work)
+- [ ] Crank engine — confirm Pi stays powered through crank and does **not** require manual PWR
+      button press afterward
+- [ ] Repeat crank test several times (cold start, warm start) to confirm consistency
+- [ ] Check vcgencmd throttle/volts log (already set up from earlier diagnostics) to confirm clean
+      5 V across crank events — not just "Pi survived" but "Pi never saw a brownout at all"
+- [ ] Monitor Fockety output voltage periodically over first few weeks (multimeter on DC_OUT) —
+      watch for any drift toward 5.4 V+ given the review describing exactly that failure mode
+      after ~15 startups; the P6KE6.8A should clamp it, but worth confirming it's not silently
+      clamping/dissipating on every cycle
+
+**Notes / rationale (for future reference)**
+- EEPROM `POWER_OFF_ON_HALT` already ruled out and removed — confirmed irrelevant to this issue
+- E30 wiring confirmed terminal 15 and accessory circuits stay live through START position — power
+  is not cut during crank, it sags
+- Went with supercap over buck-boost: bridges the sag directly rather than depending on a
+  converter's input floor surviving an uncertain dip depth
+- Went with supercap over lithium UPS: avoids thermal/longevity risk of Li-ion cells sitting in a
+  hot, unmanaged car cabin; didn't need the extra runtime capacity lithium would provide since
+  we're only bridging a few seconds of crank sag, not a real power outage
+- Output-side TVS added specifically because of a user review reporting the Fockety board's
+  regulator drifting to 5.4 V output after ~15 startup cycles — cheap insurance against that
+  exact failure mode reaching the Pi
 
 ### 2. CarPlay audio (music/media) drops ~1 s at a time; calls are fine
 
@@ -306,9 +328,12 @@ EOF
 systemctl --user restart pipewire pipewire-pulse wireplumber
 ```
 
-**Physical layout note:** Carlinkit is always plugged directly into the Pi (in the glove
-box). The USB3 hub is in the HVAC area — physically separated, so USB3 2.4 GHz
-interference is not a concern for this install.
+**Physical layout note:** Carlinkit is plugged directly into the Pi (currently in the glove
+box, close to the Pi and its USB3 ports). The USB3 hub is in the HVAC area — slower devices
+(audio DAC, optional Arduino) hang off the hub instead. **USB3 ports and hubs radiate ~2.4 GHz
+noise** that can interfere with the Carlinkit's wireless link to the phone (its AP runs on
+2.4 GHz) — keep the dongle away from Pi USB3 ports and the hub when possible (see current
+trial below).
 
 **c) Dongle firmware reboot-loop (new finding — 2026-06-19, leading suspect for any
 *remaining* media cutouts):** Bench investigation of the Carlinkit "Auto Box"
@@ -328,6 +353,39 @@ and **not** the USB DAC output.
   buying a replacement dongle, **confirm in the car with a phone actively streaming**
   using the flight recorder below — drive, then run the report and check the dongle
   re-enumeration count vs. USB/power/audio events.
+
+#### Current trial (2026-06-19) — interference hypothesis
+
+**Prior findings (context):**
+- Bench sessions showed the Carlinkit dongle re-enumerating on a metronomic ~13 s loop (issue
+  **c** above) — may be benign no-phone idle behaviour, not the in-car fault.
+- In-car symptom that drove this pivot: **audio-only skips** (~1 s gaps) while **CarPlay maps
+  stay up** — i.e. not full Pi reboots and not a complete CarPlay disconnect from the user's
+  perspective.
+- Dongle is on Pi USB port **`1-2`**, plugged **direct** (not through the USB3 hub). Physical
+  port colour (black USB2 vs blue USB3) on the Pi 5 board was **not confirmed** in logs — worth
+  noting on the next bench check.
+- Earlier same-day logs also showed Pi reboot clusters that looked like power events; those may
+  have been bench deploy restarts after returning home, not in-drive faults. Treat power (issue
+  **#1**) and interference as **separate tracks**.
+
+**Current hypothesis:** remaining media cutouts are **RF/USB proximity interference** — the
+dongle sitting in the glove box near the Pi (and its USB3 ports) degrading the Carlinkit's 2.4
+GHz wireless link or its USB stability, producing brief audio gaps without killing the video
+surface.
+
+**What we're trying now:**
+1. **Carlinkit playback delay → 2000 ms** — set in the Carlinkit companion app (buffers more
+   audio ahead of brief wireless/USB hiccups).
+2. **Relocate the dongle further from the Pi** — move it out of glove-box proximity to the Pi
+   and its USB3 ports; use a short USB extension if needed so the dongle body sits farther from
+   the Pi board/hub radiators while staying on a direct Pi port (not through the USB3 hub).
+
+**How to verify after the next drive:** return to WiFi range, then on the Pi (or via
+`ssh s52 '~/.local/bin/s52-drive-report.sh'`) run the flight recorder report and compare
+dongle re-enumerations, USB errors, under-voltage/throttle, and PipeWire xruns against the
+audio skips you felt. Fewer skips with no new dongle resets ⇒ interference mitigation worked;
+unchanged skips with clean logs ⇒ look downstream (AUX/DAC/PipeWire) next.
 
 #### Drive "flight recorder" (to confirm the dongle finding in-car)
 
