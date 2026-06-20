@@ -172,7 +172,9 @@ and serves it at <http://localhost:8080> (see `docker-compose.yml` +
 `GALLIUM_DRIVER=llvmpipe`) and `--disable-features=Vulkan,WebGPU`. Opt back
 into hardware with `S52_CARPLAY_GPU=1` once Mesa is fixed upstream.
 - **AppImage patches** (`install-react-carplay-appimage.sh`): `show:false`→`true`
-(window never mapped on Wayland otherwise) and an `askForMediaAccess` shim.
+(window never mapped on Wayland otherwise), an `askForMediaAccess` shim, and
+**`mediaDelay: 300`→`2000` ms** in bundled node-carplay defaults (see issue #2
+interference trial — dongle web UI alone does not stick).
 - `**usb_max_current_enable=1`** in `config.txt`: the 25 W buck is a "dumb" 5 V
 source (no USB-PD), so without this the Pi caps USB current / warns.
 - **ALSA output unmute (fixed):** the C-Media card's real playback control is
@@ -375,8 +377,25 @@ GHz wireless link or its USB stability, producing brief audio gaps without killi
 surface.
 
 **What we're trying now:**
-1. **Carlinkit playback delay → 2000 ms** — set in the Carlinkit companion app (buffers more
-   audio ahead of brief wireless/USB hiccups).
+1. **Carlinkit playback delay → 2000 ms** — buffers more audio ahead of brief
+   wireless/USB hiccups. **Do not rely on the Carlinkit companion/web UI for
+   this:** node-carplay sends `SendBoxSettings` (including `mediaDelay`) on
+   every connect with its bundled default **300 ms**, which overwrites whatever
+   you set in the dongle UI after reboot. The host-side fix is in
+   `scripts/install-react-carplay-appimage.sh` (patch #3): it rewrites bundled
+   `DEFAULT_CONFIG` copies from 300 → **2000 ms** and merges the same value into
+   `~/.config/react-carplay/config.json`. Re-run after AppImage upgrades:
+
+   ```bash
+   bash ~/e30piplay/scripts/install-react-carplay-appimage.sh
+   sudo systemctl restart s52-cage-kiosk
+   ```
+
+   **Tune later (500–2000 ms typical):** set `S52_CARPLAY_MEDIA_DELAY=1500` when
+   running the install script, or edit `mediaDelay` in
+   `~/.config/react-carplay/config.json`, or use react-carplay → Settings →
+   MEDIA DELAY (saved to the same config file). Dongle web UI is optional
+   confirmation only — react-carplay wins on connect.
 2. **Relocate the dongle further from the Pi** — move it out of glove-box proximity to the Pi
    and its USB3 ports; use a short USB extension if needed so the dongle body sits farther from
    the Pi board/hub radiators while staying on a direct Pi port (not through the USB3 hub).
