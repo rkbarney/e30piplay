@@ -52,6 +52,28 @@
 | **Spare MicroSD card (32GB+)** | Clone a working image once setup is done — instant recovery if card fails |
 | **USB-A hub (compact, powered)** | Useful during setup if you need keyboard + dongle + DAC simultaneously. Not needed for final install |
 
+### GPS (Track Mode feature)
+
+The Track Mode screen needs a USB GPS puck connected to the Pi. It works with
+any u-blox 7/8 or MTK3339-based puck — see `scripts/99-gps.rules` for the
+full supported list. Recommendations in order of preference:
+
+| Item | Notes |
+| ---- | ----- |
+| **GlobalSat BU-353-S4** (SiRFstar IV) | Best-in-class sensitivity for the price (~$30 on Amazon). USB, plug-and-play on Pi OS, 1 Hz default. **Top pick for reliability.** |
+| **u-blox VK-172 "USB GPS" puck** (~$15–20) | Most common budget pick; u-blox 7 chipset (VID 1546:01a7). 1 Hz out of the box; can be reconfigured to 5–10 Hz with u-center or `ubxtool`. Tiny thumb-drive form factor — easy to tuck behind the dash. |
+| **Adafruit Ultimate GPS Breakout** (PA6H / MTK3339) with USB adapter | 10 Hz capable, excellent sensitivity, good Python/gpsd community support. Requires a USB-Serial adapter (CP2102 or FTDI); add ~$5. |
+| **u-blox M8N module on a USB-Serial board** (~$10–15) | u-blox 8 (VID 1546:01a8/01a9); configurable up to 10 Hz. Search "NEO-M8N GPS USB module". Best for smooth g-force derivation due to higher update rate. |
+
+**Notes:**
+- Any USB GPS that exposes a standard NMEA serial port will work. The udev rule
+  in `scripts/99-gps.rules` creates `/dev/gps0` automatically for all four chip
+  families above.
+- Mount with a clear sky view — even a small suction-cup window mount gives
+  dramatically better signal than tucked behind the dash.
+- 10 Hz models improve the 0–60 timer accuracy and g-force smoothness; 1 Hz is
+  fine for speed display and drive logging.
+
 ---
 
 ## What You Don't Need
