@@ -189,6 +189,7 @@ sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s
 # Privileged deploy step for in-UI GitHub updates (POST /api/update → s52-update.sh
 # → sudo -n s52-deploy.sh). Keeps the only root-requiring actions allow-listed.
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-deploy.sh" /usr/local/bin/s52-deploy.sh
+sudo install -m 755 "$SOURCE_DIR/scripts/s52-remove-hotspot.sh" /usr/local/bin/s52-remove-hotspot.sh
 
 # Preserve WAYLAND_DISPLAY/XDG_RUNTIME_DIR through sudo so wlrctl can find labwc.
 sudo tee /etc/sudoers.d/s52-carplay-launcher > /dev/null <<SUDOERS
@@ -196,6 +197,7 @@ Defaults!/usr/local/bin/s52-carplay-switch.sh env_keep += "WAYLAND_DISPLAY XDG_R
 Defaults!/usr/local/bin/s52-deploy.sh env_keep += "APP_DIR"
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-carplay-switch.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-deploy.sh
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-remove-hotspot.sh
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/s52-carplay-launcher
 sudo visudo -cf /etc/sudoers.d/s52-carplay-launcher
