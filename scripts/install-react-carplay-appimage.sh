@@ -8,6 +8,7 @@
 set -euo pipefail
 
 VERSION="${REACT_CARPLAY_VERSION:-4.0.5}"
+MEDIA_DELAY="${S52_CARPLAY_MEDIA_DELAY:-2000}"
 APP_DIR="${HOME}/apps"
 IMAGE="${APP_DIR}/react-carplay-${VERSION}-arm64.AppImage"
 URL="https://github.com/rhysmorgan134/react-carplay/releases/download/v${VERSION}/react-carplay-${VERSION}-arm64.AppImage"
@@ -18,6 +19,12 @@ if ! getconf LONG_BIT 2>/dev/null | grep -q 64; then
 fi
 
 echo "=== react-carplay AppImage v${VERSION} (upstream Electron) ==="
+
+if ! [[ "${MEDIA_DELAY}" =~ ^[0-9]+$ ]] || [ "${MEDIA_DELAY}" -lt 100 ]; then
+  echo "Invalid S52_CARPLAY_MEDIA_DELAY=${MEDIA_DELAY} (need integer >= 100 ms)" >&2
+  exit 1
+fi
+echo "mediaDelay target: ${MEDIA_DELAY} ms (override: S52_CARPLAY_MEDIA_DELAY)"
 
 sudo apt-get update -qq
 sudo apt-get install -y -qq curl
@@ -42,7 +49,7 @@ EOF
 sudo udevadm control --reload-rules
 sudo usermod -aG plugdev "$USER" || true
 
-# --- Linux patches applied to the extracted asar (re-run re-applies both):
+# --- Linux patches applied to the extracted asar (re-run re-applies all):
 #
 # 1) electron.systemPreferences.askForMediaAccess is macOS-only. On Linux this
 #    call throws an unhandled rejection that prevents mic streams from
@@ -57,11 +64,16 @@ sudo usermod -aG plugdev "$USER" || true
 #    We flip `show: false` -> `show: true` so the toplevel maps unconditionally;
 #    labwc's windowRule iconifies it until the user taps `+`.
 #
+# 3) node-carplay defaults mediaDelay to 300 ms and re-sends DongleConfig
+#    (SendBoxSettings) on every connect, overwriting the Carlinkit web UI.
+#    We patch bundled DEFAULT_CONFIG copies to S52_CARPLAY_MEDIA_DELAY (default
+#    2000 ms) and merge the same value into ~/.config/react-carplay/config.json.
+#
 # We extract the AppImage, patch, and run from the extracted tree so the patch
 # survives future kiosk restarts without re-downloading.
 EXTRACTED="${APP_DIR}/react-carplay-${VERSION}-arm64-extracted"
 PATCH_OK=0
-echo "Applying Linux mic patch (react-carplay#107)..."
+echo "Applying Linux patches (mic, show, mediaDelay)..."
 if command -v node >/dev/null 2>&1; then
   # Extract AppImage into versioned directory (safe to re-run — rm first).
   rm -rf "${EXTRACTED}"
@@ -76,28 +88,77 @@ if command -v node >/dev/null 2>&1; then
     if npx --yes @electron/asar extract "${ASAR}" "${PATCH_WORK}" 2>/dev/null; then
       MAIN_JS="${PATCH_WORK}/out/main/index.js"
       if [ -f "${MAIN_JS}" ]; then
-        node -e "
+        S52_CARPLAY_MEDIA_DELAY="${MEDIA_DELAY}" node -e "
 const fs = require('fs');
-const f = process.argv[1];
-let s = fs.readFileSync(f, 'utf8');
-// Patch 1: guard macOS-only askForMediaAccess (react-carplay#107).
-const before = 'electron.systemPreferences.askForMediaAccess(\"microphone\");';
-const after  = 'if (typeof electron.systemPreferences.askForMediaAccess === \"function\") { electron.systemPreferences.askForMediaAccess(\"microphone\"); }';
-if (s.includes(before)) { s = s.replace(before, after); process.stdout.write('mic: patched\n'); }
-else if (s.includes(after)) { process.stdout.write('mic: already patched\n'); }
+const path = require('path');
+const mediaDelay = process.env.S52_CARPLAY_MEDIA_DELAY;
+const mainFile = process.argv[1];
+const asarRoot = process.argv[2];
+
+// Patch 1 + 2: main process (mic guard + show:true).
+let s = fs.readFileSync(mainFile, 'utf8');
+const micBefore = 'electron.systemPreferences.askForMediaAccess(\"microphone\");';
+const micAfter  = 'if (typeof electron.systemPreferences.askForMediaAccess === \"function\") { electron.systemPreferences.askForMediaAccess(\"microphone\"); }';
+if (s.includes(micBefore)) { s = s.replace(micBefore, micAfter); process.stdout.write('mic: patched\n'); }
+else if (s.includes(micAfter)) { process.stdout.write('mic: already patched\n'); }
 else { process.stdout.write('mic: line not found — skipping\n'); }
-// Patch 2: show window unconditionally (software-GL path never fires ready-to-show).
-const m = s.match(/show:\s*false,/);
-if (m) { s = s.replace(/show:\s*false,/, 'show: true,'); process.stdout.write('show: patched\n'); }
+if (/show:\s*false,/.test(s)) { s = s.replace(/show:\s*false,/, 'show: true,'); process.stdout.write('show: patched\n'); }
 else if (/show:\s*true,/.test(s)) { process.stdout.write('show: already patched\n'); }
 else { process.stdout.write('show: pattern not found — skipping\n'); }
-fs.writeFileSync(f, s);
-" "${MAIN_JS}"
+fs.writeFileSync(mainFile, s);
+
+// Patch 3: node-carplay DEFAULT_CONFIG mediaDelay (300 -> target) everywhere in asar.
+const needle = 'mediaDelay: 300';
+const repl = 'mediaDelay: ' + mediaDelay;
+let patched = 0;
+function walk(dir) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) walk(p);
+    else if (ent.isFile() && ent.name.endsWith('.js')) {
+      let t = fs.readFileSync(p, 'utf8');
+      if (t.includes(needle)) {
+        t = t.split(needle).join(repl);
+        fs.writeFileSync(p, t);
+        patched++;
+        process.stdout.write('mediaDelay: patched ' + path.relative(asarRoot, p) + '\n');
+      } else if (t.includes(repl)) {
+        process.stdout.write('mediaDelay: already patched ' + path.relative(asarRoot, p) + '\n');
+      }
+    }
+  }
+}
+walk(asarRoot);
+if (patched === 0) process.stdout.write('mediaDelay: no 300 ms defaults found — check upstream layout\n');
+" "${MAIN_JS}" "${PATCH_WORK}"
         npx @electron/asar pack "${PATCH_WORK}" "${ASAR}" 2>/dev/null && PATCH_OK=1 || true
       fi
       rm -rf "${PATCH_WORK}"
     fi
   fi
+fi
+
+# Merge mediaDelay into the Electron user config (used at connect time).
+CONFIG_JSON="${HOME}/.config/react-carplay/config.json"
+mkdir -p "$(dirname "${CONFIG_JSON}")"
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "${CONFIG_JSON}" "${MEDIA_DELAY}" <<'PY'
+import json, os, sys
+path, delay = sys.argv[1], int(sys.argv[2])
+if os.path.isfile(path):
+    with open(path) as f:
+        cfg = json.load(f)
+    old = cfg.get("mediaDelay", "(unset)")
+    cfg["mediaDelay"] = delay
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=2)
+        f.write("\n")
+    print(f"config.json mediaDelay: {old} -> {delay} ms")
+else:
+    print(f"config.json not found yet — first launch uses patched default {delay} ms")
+PY
+else
+  echo "Warning: python3 missing — could not update ${CONFIG_JSON}" >&2
 fi
 
 if [ "${PATCH_OK}" -eq 1 ]; then
