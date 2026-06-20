@@ -4,6 +4,11 @@
 # is in range, so the Pi prefers home wifi when parked and falls back to the
 # phone hotspot on the road.
 #
+# ⚠️  BLOCKED (2026-06-20): Do not use until issue #6 is reworked. Personal
+# Hotspot on the phone conflicts with wireless CarPlay (shared WiFi radio) and
+# caused disconnects/audio skips. Use scripts/s52-remove-hotspot.sh to roll
+# back if already installed.
+#
 # Credentials are stored only in NetworkManager on the Pi — never committed
 # (same rule as the wifi/sudo secrets noted in HANDOFF.md).
 #
