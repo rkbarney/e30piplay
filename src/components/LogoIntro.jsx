@@ -9,8 +9,9 @@ import FactoryClock from './FactoryClock';
     >= SPIN_MS    if /api/carplay-ready hasn't returned 200 yet, keep spinning
                   (continuous loop) while polling
     ready 200     hold briefly, then fade the logo out / reveal the clock
-    SAFETY_MS     fall through to the clock anyway so a broken backend can
-                  never brick the UI (clock + manual `+` stay reachable)
+    SPIN+GRACE    if still not ready after the min spin, keep looping briefly
+                  then reveal the clock (~8s total — close to the old ~5.2s boot)
+    SAFETY_MS     absolute backstop if /api/carplay-ready never responds
 */
 const SPIN_MS = 3000; // minimum spin (the existing decel/settle animation)
 const HOLD_MS = 400;  // brief hold once we decide to transition
@@ -18,7 +19,10 @@ const FADE_MS = 900;  // logo fade-out / clock reveal
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 const POLL_INTERVAL_MS = 500;
-const SAFETY_TIMEOUT_MS = 25000; // never hang: reveal the clock regardless
+// wlrctl often never sees react-carplay (503 forever) even when the AppImage is
+// fine, so don't make the user stare at a spinner for 25s — match legacy boot time.
+const MAX_WAIT_AFTER_SPIN_MS = 5000;
+const SAFETY_TIMEOUT_MS = 10000; // API unreachable: reveal the clock regardless
 
 // FactoryClock (the face the boot reveals) centers its SVG + gap + buttons as a
 // flex column, so its face center sits above the screen center by half of the
@@ -35,6 +39,7 @@ export default function LogoIntro({ onComplete }) {
   useEffect(() => {
     let cancelled = false;
     let pollTimer;
+    let graceTimer;
     let fadeTimer;
     let ready = false;
     let minSpinDone = false;
@@ -53,8 +58,13 @@ export default function LogoIntro({ onComplete }) {
 
     const minSpinTimer = setTimeout(() => {
       minSpinDone = true;
-      // Not ready when the settle finishes → keep the roundel spinning.
-      if (!ready && !finished) setLooping(true);
+      // Not ready when the settle finishes → keep the roundel spinning briefly.
+      if (!ready && !finished) {
+        setLooping(true);
+        graceTimer = setTimeout(() => {
+          if (!cancelled && !finished) finish();
+        }, MAX_WAIT_AFTER_SPIN_MS);
+      }
       maybeFinish();
     }, SPIN_MS);
 
@@ -83,6 +93,7 @@ export default function LogoIntro({ onComplete }) {
     return () => {
       cancelled = true;
       clearTimeout(pollTimer);
+      clearTimeout(graceTimer);
       clearTimeout(minSpinTimer);
       clearTimeout(safetyTimer);
       clearTimeout(fadeTimer);
