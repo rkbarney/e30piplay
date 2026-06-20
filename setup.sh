@@ -258,7 +258,7 @@ echo "    Drive logs directory: $APP_DIR/drive-logs"
 
 # ── 7. Groups + linger ────────────────────────────────────────────────────────
 echo "[7/10] User groups + systemd linger…"
-sudo usermod -aG plugdev,video,render,input "$SERVICE_USER"
+sudo usermod -aG plugdev,video,render,input,dialout "$SERVICE_USER"
 if getent group seat >/dev/null; then
   sudo usermod -aG seat "$SERVICE_USER"
 fi

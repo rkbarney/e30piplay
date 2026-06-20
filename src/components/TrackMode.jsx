@@ -13,6 +13,9 @@ const START_MPH     = 3;               // begin timing above this
 const START_MS      = START_MPH / MS_TO_MPH;
 const POLL_MS       = 500;             // GPS poll interval
 const G             = 9.80665;         // m/s² per g
+const MAX_G_DISPLAY = 9.9;             // cap g-force display at this value (single digit + one decimal)
+const MIN_HDG_CHANGE_DEG = 2;         // ignore heading changes smaller than this (GPS noise when stationary)
+const MAX_G_SANITY  = 3.0;             // reject derived g values above this as noise spikes (> 3g implausible on road)
 const LOG_INTERVAL_MS = 5000;          // auto-log a point every 5 s when logging
 
 // Heading degrees → compass label
@@ -81,17 +84,23 @@ export default function TrackMode({ onMinus, onPlus }) {
         const dv      = data.speed - prev.speed;                   // m/s
         const aLong   = dv / dt;                                   // m/s²
 
-        // lateral: centripetal if heading changed
+        // lateral: centripetal if heading changed meaningfully
         let aLat = 0;
         if (typeof data.track === 'number' && typeof prev.track === 'number') {
           const dHeadDeg = angleDiff(data.track, prev.track);
-          const dHeadRad = (dHeadDeg * Math.PI) / 180;
-          const vAvg     = (data.speed + prev.speed) / 2;
-          aLat = vAvg * (dHeadRad / dt);
+          // Ignore small heading changes — GPS heading is noisy when near-stationary
+          if (Math.abs(dHeadDeg) >= MIN_HDG_CHANGE_DEG) {
+            const dHeadRad = (dHeadDeg * Math.PI) / 180;
+            const vAvg     = (data.speed + prev.speed) / 2;
+            aLat = vAvg * (dHeadRad / dt);
+          }
         }
 
         const gVal = Math.sqrt(aLong * aLong + aLat * aLat) / G;
-        setGforce(Math.min(gVal, 9.9));  // cap display at 9.9 g
+        // Reject implausibly high spikes (GPS noise, bad fix, etc.)
+        if (gVal <= MAX_G_SANITY) {
+          setGforce(Math.min(gVal, MAX_G_DISPLAY));
+        }
       }
     }
 

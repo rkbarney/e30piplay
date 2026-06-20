@@ -14,20 +14,20 @@
 
 # u-blox 7 (VK-172 "VK172 USB GPS")
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
-    SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+    SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"
 
 # u-blox 8
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a8", \
-    SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+    SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"
 
 # u-blox M8N
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a9", \
-    SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+    SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"
 
 # GlobalTop / generic CP2102 USB-UART GPS (MTK3339 / PA6H)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
-    ATTRS{product}=="CP2102*GPS*", SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+    ATTRS{product}=="CP2102*GPS*", SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"
 
 # Prolific PL2303 USB-UART (some cheap clones)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", \
-    ENV{ID_USB_DRIVER}=="pl2303", SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+    ENV{ID_USB_DRIVER}=="pl2303", SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"

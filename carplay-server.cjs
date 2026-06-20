@@ -165,7 +165,9 @@ function ensureDriveLogDir() {
 
 function appendDrivePoint(point) {
   ensureDriveLogDir();
-  const line = JSON.stringify({ ...point, _logged: new Date().toISOString() }) + '\n';
+  // Prefer the GPS timestamp; fall back to server wall-clock.
+  const ts = (point.time && typeof point.time === 'string') ? point.time : new Date().toISOString();
+  const line = JSON.stringify({ ...point, _logged: ts }) + '\n';
   fs.appendFileSync(driveLogPath(), line, 'utf8');
 }
 
