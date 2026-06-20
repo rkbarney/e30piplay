@@ -116,6 +116,12 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
         amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' cap >/dev/null 2>&1 || true
         amixer -c "${USB_ALSA_CARD}" sset Mic 90% >/dev/null 2>&1 || true
       fi
+      # Route react-carplay's stdout/stderr through the journal (tag
+      # s52-carplay-app) so its lines are persistent + timestamped (the old
+      # /tmp/react-carplay.log is wiped on reboot). This gives the flight
+      # recorder a durable record of every (re)start of the AppImage — and any
+      # connect/attach line it ever emits. Still tee to /tmp for live tailing.
+      # Falls back to the /tmp log if systemd-cat is unavailable.
       "${CARPLAY_LAUNCHER}" --no-sandbox \
         ${GPU_FLAG} \
         ${VULKAN_FLAG} \
@@ -125,7 +131,7 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
         --password-store=basic \
         --autoplay-policy=no-user-gesture-required \
         --disable-web-security \
-        >>"${CARPLAY_LOG}" 2>&1 || true
+        2>&1 | { if command -v systemd-cat >/dev/null 2>&1; then tee -a "${CARPLAY_LOG}" | systemd-cat -t s52-carplay-app; else cat >>"${CARPLAY_LOG}"; fi; } || true
       sleep 3
     done
   ) &
