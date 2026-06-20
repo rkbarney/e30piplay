@@ -119,6 +119,14 @@ server {
         proxy_set_header   X-Forwarded-Proto $scheme;
     }
 
+    # Never cache index.html — Chromium kiosk reuses a persistent profile; a stale
+    # shell pointing at an old Vite bundle hash leaves the display on the old UI
+    # even after rsync deploys new assets.
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
