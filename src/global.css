@@ -44,6 +44,13 @@
   100%  { transform: rotate(2160deg); filter: blur(0px);   opacity: 1; }
 }
 
+/* Continuous constant-speed spin used while the boot waits for CarPlay
+   readiness past the initial settle. */
+@keyframes spinLoop {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* Logo fades out */
 @keyframes logoFadeOut {
   0%   { opacity: 1; }

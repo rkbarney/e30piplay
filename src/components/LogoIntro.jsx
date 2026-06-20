@@ -1,18 +1,24 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import FactoryClock from './FactoryClock';
 
 /*
-  Animation timeline (~5.2s total):
-  0.0 – 0.2s   fade in
-  0.2 – 3.2s   spinSettle — blast fast, continuous decel, settle (3s)
-  3.2 – 3.8s   hold clear logo
-  3.8 – 4.8s   logo fades out, clock fades in
+  Boot timeline — the spinning roundel is now GATED on CarPlay readiness
+  instead of a fixed timer:
+    0.0s          fade in + spin/settle (min spin, looks intentional)
+    >= SPIN_MS    if /api/carplay-ready hasn't returned 200 yet, keep spinning
+                  (continuous loop) while polling
+    ready 200     hold briefly, then fade the logo out / reveal the clock
+    SAFETY_MS     fall through to the clock anyway so a broken backend can
+                  never brick the UI (clock + manual `+` stay reachable)
 */
-const SPIN_MS   = 3000;
-const HOLD_MS   = 600;
-const FADE_MS   = 900;
-const TOTAL_MS  = SPIN_MS + HOLD_MS + FADE_MS + 200; // +200 for initial fade-in
+const SPIN_MS = 3000; // minimum spin (the existing decel/settle animation)
+const HOLD_MS = 400;  // brief hold once we decide to transition
+const FADE_MS = 900;  // logo fade-out / clock reveal
+
+const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
+const POLL_INTERVAL_MS = 500;
+const SAFETY_TIMEOUT_MS = 25000; // never hang: reveal the clock regardless
 
 // FactoryClock (the face the boot reveals) centers its SVG + gap + buttons as a
 // flex column, so its face center sits above the screen center by half of the
@@ -21,26 +27,103 @@ const TOTAL_MS  = SPIN_MS + HOLD_MS + FADE_MS + 200; // +200 for initial fade-in
 const CLOCK_CENTER_OFFSET_Y = 42;
 
 export default function LogoIntro({ onComplete }) {
-  const timerRef = useRef(null);
+  // looping: min spin elapsed but CarPlay not ready yet → keep spinning.
+  // finishing: ready (or safety) → play the fade/reveal, then onComplete.
+  const [looping, setLooping] = useState(false);
+  const [finishing, setFinishing] = useState(false);
 
   useEffect(() => {
-    timerRef.current = setTimeout(() => onComplete?.(), TOTAL_MS);
-    return () => clearTimeout(timerRef.current);
+    let cancelled = false;
+    let pollTimer;
+    let fadeTimer;
+    let ready = false;
+    let minSpinDone = false;
+    let finished = false;
+
+    const finish = () => {
+      if (cancelled || finished) return;
+      finished = true;
+      setFinishing(true);
+      fadeTimer = setTimeout(() => onComplete?.(), HOLD_MS + FADE_MS);
+    };
+
+    const maybeFinish = () => {
+      if (ready && minSpinDone) finish();
+    };
+
+    const minSpinTimer = setTimeout(() => {
+      minSpinDone = true;
+      // Not ready when the settle finishes → keep the roundel spinning.
+      if (!ready && !finished) setLooping(true);
+      maybeFinish();
+    }, SPIN_MS);
+
+    const safetyTimer = setTimeout(() => {
+      ready = true;
+      minSpinDone = true;
+      finish();
+    }, SAFETY_TIMEOUT_MS);
+
+    const poll = async () => {
+      if (cancelled || finished) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/carplay-ready`, { cache: 'no-store' });
+        if (res.ok) {
+          ready = true;
+          maybeFinish();
+          return;
+        }
+      } catch {
+        // Backend not up yet — keep spinning and polling.
+      }
+      pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+    };
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(pollTimer);
+      clearTimeout(minSpinTimer);
+      clearTimeout(safetyTimer);
+      clearTimeout(fadeTimer);
+    };
   }, [onComplete]);
+
+  // While waiting past the settle, loop a constant spin; otherwise run the
+  // one-shot decel/settle. `both` fill keeps the settled frame (upright) when
+  // we finish straight from the settle without ever looping.
+  const logoAnimation = looping
+    ? 'spinLoop 1.1s linear infinite'
+    : `spinSettle ${SPIN_MS}ms linear 0.1s both`;
 
   return (
     <div style={styles.root}>
-      {/* Clock fades in from underneath as logo fades out */}
-      <div style={styles.clockLayer}>
+      {/* Clock fades in from underneath as the logo fades out */}
+      <div
+        style={{
+          ...styles.clockLayer,
+          animation: finishing
+            ? `clockReveal ${FADE_MS}ms ease-out ${HOLD_MS}ms both`
+            : 'none',
+          opacity: finishing ? undefined : 0,
+        }}
+      >
         <FactoryClock />
       </div>
 
-      {/* Logo layer — spins, settles, fades */}
-      <div style={styles.logoLayer}>
+      {/* Logo layer — spins (settle or loop), then fades */}
+      <div
+        style={{
+          ...styles.logoLayer,
+          animation: finishing
+            ? `logoFadeOut ${FADE_MS}ms ease-in ${HOLD_MS}ms both`
+            : 'none',
+        }}
+      >
         <img
           src="/BMW-Logo-1970-1989.png"
           alt="BMW"
-          style={styles.logo}
+          style={{ ...styles.logo, animation: logoAnimation }}
         />
       </div>
     </div>
@@ -63,7 +146,6 @@ const styles = {
   clockLayer: {
     position: 'absolute',
     inset: 0,
-    animation: `clockReveal ${FADE_MS}ms ease-out ${SPIN_MS + HOLD_MS}ms both`,
   },
   logoLayer: {
     position: 'absolute',
@@ -74,7 +156,6 @@ const styles = {
     // Lift to the clock face center; logoFadeOut only animates opacity so this
     // transform is preserved throughout the spin/fade.
     transform: `translateY(-${CLOCK_CENTER_OFFSET_Y}px)`,
-    animation: `logoFadeOut ${FADE_MS}ms ease-in ${SPIN_MS + HOLD_MS}ms both`,
   },
   logo: {
     // The source PNG is 16:9 with the roundel centered in wide transparent
@@ -86,7 +167,5 @@ const styles = {
     objectFit: 'cover',
     // Soft shadow gives the white roundel segments definition on white.
     filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.30))',
-    // linear so each keyframe's rotation value controls pacing directly
-    animation: `spinSettle ${SPIN_MS}ms linear 0.1s both`,
   },
 };
