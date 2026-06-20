@@ -1,25 +1,25 @@
 /**
- * CarPlayReceiver — hands display to upstream Electron react-carplay from the Pi kiosk.
+ * CarPlayReceiver — relaunch surface for the pre-loaded react-carplay AppImage.
  *
- * Opens automatically when this screen is shown (+). nginx proxies POST /api/* → carplay-server.cjs.
- * Requires ~/.local/bin/react-carplay (setup.sh or install-react-carplay-appimage.sh).
+ * Tapping + from the clock lands here. The user explicitly relaunches CarPlay
+ * (restart AppImage + focus) rather than auto-handoff, which helps when the
+ * dongle lost the phone link. nginx proxies POST /api/* → carplay-server.cjs.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
 export default function CarPlayReceiver({ onBack }) {
-  const [phase, setPhase] = useState('starting');
+  const [phase, setPhase] = useState('idle');
   const [err, setErr] = useState('');
-  const devGuardRef = useRef(false);
 
-  const runLaunch = useCallback(async () => {
+  const runRelaunch = useCallback(async () => {
     setErr('');
     setPhase('starting');
     try {
-      const res = await fetch(`${API_BASE}/api/launch-react-carplay`, {
+      const res = await fetch(`${API_BASE}/api/relaunch-react-carplay`, {
         method: 'POST',
         headers: { Accept: 'application/json' },
       });
@@ -39,21 +39,14 @@ export default function CarPlayReceiver({ onBack }) {
     }
   }, []);
 
-  useEffect(() => {
-    // React 18 Strict Mode (dev only) runs effects twice; avoid double POST to the Pi launcher.
-    if (import.meta.env.DEV) {
-      if (devGuardRef.current) return;
-      devGuardRef.current = true;
-    }
-    runLaunch();
-  }, [runLaunch]);
+  const busy = phase === 'starting' || phase === 'handoff';
 
   return (
     <div style={styles.root}>
       <div style={styles.statusBar}>
         <div style={styles.statusLeft}>
           {typeof onBack === 'function' && (
-            <button type="button" style={styles.backBtn} onClick={onBack}>
+            <button type="button" style={styles.backBtn} onClick={onBack} disabled={busy}>
               ← back
             </button>
           )}
@@ -63,61 +56,41 @@ export default function CarPlayReceiver({ onBack }) {
       </div>
 
       <div style={styles.main}>
-        <div style={styles.iconWrap}>
-          <div style={styles.bigIcon} aria-hidden>
-            <svg width="56" height="56" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <rect
-                x="6.5"
-                y="2.5"
-                width="11"
-                height="19"
-                rx="2.2"
-                fill="none"
-                stroke="#ffb300"
-                strokeWidth="1.4"
-              />
-              <line x1="9" y1="4.5" x2="15" y2="4.5" stroke="#ffb300" strokeWidth="1" opacity="0.35" />
-              <circle cx="12" cy="18.5" r="1.1" fill="#ffb300" />
-            </svg>
-          </div>
-          <div style={styles.title}>CarPlay</div>
-        </div>
+        <button
+          type="button"
+          style={{
+            ...styles.relaunchBtn,
+            ...(busy ? styles.relaunchBtnBusy : null),
+          }}
+          onClick={runRelaunch}
+          disabled={busy}
+        >
+          {phase === 'starting'
+            ? 'RESTARTING…'
+            : phase === 'handoff'
+              ? 'SWITCHING…'
+              : 'RELAUNCH\nCARPLAY'}
+        </button>
 
-        <div style={styles.col}>
-          <div style={styles.instructions}>
-            <div style={styles.step}>1  Plug Carlinkit dongle into Pi USB</div>
-            <div style={styles.step}>2  Electron opens automatically — kiosk hands off the display</div>
-            <div style={styles.step}>3  Quit Electron when done — kiosk returns</div>
-          </div>
+        {err ? <div style={styles.error}>{err}</div> : null}
 
-          {err ? (
-            <button type="button" style={styles.primaryBtn} onClick={runLaunch}>
-              Retry Open CarPlay
-            </button>
-          ) : null}
-
-          {err ? <div style={styles.error}>{err}</div> : null}
-
-          <div style={styles.hint}>
-            Stuck? SSH:{' '}
-            <span style={styles.mono}>sudo /usr/local/bin/s52-carplay-switch.sh return</span>
-          </div>
+        <div style={styles.hint}>
+          Phone not connecting? Check wireless CarPlay on your phone, then tap relaunch.
         </div>
       </div>
 
       <div style={styles.footer}>
-        <span style={styles.footerLeft}>CARLINKIT WIRELESS DONGLE</span>
+        <span style={styles.footerLeft}>CARLINKIT WIRELESS</span>
         <span style={styles.footerRight}>
           {phase === 'starting'
-            ? 'STARTING…'
+            ? 'RESTARTING…'
             : phase === 'handoff'
-              ? 'SWITCHING DISPLAY…'
+              ? 'HANDOFF'
               : err
                 ? 'ERROR'
                 : 'READY'}
         </span>
       </div>
-      <div style={styles.waitDot} />
     </div>
   );
 }
@@ -186,63 +159,37 @@ const styles = {
   main: {
     flex: 1,
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: '16px',
-    padding: '12px 14px 8px',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    padding: '16px 14px',
+    gap: '12px',
     minHeight: 0,
   },
-  iconWrap: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '6px',
-    flexShrink: 0,
-    paddingTop: '8px',
-  },
-  bigIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    lineHeight: 0,
-  },
-  title: {
-    color: '#ffb300',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    letterSpacing: '0.1em',
-  },
-  col: {
+  relaunchBtn: {
     flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    minWidth: 0,
-  },
-  instructions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '5px',
-  },
-  step: {
-    color: '#cc8800',
-    fontSize: '8.5px',
-    lineHeight: 1.28,
-    borderLeft: '2px solid #3a2800',
-    paddingLeft: '6px',
-  },
-  primaryBtn: {
-    marginTop: '4px',
-    padding: '8px 10px',
+    minHeight: '200px',
+    maxHeight: '320px',
+    margin: '0 4px',
+    padding: '24px 16px',
     fontFamily: 'inherit',
-    fontSize: '9px',
+    fontSize: '28px',
     fontWeight: 'bold',
-    letterSpacing: '0.08em',
+    letterSpacing: '0.12em',
+    lineHeight: 1.15,
+    whiteSpace: 'pre-line',
     color: '#1a1200',
     background: 'linear-gradient(180deg, #ffc940 0%, #e6a000 100%)',
-    border: '1px solid #ffdd77',
-    borderRadius: '3px',
+    border: '3px solid #ffdd77',
+    borderRadius: '8px',
     cursor: 'pointer',
-    alignSelf: 'stretch',
+    boxShadow: '0 4px 24px rgba(255, 179, 0, 0.35)',
+  },
+  relaunchBtnBusy: {
+    opacity: 0.75,
+    cursor: 'wait',
+    fontSize: '18px',
+    letterSpacing: '0.08em',
   },
   error: {
     color: '#ff6b6b',
@@ -250,18 +197,14 @@ const styles = {
     lineHeight: 1.35,
     borderLeft: '2px solid #662222',
     paddingLeft: '6px',
+    flexShrink: 0,
   },
   hint: {
     color: '#665533',
     fontSize: '7px',
     lineHeight: 1.35,
-    marginTop: 'auto',
-    paddingBottom: '4px',
-  },
-  mono: {
-    fontFamily: 'monospace',
-    color: '#887755',
-    wordBreak: 'break-all',
+    textAlign: 'center',
+    flexShrink: 0,
   },
   footer: {
     height: '22px',
@@ -282,15 +225,5 @@ const styles = {
     color: '#ffb300',
     fontSize: '8px',
     letterSpacing: '0.1em',
-  },
-  waitDot: {
-    position: 'absolute',
-    bottom: '28px',
-    right: '12px',
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    background: '#ffb300',
-    animation: 'blink 1s ease-in-out infinite',
   },
 };
