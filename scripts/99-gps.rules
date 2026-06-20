@@ -1,0 +1,33 @@
+# 99-gps.rules — stable /dev/gps0 symlink for USB GPS pucks
+#
+# Covers the most common Pi-compatible USB GPS modules:
+#
+#   u-blox 7   VK-172 / VK-162  (1546:01a7)   — recommended, ~$15, 1 Hz standard / 10 Hz configurable
+#   u-blox 8   PA1616D / G-72   (1546:01a8)   — slightly newer silicon, same form factor
+#   u-blox M8  (GlobalTop / SiRFstar IV based) (1546:01a9)
+#   u-blox NEO-7M / NEO-8M module on generic USB-Serial (067b:23a3 / 10c4:ea60)
+#   GlobalTop MTK3339 (PA6H / Ultimate GPS)    (10c4:ea60 using CP2102 UART bridge)
+#
+# After install (see setup.sh), verify with:
+#   ls -l /dev/gps0
+#   gpspipe -w -n 5 | grep TPV
+
+# u-blox 7 (VK-172 "VK172 USB GPS")
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
+    SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+
+# u-blox 8
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a8", \
+    SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+
+# u-blox M8N
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a9", \
+    SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+
+# GlobalTop / generic CP2102 USB-UART GPS (MTK3339 / PA6H)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+    ATTRS{product}=="CP2102*GPS*", SYMLINK+="gps0", MODE="0666", TAG+="systemd"
+
+# Prolific PL2303 USB-UART (some cheap clones)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", \
+    ENV{ID_USB_DRIVER}=="pl2303", SYMLINK+="gps0", MODE="0666", TAG+="systemd"

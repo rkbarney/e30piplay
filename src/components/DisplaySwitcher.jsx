@@ -5,9 +5,10 @@ import DigitalClock    from './DigitalClock';
 import AnalogClock     from './AnalogClock';
 import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
+import TrackMode       from './TrackMode';
 
 // Faces cycled by the − button
-const CLOCK_FACES = ['factory', 'digital', 'clock', 'system'];
+const CLOCK_FACES = ['factory', 'digital', 'clock', 'system', 'track'];
 
 export default function DisplaySwitcher() {
   // Boot goes straight to the spinning roundel ('logo'), then to the clock.
@@ -54,6 +55,8 @@ export default function DisplaySwitcher() {
         <AnalogClock  onMinus={handleMinus} onPlus={handlePlus} />}
       {isClockScreen && clockFace === 'system' &&
         <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
+      {isClockScreen && clockFace === 'track' &&
+        <TrackMode    onMinus={handleMinus} onPlus={handlePlus} />}
     </div>
   );
 }

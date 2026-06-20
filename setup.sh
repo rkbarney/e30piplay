@@ -61,7 +61,9 @@ sudo apt-get install -y -qq \
   python3 \
   rsync \
   git \
-  zlib1g-dev
+  zlib1g-dev \
+  gpsd \
+  gpsd-clients
 
 sudo systemctl enable ssh
 sudo systemctl start ssh
@@ -229,6 +231,30 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1314", ATTRS{idProduct}=="152*", MODE="0660"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", MODE="0660", GROUP="plugdev"
 UDEV
 sudo udevadm control --reload-rules
+
+# GPS puck udev rule — gives every supported u-blox / MTK USB GPS a stable
+# /dev/gps0 symlink so gpsd can always find it at the same path.
+echo "[6b/10] GPS puck udev rule + gpsd configuration…"
+sudo install -m 644 "$SOURCE_DIR/scripts/99-gps.rules" /etc/udev/rules.d/99-gps.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=tty 2>/dev/null || true
+
+# Configure gpsd to listen on /dev/gps0 (created by the udev rule above).
+# -n: don't wait for a client before activating the GPS.
+# -G: listen on all interfaces (loopback-only by default; fine for a kiosk).
+sudo tee /etc/default/gpsd > /dev/null <<'GPSD'
+START_DAEMON="true"
+GPSD_OPTIONS="-n"
+DEVICES="/dev/gps0"
+USBAUTO="false"
+GPSD
+sudo systemctl enable gpsd 2>/dev/null || true
+sudo systemctl restart gpsd 2>/dev/null || true
+echo "    gpsd configured for /dev/gps0 (plug GPS puck, then: gpspipe -w -n 5 | grep TPV)"
+
+# drive-logs directory — created early so the API server can write immediately.
+mkdir -p "$APP_DIR/drive-logs"
+echo "    Drive logs directory: $APP_DIR/drive-logs"
 
 # ── 7. Groups + linger ────────────────────────────────────────────────────────
 echo "[7/10] User groups + systemd linger…"

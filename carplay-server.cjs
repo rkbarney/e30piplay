@@ -8,6 +8,7 @@
 
 const http = require('http');
 const path = require('path');
+const fs   = require('fs');
 const { execFile } = require('child_process');
 
 const PORT = Number.parseInt(process.env.PORT || '3001', 10) || 3001;
@@ -98,6 +99,93 @@ async function carplayReady() {
   }
 }
 
+// ── GPS ────────────────────────────────────────────────────────────────────────
+
+// Parse a stream of newline-delimited gpsd JSON objects and return the most
+// recent TPV record with a real fix (mode ≥ 2).
+function parseTpv(raw) {
+  let best = null;
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let obj;
+    try { obj = JSON.parse(trimmed); } catch { continue; }
+    if (obj.class === 'TPV' && typeof obj.mode === 'number' && obj.mode >= 2) {
+      best = obj;
+    }
+  }
+  return best;
+}
+
+// Poll gpspipe for up to GPS_LINES JSON lines (covers ~1 s of 10 Hz data).
+// Returns a sanitised fix object or { mode: 0 } when gpsd is unreachable.
+const GPS_LINES = 20;
+const GPS_TIMEOUT_MS = 2500;
+
+async function getGpsFix() {
+  let stdout = '';
+  try {
+    ({ stdout } = await run(
+      'gpspipe',
+      ['-w', `-n${GPS_LINES}`],
+      { timeout: GPS_TIMEOUT_MS },
+    ));
+  } catch {
+    return { ok: true, mode: 0 };
+  }
+  const tpv = parseTpv(stdout);
+  if (!tpv) return { ok: true, mode: 0 };
+  return {
+    ok:    true,
+    mode:  tpv.mode,
+    time:  tpv.time  ?? null,
+    lat:   typeof tpv.lat   === 'number' ? tpv.lat   : null,
+    lon:   typeof tpv.lon   === 'number' ? tpv.lon   : null,
+    alt:   typeof tpv.alt   === 'number' ? tpv.alt   : null,    // metres
+    speed: typeof tpv.speed === 'number' ? tpv.speed : null,    // m/s
+    track: typeof tpv.track === 'number' ? tpv.track : null,    // degrees true
+    climb: typeof tpv.climb === 'number' ? tpv.climb : null,    // m/s vertical
+    epx:   typeof tpv.epx   === 'number' ? tpv.epx   : null,    // horizontal error estimate (m)
+  };
+}
+
+// ── Drive log ─────────────────────────────────────────────────────────────────
+
+const DRIVE_LOG_DIR = path.join(APP_DIR, 'drive-logs');
+
+function driveLogPath() {
+  const d = new Date();
+  const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return path.join(DRIVE_LOG_DIR, `drive-${stamp}.jsonl`);
+}
+
+function ensureDriveLogDir() {
+  try { fs.mkdirSync(DRIVE_LOG_DIR, { recursive: true }); } catch { /* ignore */ }
+}
+
+function appendDrivePoint(point) {
+  ensureDriveLogDir();
+  const line = JSON.stringify({ ...point, _logged: new Date().toISOString() }) + '\n';
+  fs.appendFileSync(driveLogPath(), line, 'utf8');
+}
+
+function readDriveLog() {
+  const fp = driveLogPath();
+  if (!fs.existsSync(fp)) return [];
+  return fs.readFileSync(fp, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
+function clearDriveLog() {
+  const fp = driveLogPath();
+  if (fs.existsSync(fp)) fs.unlinkSync(fp);
+}
+
+// ── HTTP server ───────────────────────────────────────────────────────────────
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -105,7 +193,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS' && url.pathname.startsWith('/api')) {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Accept',
       });
       res.end();
@@ -144,6 +232,38 @@ const server = http.createServer(async (req, res) => {
       await returnToKiosk();
       json(res, 200, { ok: true });
       return;
+    }
+
+    // ── GPS fix ───────────────────────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/gps') {
+      const fix = await getGpsFix();
+      json(res, 200, fix);
+      return;
+    }
+
+    // ── Drive log ─────────────────────────────────────────────────────────────
+    if (url.pathname === '/api/drive-log') {
+      if (req.method === 'GET') {
+        json(res, 200, { ok: true, points: readDriveLog() });
+        return;
+      }
+      if (req.method === 'POST') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        let point;
+        try { point = JSON.parse(body); } catch {
+          json(res, 400, { ok: false, error: 'invalid_json' });
+          return;
+        }
+        appendDrivePoint(point);
+        json(res, 200, { ok: true });
+        return;
+      }
+      if (req.method === 'DELETE') {
+        clearDriveLog();
+        json(res, 200, { ok: true });
+        return;
+      }
     }
 
     json(res, 404, { ok: false, error: 'not_found' });
