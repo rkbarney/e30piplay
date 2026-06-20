@@ -7,9 +7,13 @@
  */
 
 const http = require('http');
+const path = require('path');
 const { execFile } = require('child_process');
 
 const PORT = Number.parseInt(process.env.PORT || '3001', 10) || 3001;
+
+// The systemd unit runs with WorkingDirectory=$APP_DIR, so cwd is the repo.
+const APP_DIR = process.env.APP_DIR || process.cwd();
 
 function json(res, status, obj) {
   const body = JSON.stringify(obj);
@@ -20,9 +24,9 @@ function json(res, status, obj) {
   res.end(body);
 }
 
-function run(cmd, args) {
+function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: 120000 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { timeout: 120000, ...opts }, (err, stdout, stderr) => {
       if (err) {
         err.stderr = stderr;
         err.stdout = stdout;
@@ -38,6 +42,46 @@ async function launchReactCarplay() {
 
 async function returnToKiosk() {
   await run('sudo', ['-n', '/usr/local/bin/s52-carplay-switch.sh', 'return']);
+}
+
+const GIT = 'git';
+
+// Current build info + whether the remote is ahead. `git fetch` needs network;
+// if it fails we report online:false rather than erroring the whole request.
+async function getVersion() {
+  const git = (args, opts) => run(GIT, ['-C', APP_DIR, ...args], opts);
+  const out = async (args) => (await git(args)).stdout.trim();
+
+  const sha = await out(['rev-parse', '--short', 'HEAD']);
+  const branch = await out(['rev-parse', '--abbrev-ref', 'HEAD']);
+  let dirty = false;
+  try {
+    dirty = (await git(['status', '--porcelain'])).stdout.trim().length > 0;
+  } catch { /* ignore */ }
+
+  let online = false;
+  let behind = 0;
+  try {
+    await git(['fetch', '--quiet', 'origin'], { timeout: 20000 });
+    online = true;
+    // Commits upstream has that we don't (0 = up to date).
+    behind = Number.parseInt(await out(['rev-list', '--count', 'HEAD..@{u}']), 10) || 0;
+  } catch {
+    online = false;
+  }
+
+  return { sha, branch, dirty, online, behind, updateAvailable: behind > 0 };
+}
+
+// Pull + build + deploy. Long-running (npm ci + build), so a generous timeout.
+async function runUpdate() {
+  const script = path.join(APP_DIR, 'scripts', 's52-update.sh');
+  const { stdout, stderr } = await run('bash', [script], {
+    timeout: 600000,
+    cwd: APP_DIR,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return { log: `${stdout}${stderr}`.trim() };
 }
 
 const WLRCTL = '/usr/bin/wlrctl';
@@ -76,6 +120,17 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/carplay-ready') {
       const ready = await carplayReady();
       json(res, ready ? 200 : 503, { ready });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/version') {
+      json(res, 200, { ok: true, ...(await getVersion()) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/update') {
+      const { log } = await runUpdate();
+      json(res, 200, { ok: true, log });
       return;
     }
 

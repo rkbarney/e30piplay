@@ -127,6 +127,40 @@ ssh s52 'cd ~/e30piplay && npm run build && \
 - Restart `s52-carplay` for server changes; `s52-cage-kiosk` to reload the UI
 (also relaunches react-carplay, re-sourcing the audio env).
 
+### In-UI update from GitHub (no SSH)
+
+The **System** face (cycle the `−` button past the clocks) shows the current
+build and an **INSTALL** button when `origin` is ahead. It calls
+`POST /api/update` → `scripts/s52-update.sh` (runs as the kiosk user:
+`git pull --ff-only` → `npm ci` → `npm run build`) → `sudo -n
+/usr/local/bin/s52-deploy.sh` (rsync to `/var/www` + restart `s52-carplay`).
+The UI then reloads itself (Vite hash-named assets), so `s52-cage-kiosk` is **not**
+restarted.
+
+- Needs internet (home wifi when parked, or the phone hotspot below on the road).
+- **Refuses to run if the working tree is dirty.** The Pi has known local mods
+  (see the caveat above), so resolve those over SSH first or the button reports
+  the dirty tree and changes nothing.
+- The only privileged piece is `s52-deploy.sh`, allow-listed in
+  `/etc/sudoers.d/s52-carplay-launcher` (same pattern as `s52-carplay-switch.sh`).
+
+### Phone hotspot (internet on the road)
+
+NetworkManager auto-joins the highest-priority network in range, so the Pi
+prefers home wifi (`biscuit`) when parked and falls back to the phone hotspot
+elsewhere. Add the hotspot **once**, on the Pi (credentials live only in NM,
+never committed):
+
+```bash
+ssh s52 'bash -s' "<SSID>" "<PASSWORD>" < scripts/s52-add-hotspot.sh
+```
+
+- iPhone: enable **Maximize Compatibility** (2.4 GHz). An idle iPhone hotspot
+  sleeps until a device asks for it, so expect a short reconnect delay; Android
+  hotspots are more reliably always-on.
+- `NetworkManager-wait-online` stays disabled — the kiosk must not gate boot on
+  the network.
+
 ---
 
 ## Boot flow
@@ -494,6 +528,11 @@ but not enough.
 
 ## Outstanding / possible next tasks
 
+- **Feature backlog is tracked as GitHub issues** (`gh issue list`): phone
+  hotspot (#6, done), in-UI OTA (#7, done), GPS "Track Mode" (#8), NES/Game Boy
+  emulator (#9), in-car AI (#10), USB dashcam (#11), radar/speed-trap research
+  (#12). Each is self-contained — pick one at a time. OBD-II is out (the car is
+  OBD1; ELM327 tooling doesn't apply).
 - (Optional) Oil-pressure **Arduino**: the owner has a personal Arduino gauge
 (analog oil-pressure sensor → mini LCD). Plan was to power it from a Pi USB
 port (it's standalone, ~100 mA). Marked optional in `SHOPPING_LIST.md`. A
