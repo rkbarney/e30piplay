@@ -231,6 +231,12 @@ the `PCM`/`Extension Unit` the autostart historically targeted. The autostart
 now explicitly runs `amixer ... sset Speaker 100% unmute` (best-effort,
 alongside the legacy `PCM`/`Extension Unit` calls) on every react-carplay
 (re)launch, so the analog output can't come up muted.
+- **Invisible mouse at the bench:** a live-only systemd drop-in
+  `s52-cage-kiosk.service.d/cursor.conf` with `XCURSOR_THEME=blank` /
+  `XCURSOR_SIZE=1` hides the pointer entirely — worse than `unclutter`.
+  Remove it (`sudo rm …/cursor.conf && sudo systemctl restart s52-cage-kiosk`).
+  `setup.sh` now deletes that file; in-car hiding uses autostart `unclutter`
+  only when a touchscreen is detected.
 
 ---
 

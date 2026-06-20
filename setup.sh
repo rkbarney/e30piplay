@@ -344,6 +344,12 @@ RestartSec=4
 WantedBy=multi-user.target
 SERVICE
 
+# Older bench/kiosk experiments may have dropped cursor.conf here with
+# XCURSOR_THEME=blank / XCURSOR_SIZE=1 — that makes the pointer invisible
+# even with a mouse. Touchscreen installs should use unclutter in autostart
+# (auto-enabled when a touch device is present), not a blank cursor theme.
+sudo rm -f /etc/systemd/system/s52-cage-kiosk.service.d/cursor.conf
+
 # Plymouth → labwc handoff: keep the amber splash on the framebuffer while
 # labwc is grabbing DRM by overriding the default `plymouth quit` with
 # `plymouth quit --retain-splash`. Only takes effect if Plymouth is
