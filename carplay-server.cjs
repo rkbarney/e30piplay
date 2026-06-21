@@ -42,30 +42,6 @@ async function returnToKiosk() {
 
 const WLRCTL = '/usr/bin/wlrctl';
 
-const HOME = process.env.HOME || '/home/admin';
-const AUDIO_SCRIPT = `${HOME}/.local/bin/s52-audio-output.sh`;
-const BT_SCRIPT = `${HOME}/.local/bin/s52-bt.sh`;
-const AUDIO_TARGETS = new Set(['aux', 'bt', 'hdmi']);
-
-// Current output token: aux | bt | hdmi | unknown.
-async function getAudioOutput() {
-  const { stdout } = await run(AUDIO_SCRIPT, ['current']);
-  return stdout.trim();
-}
-
-// Switch the output sink. For Bluetooth, try to (re)connect the saved Kenwood
-// first so the sink exists before we route to it.
-async function setAudioOutput(target) {
-  if (target === 'bt') {
-    try {
-      await run(BT_SCRIPT, ['connect']);
-    } catch {
-      // fall through; s52-audio-output.sh will report if no BT sink exists
-    }
-  }
-  await run(AUDIO_SCRIPT, [target]);
-}
-
 // Used by the React splash to know when the AppImage is alive as a labwc
 // toplevel — i.e. when tapping `+` will be instant. Resolves true iff
 // `wlrctl toplevel find app_id:react-carplay` returns 0.
@@ -112,24 +88,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/return-to-kiosk') {
       await returnToKiosk();
       json(res, 200, { ok: true });
-      return;
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/audio-output') {
-      const output = await getAudioOutput();
-      json(res, 200, { ok: true, output });
-      return;
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/audio-output') {
-      const target = url.searchParams.get('target');
-      if (!AUDIO_TARGETS.has(target)) {
-        json(res, 400, { ok: false, error: 'bad_target', detail: 'target must be aux|bt|hdmi' });
-        return;
-      }
-      await setAudioOutput(target);
-      const output = await getAudioOutput();
-      json(res, 200, { ok: true, output });
       return;
     }
 
