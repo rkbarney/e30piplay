@@ -107,17 +107,8 @@ export default function LogoIntro({ onComplete }) {
     ? 'spinLoop 1.1s linear infinite'
     : `spinSettle ${SPIN_MS}ms linear 0.1s both`;
 
-  // Flip page chrome to black as soon as the crossfade starts so white root/body
-  // can't bleed through the logo PNG's transparent side margins during clockReveal.
-  useEffect(() => {
-    if (!finishing) return undefined;
-    document.body.classList.add('clock-active');
-    document.documentElement.classList.add('clock-active');
-    return undefined;
-  }, [finishing]);
-
   return (
-    <div style={{ ...styles.root, background: finishing ? '#000' : '#fff' }}>
+    <div style={styles.root}>
       {/* Clock fades in from underneath as the logo fades out */}
       <div
         style={{
@@ -158,14 +149,14 @@ const styles = {
   root: {
     width: '320px',
     height: '480px',
+    // White during boot so the unavoidable startup white flash blends in.
+    background: '#fff',
     position: 'relative',
     overflow: 'hidden',
   },
   clockLayer: {
     position: 'absolute',
     inset: 0,
-    // Full-bleed black under the clock so crossfade never exposes white at the sides.
-    background: '#000',
   },
   logoLayer: {
     position: 'absolute',
