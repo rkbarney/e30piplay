@@ -68,13 +68,10 @@ const styles = {
     animation: `logoFadeOut ${FADE_MS}ms ease-in ${SPIN_MS + HOLD_MS}ms both`,
   },
   logo: {
-    // The source PNG is 16:9 with the roundel centered in wide transparent
-    // side margins (roundel ≈55% of image width, ≈98% of height). `contain`
-    // therefore sized the roundel to the image width and left it small.
-    // `cover` crops the empty margins so the roundel fills the box edge-to-edge.
-    width: '318px',
-    height: '318px',
-    objectFit: 'cover',
+    // Large roundel — only slightly smaller than the 320px screen width.
+    width: '300px',
+    height: '300px',
+    objectFit: 'contain',
     // Soft shadow gives the white roundel segments definition on white.
     filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.30))',
     // linear so each keyframe's rotation value controls pacing directly
