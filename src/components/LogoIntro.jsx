@@ -14,12 +14,6 @@ const HOLD_MS   = 600;
 const FADE_MS   = 900;
 const TOTAL_MS  = SPIN_MS + HOLD_MS + FADE_MS + 200; // +200 for initial fade-in
 
-// FactoryClock (the face the boot reveals) centers its SVG + gap + buttons as a
-// flex column, so its face center sits above the screen center by half of the
-// stuff below it: (gap 16 + button height 68) / 2 = 42px. Shift the roundel up
-// by the same amount so the two centers coincide exactly across the transition.
-const CLOCK_CENTER_OFFSET_Y = 42;
-
 export default function LogoIntro({ onComplete }) {
   const timerRef = useRef(null);
 
@@ -71,9 +65,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    // Lift to the clock face center; logoFadeOut only animates opacity so this
-    // transform is preserved throughout the spin/fade.
-    transform: `translateY(-${CLOCK_CENTER_OFFSET_Y}px)`,
     animation: `logoFadeOut ${FADE_MS}ms ease-in ${SPIN_MS + HOLD_MS}ms both`,
   },
   logo: {
