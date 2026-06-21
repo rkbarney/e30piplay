@@ -97,7 +97,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
                                           ┌───────────┼───────────┐
                                        micro HDMI   USB-C      USB-A
                                           │         power        │
-                                       [Display] [Supercap UPS] [USB DAC]
+                                       [Display]  [Buck conv]  [USB DAC]
                                        (E30 dash)  (ACC 12V)     │
                                                               [Kenwood AUX]
 ```
@@ -105,18 +105,15 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 ### Mounting
 - Display flush in E30 clock opening (portrait, PCB behind dash panel)
 - Pi 5 mounted behind dash with VHB tape or velcro
-- Power tapped from stereo switched-ignition line via a supercap UPS (replaces
-  the old buck — it rides through the crank voltage sag; see HANDOFF issue #1)
+- Power tapped from stereo ACC 12V line via buck converter
 - AUX cable to Kenwood head unit
 
 ### Power Chain
 ```
-Switched-ignition 12V (terminal 15 / purple accessory wire)
-  │   (stays live through crank on the E30 — voltage just sags)
-  └─► [Add-a-Circuit fuse tap / Posi connector]   (solderless)
-        └─► [Fockety supercap UPS  9–24V in → 5V/3A out, 4S]
-              │   (bridges the crank sag; TVS diode clamped on DC_IN and DC_OUT)
-              └─► USB-C (≥4A) → Pi 5
+ACC 12V (stereo wire)
+  └─► [solder splice + XT30 inline connector]
+        └─► [12V→5V 5A buck converter]
+              └─► USB-C → Pi 5
 ```
 
 ---
