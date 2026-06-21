@@ -1,0 +1,129 @@
+{
+  "infos": {
+    "CarInfo": {
+      "brand": "",
+      "model": "",
+      "userid": "",
+      "year": 0,
+      "screen": "0x0",
+      "gnss": "",
+      "screenFps": "0",
+      "screenSize": "0x0",
+      "huid": ""
+    },
+    "BoxInfo": {
+      "bt": "AutoKit-2041",
+      "wifi": "AutoKit-2041",
+      "boxName": "",
+      "MDLinkType": "",
+      "HULinkType": "AutoPlay",
+      "MDModel": "",
+      "MDOSVersion": "",
+      "MDLinkVersion": "",
+      "hardwareVer": "YMA0-WN16-0003",
+      "ver": "2025.10.15.1127",
+      "cgiVer": "Sep  5 2025 11:05:47",
+      "mfd": "20251015",
+      "uuid": "68e2bdc9132669d7e4fa521cb7089fa2",
+      "productType": "A15W",
+      "mac": "00:e0:4c:67:06:7c",
+      "wifiChipType": 7,
+      "upTime": 176213,
+      "customVer": 2,
+      "customCode": "",
+      "fileName": "A15W_Update.img",
+      "boxType": "YA",
+      "logFileSuffix": "YA15W",
+      "tabId": "",
+      "code": "tTV5BK2u67T1RgjiXCKvlt4x7vCu6xj6",
+      "needActive": 1
+    },
+    "Settings": {
+      "startDelay": 0,
+      "mediaDelay": 2000,
+      "autoConn": 1,
+      "wifi5GSwitch": 1,
+      "wifiChannel": 36,
+      "mediaSound": 0,
+      "CallQuality": 1,
+      "bitRate": 0,
+      "autoPlay": 0,
+      "backRecording": 0,
+      "naviVolume": 0,
+      "displaySize": 0,
+      "ScreenDPI": 0,
+      "Udisk": 0
+    },
+    "DevList": [
+      {
+        "id": "F4:52:93:BE:3C:4E",
+        "type": "CarPlay",
+        "name": "rkbarney’s main",
+        "index": "1"
+      }
+    ],
+    "LangList": [],
+    "WifiChannelList": [
+      {
+        "id": 1,
+        "wifiFreq": 2412
+      },
+      {
+        "id": 2,
+        "wifiFreq": 2417
+      },
+      {
+        "id": 3,
+        "wifiFreq": 2422
+      },
+      {
+        "id": 4,
+        "wifiFreq": 2427
+      },
+      {
+        "id": 5,
+        "wifiFreq": 2432
+      },
+      {
+        "id": 6,
+        "wifiFreq": 2437
+      },
+      {
+        "id": 7,
+        "wifiFreq": 2442
+      },
+      {
+        "id": 36,
+        "wifiFreq": 5180
+      },
+      {
+        "id": 40,
+        "wifiFreq": 5200
+      },
+      {
+        "id": 44,
+        "wifiFreq": 5220
+      },
+      {
+        "id": 48,
+        "wifiFreq": 5240
+      },
+      {
+        "id": 149,
+        "wifiFreq": 5745
+      },
+      {
+        "id": 157,
+        "wifiFreq": 5785
+      },
+      {
+        "id": 161,
+        "wifiFreq": 5805
+      }
+    ]
+  },
+  "carInfo": "Status: 403 Forbidden\r\n\r\n",
+  "syncTime": {
+    "err": 0
+  }
+}
