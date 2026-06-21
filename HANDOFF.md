@@ -150,17 +150,19 @@ ssh s52 'cd ~/e30piplay && npm run build && \
   (window never mapped on Wayland otherwise) and an `askForMediaAccess` shim.
 - **`usb_max_current_enable=1`** in `config.txt`: the 25 W buck is a "dumb" 5 V
   source (no USB-PD), so without this the Pi caps USB current / warns.
-- **ALSA output unmute (fixed):** the C-Media card's real playback control is
-  **`Speaker`** (controls present: `Speaker`, `Mic`, `Auto Gain Control`) — not
-  the `PCM`/`Extension Unit` the autostart historically targeted. The autostart
-  now explicitly runs `amixer ... sset Speaker 100% unmute` (best-effort,
-  alongside the legacy `PCM`/`Extension Unit` calls) on every react-carplay
-  (re)launch, so the analog output can't come up muted.
+- **ALSA unmute mismatch (minor, known):** the autostart tries to unmute ALSA
+  controls `PCM`/`Extension Unit`/`Capture`/`Mic Capture`/`Mic`, but the
+  C-Media card's actual playback control is **`Speaker`** (controls present:
+  `Speaker`, `Mic`, `Auto Gain Control`). It works today only because `Speaker`
+  defaults to 100%/unmuted. **Nice-to-have:** make the autostart explicitly set
+  `Speaker` so a future boot can't surprise with silence.
 
 ---
 
 ## Outstanding / possible next tasks
 
+- (Nice-to-have) Fix the autostart to unmute the real `Speaker` control on the
+  C-Media adapter (see above).
 - (Optional) Oil-pressure **Arduino**: the owner has a personal Arduino gauge
   (analog oil-pressure sensor → mini LCD). Plan was to power it from a Pi USB
   port (it's standalone, ~100 mA). Marked optional in `SHOPPING_LIST.md`. A
