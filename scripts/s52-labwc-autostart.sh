@@ -40,23 +40,8 @@ fi
 SWAYBG_SETTLE="${S52_SWAYBG_SETTLE_SEC:-0.2}"
 sleep "${SWAYBG_SETTLE}" 2>/dev/null || sleep 1
 
-# Hide the pointer on touchscreen installs; keep it visible at the bench with a mouse.
-# Override: S52_HIDE_CURSOR=1 (always hide) or S52_HIDE_CURSOR=0 (always show).
-hide_cursor="${S52_HIDE_CURSOR:-auto}"
-if [ "$hide_cursor" = "auto" ]; then
-  hide_cursor=0
-  for namefile in /sys/class/input/event*/device/name; do
-    [ -f "$namefile" ] || continue
-    name=$(cat "$namefile" 2>/dev/null || true)
-    case $name in
-      *[Tt]ouch*|*Wave*|*Goodix*|*ft5406*|*"Multi-Touch"*|*Touchscreen*)
-        hide_cursor=1
-        break
-        ;;
-    esac
-  done
-fi
-if [ "$hide_cursor" = "1" ] && command -v unclutter >/dev/null 2>&1; then
+# Hide the pointer when not in use.
+if command -v unclutter >/dev/null 2>&1; then
   unclutter -idle 0.1 -root >/dev/null 2>&1 &
 fi
 
