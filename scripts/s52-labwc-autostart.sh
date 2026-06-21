@@ -40,8 +40,23 @@ fi
 SWAYBG_SETTLE="${S52_SWAYBG_SETTLE_SEC:-0.2}"
 sleep "${SWAYBG_SETTLE}" 2>/dev/null || sleep 1
 
-# Hide the pointer when not in use.
-if command -v unclutter >/dev/null 2>&1; then
+# Hide the pointer on touchscreen installs; keep it visible at the bench with a mouse.
+# Override: S52_HIDE_CURSOR=1 (always hide) or S52_HIDE_CURSOR=0 (always show).
+hide_cursor="${S52_HIDE_CURSOR:-auto}"
+if [ "$hide_cursor" = "auto" ]; then
+  hide_cursor=0
+  for namefile in /sys/class/input/event*/device/name; do
+    [ -f "$namefile" ] || continue
+    name=$(cat "$namefile" 2>/dev/null || true)
+    case $name in
+      *[Tt]ouch*|*Wave*|*Goodix*|*ft5406*|*"Multi-Touch"*|*Touchscreen*)
+        hide_cursor=1
+        break
+        ;;
+    esac
+  done
+fi
+if [ "$hide_cursor" = "1" ] && command -v unclutter >/dev/null 2>&1; then
   unclutter -idle 0.1 -root >/dev/null 2>&1 &
 fi
 
@@ -101,7 +116,11 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
     fi
     while true; do
       if command -v amixer >/dev/null 2>&1; then
-        # Some USB DACs flip "Extension Unit" off when PCM is touched — set PCM first, unmute last.
+        # Force the analog output ON at boot so it can never come up muted/silent.
+        # USB adapters name the output control differently: our C-Media/Unitek
+        # Y-247A uses "Speaker"; many others use "PCM" (+ an "Extension Unit" that
+        # defaults off and mutes the analog out). Set all of them best-effort.
+        amixer -c "${USB_ALSA_CARD}" sset Speaker 100% unmute >/dev/null 2>&1 || true
         amixer -c "${USB_ALSA_CARD}" sset PCM 100% >/dev/null 2>&1 || true
         amixer -c "${USB_ALSA_CARD}" sset 'Extension Unit' on >/dev/null 2>&1 || true
         # 3.5mm mic / line-in on the same USB sound card (best-effort unmute).
@@ -112,6 +131,12 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
         amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' cap >/dev/null 2>&1 || true
         amixer -c "${USB_ALSA_CARD}" sset Mic 90% >/dev/null 2>&1 || true
       fi
+      # Route react-carplay's stdout/stderr through the journal (tag
+      # s52-carplay-app) so its lines are persistent + timestamped (the old
+      # /tmp/react-carplay.log is wiped on reboot). This gives the flight
+      # recorder a durable record of every (re)start of the AppImage — and any
+      # connect/attach line it ever emits. Still tee to /tmp for live tailing.
+      # Falls back to the /tmp log if systemd-cat is unavailable.
       "${CARPLAY_LAUNCHER}" --no-sandbox \
         ${GPU_FLAG} \
         ${VULKAN_FLAG} \
@@ -119,7 +144,9 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
         --ozone-platform=wayland \
         --enable-features=UseOzonePlatform \
         --password-store=basic \
-        >>"${CARPLAY_LOG}" 2>&1 || true
+        --autoplay-policy=no-user-gesture-required \
+        --disable-web-security \
+        2>&1 | { if command -v systemd-cat >/dev/null 2>&1; then tee -a "${CARPLAY_LOG}" | systemd-cat -t s52-carplay-app; else cat >>"${CARPLAY_LOG}"; fi; } || true
       sleep 3
     done
   ) &
