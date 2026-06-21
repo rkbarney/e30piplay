@@ -1,35 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 const DEFAULT_EXIT_PORT = 8765;
-
-// BMW roundel royal blue on the white boot screen; restore the prior amber/
-// orange once the background goes black (clock faces / CarPlay).
-const ACCENT_LIGHT_BG = '#0066B1';
-const ACCENT_DARK_BG  = '#7a5500';
-
-// DisplaySwitcher toggles `clock-active` on <body> to flip the background from
-// white (boot) to black (clock). Mirror that single source of truth so the
-// exit button recolors with the background instead of needing a prop wired
-// through ViewportScale.
-function useDarkBackground() {
-  const read = () =>
-    typeof document !== 'undefined' &&
-    document.body.classList.contains('clock-active');
-  const [dark, setDark] = useState(read);
-
-  useEffect(() => {
-    const update = () => setDark(read());
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => observer.disconnect();
-  }, []);
-
-  return dark;
-}
 
 function getExitUrl() {
   if (typeof window === 'undefined') return `http://127.0.0.1:${DEFAULT_EXIT_PORT}/exit`;
@@ -54,8 +25,6 @@ export default function KioskExit() {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState(null);
   const [errSoft, setErrSoft] = useState(false);
-  const dark = useDarkBackground();
-  const accent = dark ? ACCENT_DARK_BG : ACCENT_LIGHT_BG;
 
   const requestExit = useCallback(async () => {
     setErr(null);
@@ -83,7 +52,7 @@ export default function KioskExit() {
           setErrSoft(false);
           setOpen(true);
         }}
-        style={{ ...styles.hit, color: accent, border: `1px solid ${accent}` }}
+        style={styles.hit}
       >
         exit
       </button>
@@ -117,9 +86,11 @@ const styles = {
     fontFamily: 'inherit',
     fontSize: 12,
     lineHeight: 1,
-    // color + border are applied inline (accent depends on the background);
-    // transparent background reads cleanly on both white boot and black clock.
+    // BMW roundel royal blue on a transparent background so it reads cleanly
+    // on the white boot screen (and stays legible over the black clock too).
+    color: '#0066B1',
     background: 'transparent',
+    border: '1px solid #0066B1',
     borderRadius: 4,
     cursor: 'pointer',
     textTransform: 'lowercase',
