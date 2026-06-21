@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import ScreenFrame from './ScreenFrame';
 
 export default function DigitalClock({ onMinus, onPlus }) {
   const [time, setTime] = useState(() => new Date());
@@ -16,8 +17,13 @@ export default function DigitalClock({ onMinus, onPlus }) {
   const minStr = String(mins).padStart(2, '0');
 
   return (
-    <div style={styles.root}>
-
+    <ScreenFrame
+      variant="amber"
+      buttons={[
+        { label: '−', onClick: onMinus },
+        { label: '+', onClick: onPlus },
+      ]}
+    >
       {/* ── Display module ── */}
       <div style={styles.unit}>
 
@@ -51,13 +57,7 @@ export default function DigitalClock({ onMinus, onPlus }) {
           ))}
         </div>
       </div>
-
-      <div style={styles.navButtons}>
-        <button style={styles.navBtn} onClick={onMinus} type="button">−</button>
-        <button style={styles.navBtn} onClick={onPlus} type="button">+</button>
-      </div>
-
-    </div>
+    </ScreenFrame>
   );
 }
 
@@ -69,16 +69,6 @@ DigitalClock.propTypes = {
 const LED = '#ff5500';
 
 const styles = {
-  root: {
-    width: '320px',
-    height: '480px',
-    background: '#000',
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   // The whole OEM unit — expanded to fill most of the screen width
   unit: {
     width: '296px',
@@ -170,33 +160,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    userSelect: 'none',
-  },
-  navButtons: {
-    position: 'absolute',
-    bottom: '24px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: '300px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  navBtn: {
-    width: '128px',
-    height: '66px',
-    background: '#1a1000',
-    border: '2px solid #7a5500',
-    borderRadius: '12px',
-    color: '#ffb300',
-    fontSize: '44px',
-    lineHeight: 1,
-    cursor: 'pointer',
-    fontFamily: "'Courier New', monospace",
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    WebkitTapHighlightColor: 'transparent',
     userSelect: 'none',
   },
 };
