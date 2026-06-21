@@ -105,22 +105,9 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 ### Mounting
 - Display flush in E30 clock opening (portrait, PCB behind dash panel)
 - Pi 5 mounted behind dash with VHB tape or velcro
-- **Carlinkit dongle:** direct to a Pi USB port (not through the USB3 hub); keep the dongle body
-  **physically away from the Pi and its USB3 ports** — glove-box proximity to the Pi may cause
-  2.4 GHz / USB3 interference (see HANDOFF issue #2). A short USB extension can relocate the
-  dongle while keeping a direct port connection.
 - Power tapped from stereo switched-ignition line via a supercap UPS (replaces
   the old buck — it rides through the crank voltage sag; see HANDOFF issue #1)
 - AUX cable to Kenwood head unit
-
-### Power fix (install pending — parts ordered)
-
-**Goal:** Pi 5 not auto-booting after engine crank — plain buck browns out during crank voltage
-sag; replace with Fockety supercap UPS + TVS diodes on input and output.
-
-**Parts ordered:** Fockety supercap UPS (9–24 V → 5 V/3 A, 4S), Chanzon 1.5KE24A (input TVS),
-P6KE6.8A (output TVS). Full step-by-step install checklist and post-crank test procedure are in
-`HANDOFF.md` issue #1.
 
 ### Power Chain
 ```
