@@ -150,11 +150,6 @@ if os.path.isfile(path):
         cfg = json.load(f)
     old = cfg.get("mediaDelay", "(unset)")
     cfg["mediaDelay"] = delay
-    # No CAN hardware on the E30 install — leaving canbus enabled throws on every
-    # launch (socketcan "Error while creating channel") and adds noise to logs.
-    if cfg.get("canbus"):
-        cfg["canbus"] = False
-        print("config.json canbus: true -> false")
     with open(path, "w") as f:
         json.dump(cfg, f, indent=2)
         f.write("\n")

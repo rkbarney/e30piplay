@@ -81,14 +81,7 @@ html, body {
   line-height: 1.4;
   -webkit-font-smoothing: none;
   image-rendering: pixelated;
-  /* Hide cursor on touch-first installs; show normal pointer at the bench with a mouse. */
   cursor: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  html, body {
-    cursor: auto;
-  }
 }
 
 body.clock-active,
