@@ -27,10 +27,8 @@
 
 | Item | Notes |
 |---|---|
-| ~~25W buck converter (12/24V → 5V/5A)~~ → **replaced by supercap UPS below** | The plain buck is what causes the crank brown-out (it drops out as the 12V sags during cranking). Superseded — keep the buck only as a spare. |
-| ✅ **Fockety Super Capacitor UPS for RPi** (DC 9–24V in → 5V/3A out, 4S) | **CHOSEN + ORDERED. Fixes "Pi won't auto-boot after engine crank" — see HANDOFF issue #1.** On the E30 nothing is *cut* during crank — the Pi browns out on the voltage *sag*. A supercap UPS bridges the sag directly: its caps hold 5V through the dip — no battery, no charge-timing. Replaces the plain buck (remove the buck). Feed from the existing switched-ignition (terminal 15 / purple accessory) tap — no fuse change. **Pre-check the board's 5V output connector** (USB-A / barrel / bare screw terminal) and get a matching cable to the Pi USB-C rated **≥4A** (may need USB-A→USB-C or a USB-C PD-trigger breakout). Chosen over a lithium UPS (Geekworm X1200) to avoid Li-ion heat/longevity risk in a hot cabin — we only bridge a few seconds of crank sag, not a real outage. |
-| ✅ **Chanzon 1.5KE24A TVS diode** (DO-201AD axial, unidirectional, 24V/1500W) | **Input-side** load-dump protection — the E30 has no modern load-dump suppression. **Solderless:** clamp across the Fockety `DC_IN` screw terminals — banded (cathode) lead alongside the 12V wire, other (anode) lead alongside the GND wire. |
-| ✅ **P6KE6.8A TVS diode** (DO-15 axial, unidirectional, 6.8V/600W) | **Output-side** protection. Clamp across the Fockety `DC_OUT` screw terminals — banded (cathode) lead alongside the 5V wire to the Pi, other lead alongside GND. Insurance against a reviewed failure mode where the regulator drifts to ~5.4V after ~15 startups; keeps that off the Pi. **Trim all diode leads short after clamping.** |
+| ✅ **25W buck converter (12/24V in → 5V/5A out, USB-C)** | **Have it.** Dedicated to the Pi — correct spec for a Pi 5 + peripherals. Note: it outputs "dumb" 5V (no USB-PD), so the Pi needs `usb_max_current_enable=1` in `config.txt` to use the full 5A (already set by `setup.sh`). |
+| **UPS HAT for crank ride-through** (Geekworm **X1200**, 2-cell) | **Fixes "Pi won't auto-boot after engine crank" — see HANDOFF issue #1.** Sits between the buck and the Pi: rides through the ~1s ACC cut during cranking so the Pi never reboots, and auto-powers-on if it ever fully loses power. Amazon, ~$40 + **X1200-C1 case** + 2 quality 18650s + a low-profile cooler (NEO lid is gone). Feed power **only into the HAT**, never the Pi's USB-C. **Lithium caveat:** mount in the coolest spot (glove box, *not* behind HVAC) and check yearly. Heat-ideal but EU-only alternative: AQEX **qUPS-P-SC** supercap HAT. Simplest no-battery alternative: a 12V **delay relay** (3–5s) ahead of the buck. |
 | **Add-a-Circuit fuse tap (ATO/ATC) + 5A fuse** | **The no-solder way to get switched 12V.** Plugs into a switched (ACC) slot in the car's fuse box and gives a fused, switched +12V lead — no cutting or soldering the harness. Search: "add-a-circuit fuse tap ATO". |
 | ✅ **Solderless wire connectors** (have a 2-pair set) | Any solid solderless connector works — brand doesn't matter. Use to join the buck's input leads to the fuse-tap lead + a ground ring, and as the **disconnect point** when pulling the unit. For car vibration, prefer locking/lever types; just make sure they grip tight. |
 | **Ring terminal (crimp-on or Posi) for ground** | Ground to a clean chassis bolt. Solderless ring terminals push/screw on. |
@@ -69,18 +67,16 @@
 ## Power Wiring Diagram (solderless)
 
 ```
-Car switched-ignition source (terminal 15 / purple accessory wire — or ACC fuse slot)
-  │   (stays live through crank on the E30; voltage just sags)
-  [Add-a-Circuit fuse tap + 5A fuse]   ←── fused switched 12V, no solder (if tapping fuse box)
+Car fuse box — switched (ACC) slot
+  │
+  [Add-a-Circuit fuse tap + 5A fuse]   ←── fused switched 12V, no solder
   │
   [Posi-Tap / Posi-Lock]   ←── join point + disconnect for unit removal
   │           └──[ground ring → chassis bolt]
   │
-  [Fockety supercap UPS  9–24V in → 5V/3A out, 4S]   ←── bridges the crank sag (NOT a plain buck)
-  │     ├─[TVS 1.5KE24A across DC_IN]    ←── input-side load-dump clamp
-  │     └─[TVS P6KE6.8A across DC_OUT]   ←── output-side regulator-drift clamp
+  [25W buck  12/24V → 5V/5A]
   │
-  [USB-C cable / pigtail, rated ≥4A]
+  [USB-C cable]
   │
   [Raspberry Pi 5 USB-C power port]
         │
@@ -91,16 +87,14 @@ Car switched-ignition source (terminal 15 / purple accessory wire — or ACC fus
                       └─[USB] Arduino oil-pressure gauge   (optional personal add-on)
 ```
 
-- **Switched-ignition only** — never the constant/yellow 12V (that would drain
-  the battery while parked). On a switched feed, parked draw is essentially zero.
-- **One supercap UPS** (replaces the old 25W buck — its caps bridge the crank
-  sag; see HANDOFF issue #1). The Arduino rides a Pi USB port, so its old 15W
-  buck is dropped — fewer parts, no extra tap.
-- **Solderless:** fuse tap / Posi connectors, and both TVS diodes clamp straight
-  into the Fockety `DC_IN`/`DC_OUT` screw terminals (trim leads short). The Posi
-  join is also your unplug point when removing the unit.
-- **Pi needs `usb_max_current_enable=1`** (set in `setup.sh`) since the supercap
-  UPS has no USB-PD handshake; without it the Pi caps USB current and warns.
+- **Switched ACC only** — never the constant/yellow 12V (that would drain the
+  battery while parked). On ACC, parked draw is essentially zero.
+- **One buck** (the Pi's 25W). The Arduino now rides a Pi USB port, so its old
+  15W buck is dropped — fewer parts, no extra tap.
+- **Solderless:** fuse tap at the fuse box + Posi connectors. The Posi join is
+  also your unplug point when removing the unit.
+- **Pi needs `usb_max_current_enable=1`** (set in `setup.sh`) since the 5A buck
+  has no USB-PD handshake; without it the Pi caps USB current and warns.
 
 ### Phone charging (MagSafe / Qi mag charger)
 

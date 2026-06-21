@@ -188,18 +188,11 @@ alongside the legacy `PCM`/`Extension Unit` calls) on every react-carplay
 
 ### 1. Pi 5 does not auto-boot after engine crank (needs PWR button press)
 
-**Root cause (revised 2026-06-19 — E30-specific wiring).** Earlier notes assumed the car
-*cuts* accessory power during crank. BMW's documented E30 wiring shows it does **not**: the
-ignition barrel's green wire (terminal 15) is live in *run and start*, and the purple/violet
-accessory wire is live in *all* key positions including start — nothing is switched off going
-from "run" to "start." So the Pi isn't losing a clean cut; it's **browning out on the cranking
-voltage sag** (the battery dips while the starter pulls hundreds of amps), possibly plus a brief
-make-before-break gap as the key passes through the start detent. The 25 W buck holds just enough
-5 V to keep the PMIC (DA9091) alive but not the SoC, so the board lands in a "was running, now
-stalled" state waiting for the PWR button instead of cold-booting on the restored 5 V.
-
-**Implication: relocating to a different fuse will NOT fix this.** Every switched circuit on the
-E30 sags the same during crank. The fix has to make the 12 → 5 V stage immune to the dip.
+**Root cause (confirmed — retested 2026-06-19):** During engine cranking the ACC line is
+cut and the 12 V sags. The 25 W buck's output capacitors hold just enough 5 V to keep the
+Pi 5's PMIC (DA9091) alive but not enough to keep the SoC running. The Pi dies, but the
+PMIC never sees a clean 5 V → 0 → 5 V edge, so it sits in a "was running, now stalled"
+state waiting for the PWR button instead of cold-booting on the restored 5 V.
 
 **Confirmed NOT a software/firmware fix.** A failed crank happens while the Pi has no
 power, so nothing is running to recover it — no daemon, watchdog, or config can power on a
@@ -217,67 +210,31 @@ and `journalctl --list-boots`. In the failed-crank tests, every completed boot s
 `throttled=0x0` (clean 5 V) and the failed cranks left *no* boot entry at all — i.e. the Pi
 never powered on, which is exactly the PMIC-limbo signature above.
 
-**Fix — supercap UPS + TVS diodes (CHOSEN & ORDERED 2026-06-19).** Replace the plain buck
-*entirely* with a supercapacitor UPS that bridges the crank sag directly (its caps hold 5 V
-through the dip), and clamp transients with a TVS diode on each side. No battery, no button,
-no charge-timing — just continuous 5 V. Feed it from the existing switched-ignition tap (no
-fuse change — every switched circuit sags equally, so relocating wouldn't help):
+**Fix — ride-through UPS HAT (chosen direction).** Keep the Pi powered *through* the crank
+so it never reboots, and let it auto-boot if it ever does fully lose power. Feed it from the
+existing buck so the buck still provides automotive input protection (no TVS needed):
 
 ```
-switched-ignition tap (purple accessory wire / terminal 15)
-   ├─[TVS 1.5KE24A across DC_IN]        ←── input-side load-dump clamp
-   └─► [Fockety supercap UPS  9–24V in → 5V/3A out, 4S] ─► Pi 5 USB-C (≥4A cable)
-          └─[TVS P6KE6.8A across DC_OUT] ←── output-side, clamps regulator drift
+ACC fuse tap → 25W buck (12V→5V) → UPS HAT (5V in) → Pi 5 (powered via HAT)
 ```
 
-**Parts (all ordered):**
-- **Fockety Super Capacitor UPS for RPi** — DC 9–24 V in, DC 5 V/3 A out, 4S model. Replaces
-the 25 W buck (remove the buck entirely — it is replaced, not supplemented).
-- **Chanzon 1.5KE24A** TVS diode (DO-201AD axial, unidirectional, 24 V/1500 W) — input-side
-load-dump protection.
-- **P6KE6.8A** TVS diode (DO-15 axial, unidirectional, 6.8 V/600 W) — output-side; clamps any
-regulator drift toward 5.4 V before it reaches the Pi.
+Power **only** into the HAT — never also into the Pi's USB-C. `usb_max_current_enable=1`
+(already set) keeps the USB budget intact when the Pi is fed over the GPIO/pogo pins.
 
-**Install checklist (solderless — TVS leads clamp into the board's screw terminals):**
-- **Pre-install:** confirm the Fockety 5 V output connector type (USB-A vs barrel vs bare screw
-terminal) and get the matching cable to the Pi's USB-C — may need a USB-A→USB-C cable or a
-separate USB-C PD-trigger breakout depending on the board. **Disconnect the battery negative**
-before working in the dash.
-- **Remove** the old 25 W buck from the circuit entirely.
-- **Power chain:** switched-ignition tap (purple accessory wire) → Fockety `DC_IN`; Fockety
-`DC_OUT` (5 V) → Pi USB-C (4 A-rated cable/connector); Fockety `GND` ties to the same chassis
-ground as the ignition-tap reference.
-- **Input TVS (1.5KE24A, load-dump):** loosen `DC_IN +`, insert the banded (cathode) lead
-alongside the existing 12 V wire, tighten; loosen `DC_IN GND`, insert the other (anode) lead
-alongside the existing GND wire, tighten.
-- **Output TVS (P6KE6.8A, regulator-drift):** loosen `DC_OUT +`, insert the banded (cathode)
-lead alongside the 5 V wire to the Pi; loosen `DC_OUT GND`, insert the other lead alongside the
-GND wire.
-- **Trim/bend all diode leads short** after clamping — no bare lead should be able to touch
-anything else once buttoned up in the dash.
+- **Amazon / "done now" pick:** Geekworm **X1200** (2-cell 18650, 5.1 V/5 A, auto-power-on,
+safe-shutdown) + matching **X1200-C1** case + 2 quality 18650s + a low-profile cooler (the
+NEO heatsink lid is gone). Caveat: **lithium in a hot car degrades/swells over time** —
+mount it in the coolest spot (glove box, *not* behind the HVAC) and inspect yearly. 2 cells
+is plenty; you only need ~1 s of ride-through.
+- **Heat-ideal alternative:** AQEX **qUPS-P-SC** supercap HAT (−40…+65 °C, maintenance-free,
+has explicit "power-returned-during-shutdown" + "avoid restart cycle" logic). EU-only
+(Tindie/Lectronz, ~$55–72), slower to source. 2.5 A continuous — fine for this ~2 A load.
 
-**Post-install testing:**
-- Key to ON/ACC, engine off — confirm the Pi auto-boots (should already work).
-- Crank the engine — confirm the Pi stays powered through the crank and does **not** require a
-manual PWR button press afterward.
-- Repeat the crank test several times (cold start, warm start) for consistency.
-- Check the throttle/volts log (the `s52-boot` marker + `vcgencmd` diagnostics already in place)
-to confirm **clean 5 V across crank events** — not just "Pi survived" but "Pi never saw a
-brownout at all."
-- Over the first few weeks, periodically meter `DC_OUT` — watch for any drift toward 5.4 V+ (a
-review reports exactly that failure mode after ~15 startups). The P6KE6.8A should clamp it, but
-confirm it isn't silently clamping/dissipating on every cycle.
-
-**Why supercap + TVS (rationale):**
-- **Supercap over a (buck-)boost converter:** bridges the sag directly rather than depending on a
-converter's input floor surviving an uncertain dip depth.
-- **Supercap over a lithium UPS** (e.g. the earlier Geekworm X1200 idea): avoids Li-ion
-thermal/longevity risk in a hot, unmanaged car cabin, and we only need ~a few seconds of crank
-bridging — not the extended runtime lithium would add. (The AQEX/lithium-HAT options noted in
-earlier drafts are superseded by this.)
-- **Output-side TVS added specifically** because of a user review reporting the Fockety
-regulator drifting to 5.4 V after ~15 startup cycles — cheap insurance against that exact
-failure reaching the Pi.
+**Simplest no-battery alternative** (if you'd rather the Pi cold-boot once per start): a 12 V
+delay relay (~$8–15) between the ACC tap and the buck, set to 3–5 s, so the Pi gets no power
+until the engine is running and the crank is over. Or tap a 12 V source only live after start
+(alternator charge-light / terminal 15a). Trade-off: ~30 s boot after each start vs. staying
+alive through the crank.
 
 ### 2. CarPlay audio (music/media) drops ~1 s at a time; calls are fine
 
