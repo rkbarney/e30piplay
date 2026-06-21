@@ -90,37 +90,6 @@ journalctl -t s52-drive --no-pager "${SEL[@]}" 2>/dev/null | grep -E 'RECORDER|h
 echo "   ..."
 journalctl -t s52-drive --no-pager "${SEL[@]}" 2>/dev/null | grep -E 'RECORDER|hb ' | tail -3
 
-hr "CARPLAY APP (s52-carplay-app) — react-carplay (re)starts + attach lines"
-CARPLAY_RE='connect|attach|paired|phone|session|handshake|plugged|link established|ready to show'
-capp=$(journalctl -t s52-carplay-app --no-pager "${SEL[@]}" 2>/dev/null)
-if [ -n "$capp" ]; then
-  echo "s52-carplay-app log lines in window: $(printf '%s\n' "$capp" | grep -c .)"
-  echo "-- any connect/attach-ish lines (the AppImage rarely prints these to stdout) --"
-  hits=$(printf '%s\n' "$capp" | grep -iE "$CARPLAY_RE")
-  if [ -n "$hits" ]; then printf '%s\n' "$hits" | tail -20; else echo "   none — react-carplay does not print the phone handshake to stdout (see proxy below)."; fi
-else
-  echo "no s52-carplay-app entries in window (journal routing not deployed yet, or no boot since)."
-fi
-
-hr "PHONE-LINK PROXY (best available without patching the AppImage)"
-# react-carplay logs the actual iPhone CarPlay handshake only to its in-app
-# (renderer) console, never to stdout/journal — so there is no persistent,
-# direct 'phone attached' timestamp. We approximate it with two persistent
-# signals: the dongle enumerating (settled, not stuck in the ~13s reboot loop)
-# and the CarPlay app coming up warm. We report the first of each and the gap.
-dong_epoch=$(journalctl -k --no-pager "${SEL[@]}" -o short-unix 2>/dev/null | grep -E '1-2: new high-speed' | awk 'NR==1{print int($1)}')
-app_epoch=$(journalctl -t s52-carplay-app --no-pager "${SEL[@]}" -o short-unix 2>/dev/null | awk 'NR==1{print int($1)}')
-if [ -n "$dong_epoch" ]; then echo "dongle first enumerated : $(date -d @"$dong_epoch" '+%F %T' 2>/dev/null || echo "@$dong_epoch")"; else echo "dongle first enumerated : (none in window)"; fi
-if [ -n "$app_epoch" ]; then echo "carplay app first up    : $(date -d @"$app_epoch" '+%F %T' 2>/dev/null || echo "@$app_epoch")"; else echo "carplay app first up    : (none — needs autostart journal routing deployed + a boot)"; fi
-if [ -n "$dong_epoch" ] && [ -n "$app_epoch" ]; then
-  echo "dongle-up -> app-up     : $((app_epoch - dong_epoch))s   (proxy for time-to-ready)"
-fi
-echo "NOTE: PROXY only. It times dongle enumeration + CarPlay app warm, NOT the"
-echo "      iPhone CarPlay handshake (react-carplay logs that to its in-app"
-echo "      console, not stdout). A true phone-attach timestamp would require"
-echo "      patching the upstream AppImage. Cross-check the dongle reset cadence"
-echo "      section above: a flat ~13s cadence = reboot loop (never truly settled)."
-
 hr "SUMMARY"
 echo "dongle re-enumerations : ${enum}"
 echo "USB bus errors         : $( [ -n "$usberr" ] && echo "$usberr" | grep -c . || echo 0)"
