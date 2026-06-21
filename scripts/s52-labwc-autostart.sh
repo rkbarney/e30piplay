@@ -101,11 +101,7 @@ if [ -x "${CARPLAY_LAUNCHER}" ]; then
     fi
     while true; do
       if command -v amixer >/dev/null 2>&1; then
-        # Force the analog output ON at boot so it can never come up muted/silent.
-        # USB adapters name the output control differently: our C-Media/Unitek
-        # Y-247A uses "Speaker"; many others use "PCM" (+ an "Extension Unit" that
-        # defaults off and mutes the analog out). Set all of them best-effort.
-        amixer -c "${USB_ALSA_CARD}" sset Speaker 100% unmute >/dev/null 2>&1 || true
+        # Some USB DACs flip "Extension Unit" off when PCM is touched — set PCM first, unmute last.
         amixer -c "${USB_ALSA_CARD}" sset PCM 100% >/dev/null 2>&1 || true
         amixer -c "${USB_ALSA_CARD}" sset 'Extension Unit' on >/dev/null 2>&1 || true
         # 3.5mm mic / line-in on the same USB sound card (best-effort unmute).
