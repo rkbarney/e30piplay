@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
-const SIZE = 320;        // SVG canvas — full design width
+const SIZE = 318;
 const CX   = SIZE / 2;
 const CY   = SIZE / 2;
-const R    = 150;        // half the OEM square face — nearly edge-to-edge
+const R    = 145;
 
 function polarToXY(angleDeg, radius) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
@@ -45,16 +45,16 @@ export default function FactoryClock({ onMinus, onPlus }) {
           x={CX - R} y={CY - R}
           width={R * 2} height={R * 2}
           rx={R * 0.28}
-          fill="#0d0d0d"
-          stroke="#3a3a3a"
-          strokeWidth="3"
+          fill="#111"
+          stroke="#2a2a2a"
+          strokeWidth="1.5"
         />
 
         {/* Cardinal cross */}
         <line x1={CX} y1={CY - R * 0.92} x2={CX} y2={CY + R * 0.92}
-          stroke="#fff" strokeWidth="4" strokeLinecap="round" opacity="0.9" />
+          stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
         <line x1={CX - R * 0.92} y1={CY} x2={CX + R * 0.92} y2={CY}
-          stroke="#fff" strokeWidth="4" strokeLinecap="round" opacity="0.9" />
+          stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
 
         {/* Minor spokes */}
         {minorAngles.map(angle => {
@@ -63,7 +63,7 @@ export default function FactoryClock({ onMinus, onPlus }) {
           return (
             <line key={angle}
               x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-              stroke="#fff" strokeWidth="3.5" strokeLinecap="round" opacity="0.85"
+              stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.75"
             />
           );
         })}
@@ -74,36 +74,36 @@ export default function FactoryClock({ onMinus, onPlus }) {
           y1={polarToXY(hourAngle + 180, R * 0.12).y}
           x2={polarToXY(hourAngle, R * 0.52).x}
           y2={polarToXY(hourAngle, R * 0.52).y}
-          stroke="#fff" strokeWidth="12" strokeLinecap="round"
+          stroke="#fff" strokeWidth="7" strokeLinecap="round"
         />
 
         {/* Minute hand */}
         <line
           x1={polarToXY(minAngle + 180, R * 0.14).x}
           y1={polarToXY(minAngle + 180, R * 0.14).y}
-          x2={polarToXY(minAngle, R * 0.78).x}
-          y2={polarToXY(minAngle, R * 0.78).y}
-          stroke="#fff" strokeWidth="8" strokeLinecap="round"
+          x2={polarToXY(minAngle, R * 0.76).x}
+          y2={polarToXY(minAngle, R * 0.76).y}
+          stroke="#fff" strokeWidth="5" strokeLinecap="round"
         />
 
         {/* Second hand */}
         <line
           x1={polarToXY(secAngle + 180, R * 0.18).x}
           y1={polarToXY(secAngle + 180, R * 0.18).y}
-          x2={polarToXY(secAngle, R * 0.84).x}
-          y2={polarToXY(secAngle, R * 0.84).y}
-          stroke="#ff3333" strokeWidth="3.5" strokeLinecap="round"
+          x2={polarToXY(secAngle, R * 0.82).x}
+          y2={polarToXY(secAngle, R * 0.82).y}
+          stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.85"
         />
 
         {/* Center cap */}
-        <circle cx={CX} cy={CY} r={11} fill="#fff" />
-        <circle cx={CX} cy={CY} r={5}  fill="#0d0d0d" />
+        <circle cx={CX} cy={CY} r={7}   fill="#fff" />
+        <circle cx={CX} cy={CY} r={3.5} fill="#111" />
       </svg>
 
       {/* OEM-style -/+ buttons */}
       <div style={styles.buttons}>
-        <button style={styles.btn} onClick={onMinus} type="button">−</button>
-        <button style={styles.btn} onClick={onPlus} type="button">+</button>
+        <button style={styles.btn} onClick={onMinus}>−</button>
+        <button style={styles.btn} onClick={onPlus}>+</button>
       </div>
     </div>
   );
@@ -121,28 +121,32 @@ const styles = {
     background: '#000',
     position: 'relative',
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '16px',
+    paddingBottom: '80px',
   },
   svg: {
-    filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.10))',
+    filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.08))',
   },
+  // Buttons sit at a fixed position below center, not in flow
   buttons: {
-    width: '300px',
+    position: 'absolute',
+    bottom: '52px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    width: '200px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   btn: {
-    width: '128px',
-    height: '68px',
+    width: '56px',
+    height: '28px',
     background: '#1a1a1a',
-    border: '2px solid #555',
-    borderRadius: '12px',
+    border: '1px solid #444',
+    borderRadius: '5px',
     color: '#fff',
-    fontSize: '44px',
+    fontSize: '18px',
     lineHeight: 1,
     cursor: 'pointer',
     fontFamily: "'Courier New', monospace",
