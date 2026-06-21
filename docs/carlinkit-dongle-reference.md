@@ -159,9 +159,16 @@ page / `cmd=a` drives it manually.
 
 ## Relationship to the Pi (react-carplay)
 
-The Pi's app config `~/.config/react-carplay/config.json` has a **`wifiType`**
-(`"5ghz"` / `"2.4ghz"`) that node-carplay sends to the dongle. **It must match
-the dongle's `wifi5GSwitch`** — a mismatch leaves the screen stuck on
+The Pi's runtime app config lives at `~/.config/react-carplay/config.json`, but
+**the source of truth in this repo is [`scripts/s52-carplay-config.json`](../scripts/s52-carplay-config.json)** —
+the one place to set CarPlay **dpi (font/UI size)**, **resolution**, **band**, and
+**media buffer**. `scripts/s52-apply-carplay-config.sh` (run by `setup.sh`) merges
+it into the runtime config and restarts CarPlay. To change the on-screen font size:
+edit `dpi` there (165 = tiny on the 2.8″, **220 = current**), then on the Pi run
+`bash scripts/s52-apply-carplay-config.sh`.
+
+The **`wifiType`** (`"5ghz"` / `"2.4ghz"`) that node-carplay sends to the dongle
+**must match the dongle's `wifi5GSwitch`** — a mismatch leaves the screen stuck on
 "searching for phone" (the band the app commands ≠ the band the box advertises).
 This dongle defaults to **5 GHz** (`wifi5GSwitch: 1`), so keep `wifiType: "5ghz"`.
 
