@@ -25,11 +25,22 @@ export default function DisplaySwitcher() {
     });
   }, []);
 
+  // After backing out of CarPlay, the next visit shows reconnect instead of auto-launch.
+  const [carplayNeedsReconnect, setCarplayNeedsReconnect] = useState(false);
+
   // + enters CarPlay; if already in CarPlay, go back to clock
   const handlePlus = useCallback((e) => {
     e.stopPropagation();
-    setScreen(prev => prev === 'carplay' ? 'clock' : 'carplay');
+    setScreen(prev => {
+      if (prev === 'carplay') {
+        setCarplayNeedsReconnect(true);
+        return 'clock';
+      }
+      return 'carplay';
+    });
   }, []);
+
+  const handleCarPlayConnected = useCallback(() => setCarplayNeedsReconnect(false), []);
 
   const isClockScreen = screen === 'clock';
 
@@ -44,7 +55,13 @@ export default function DisplaySwitcher() {
   return (
     <div style={{ ...styles.container, background: darkScreen ? '#000' : '#fff' }}>
       {screen === 'logo'    && <LogoIntro  onComplete={handleLogoComplete} />}
-      {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
+      {screen === 'carplay' && (
+        <CarPlayReceiver
+          onBack={handlePlus}
+          reconnect={carplayNeedsReconnect}
+          onConnected={handleCarPlayConnected}
+        />
+      )}
 
       {isClockScreen && clockFace === 'factory' &&
         <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
