@@ -65,9 +65,7 @@ html, body {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  /* White during boot so the unavoidable startup white flash blends in.
-     DisplaySwitcher adds .clock-active to flip to black once the clock mounts. */
-  background: #ffffff;
+  background: var(--bg);
   color: var(--amber);
   font-family: var(--font);
   font-size: 12px;
@@ -75,11 +73,6 @@ html, body {
   -webkit-font-smoothing: none;
   image-rendering: pixelated;
   cursor: none;
-}
-
-body.clock-active,
-html.clock-active {
-  background: var(--bg);
 }
 
 #root {
@@ -96,9 +89,7 @@ html.clock-active {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Transparent so the body background (white during boot, black for the
-     clock via .clock-active) shows through the letterbox area. */
-  background: transparent;
+  background: var(--bg);
 }
 
 .viewport-scale-slot {

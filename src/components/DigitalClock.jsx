@@ -56,7 +56,6 @@ export default function DigitalClock({ onMinus, onPlus }) {
         <button style={styles.navBtn} onClick={onMinus} type="button">−</button>
         <button style={styles.navBtn} onClick={onPlus} type="button">+</button>
       </div>
-
     </div>
   );
 }
@@ -174,22 +173,22 @@ const styles = {
   },
   navButtons: {
     position: 'absolute',
-    bottom: '24px',
+    bottom: '52px',
     left: '50%',
     transform: 'translateX(-50%)',
-    width: '300px',
+    width: '200px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   navBtn: {
-    width: '128px',
-    height: '66px',
+    width: '56px',
+    height: '28px',
     background: '#1a1000',
-    border: '2px solid #7a5500',
-    borderRadius: '12px',
+    border: '1px solid #7a5500',
+    borderRadius: '5px',
     color: '#ffb300',
-    fontSize: '44px',
+    fontSize: '18px',
     lineHeight: 1,
     cursor: 'pointer',
     fontFamily: "'Courier New', monospace",
