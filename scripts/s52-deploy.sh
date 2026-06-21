@@ -18,4 +18,17 @@ if [[ ! -d "$APP_DIR/dist" ]]; then
 fi
 
 rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
-systemctl restart s52-carplay
+
+# Restart the API server AFTER this request returns. carplay-server is the very
+# process handling POST /api/update (this script runs inside that request), so a
+# synchronous `systemctl restart s52-carplay` here tears down the connection
+# before the success response is sent — the UI then shows a false "update failed"
+# ("lost connection during restart?"). Schedule the restart on a short transient
+# timer, OUTSIDE this service's cgroup, so the response + the SPA's self-reload
+# land first. (UI assets are already live from the rsync above; this restart only
+# matters when carplay-server.cjs itself changed.)
+if command -v systemd-run >/dev/null 2>&1; then
+  systemd-run --collect --on-active=4 systemctl restart s52-carplay >/dev/null 2>&1
+else
+  setsid bash -c 'sleep 4; systemctl restart s52-carplay' </dev/null >/dev/null 2>&1 &
+fi
