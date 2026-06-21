@@ -20,9 +20,9 @@ function json(res, status, obj) {
   res.end(body);
 }
 
-function run(cmd, args) {
+function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: 120000 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { timeout: 120000, ...opts }, (err, stdout, stderr) => {
       if (err) {
         err.stderr = stderr;
         err.stdout = stdout;
@@ -38,6 +38,31 @@ async function launchReactCarplay() {
 
 async function returnToKiosk() {
   await run('sudo', ['-n', '/usr/local/bin/s52-carplay-switch.sh', 'return']);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Kill the AppImage; the autostart relaunch loop respawns it. Wait until the
+// Wayland toplevel exists again, then focus it — used when CarPlay lost the
+// phone link and wlrctl focus alone is not enough.
+async function restartReactCarplay() {
+  try {
+    await run('pkill', ['-f', 'squashfs-root/react-carplay']);
+  } catch {
+    /* already stopped */
+  }
+
+  const deadline = Date.now() + 90000;
+  while (Date.now() < deadline) {
+    if (await carplayReady()) {
+      await launchReactCarplay();
+      return;
+    }
+    await sleep(1000);
+  }
+  throw new Error('react-carplay did not become ready within 90s');
 }
 
 const WLRCTL = '/usr/bin/wlrctl';
@@ -81,6 +106,12 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/launch-react-carplay') {
       await launchReactCarplay();
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/relaunch-react-carplay') {
+      await restartReactCarplay();
       json(res, 200, { ok: true });
       return;
     }

@@ -44,6 +44,13 @@
   100%  { transform: rotate(2160deg); filter: blur(0px);   opacity: 1; }
 }
 
+/* Continuous constant-speed spin used while the boot waits for CarPlay
+   readiness past the initial settle. */
+@keyframes spinLoop {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* Logo fades out */
 @keyframes logoFadeOut {
   0%   { opacity: 1; }
@@ -65,14 +72,28 @@ html, body {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: var(--bg);
+  /* White during boot so the unavoidable startup white flash blends in.
+     DisplaySwitcher adds .clock-active to flip to black once the clock mounts. */
+  background: #ffffff;
   color: var(--amber);
   font-family: var(--font);
   font-size: 12px;
   line-height: 1.4;
   -webkit-font-smoothing: none;
   image-rendering: pixelated;
+  /* Hide cursor on touch-first installs; show normal pointer at the bench with a mouse. */
   cursor: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  html, body {
+    cursor: auto;
+  }
+}
+
+body.clock-active,
+html.clock-active {
+  background: var(--bg);
 }
 
 #root {
@@ -89,7 +110,9 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  /* Transparent so the body background (white during boot, black for the
+     clock via .clock-active) shows through the letterbox area. */
+  background: transparent;
 }
 
 .viewport-scale-slot {
