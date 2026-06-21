@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
+import ScreenFrame from './ScreenFrame';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
@@ -57,7 +58,13 @@ export default function SystemScreen({ onMinus, onPlus }) {
   else if (version?.updateAvailable) headline = `Update available (+${version.behind})`;
 
   return (
-    <div style={styles.root}>
+    <ScreenFrame
+      variant="amber"
+      buttons={[
+        { label: '−', onClick: onMinus },
+        { label: '+', onClick: onPlus },
+      ]}
+    >
       <div style={styles.unit}>
         <div style={styles.title}>SYSTEM</div>
         <div style={styles.divider} />
@@ -89,12 +96,7 @@ export default function SystemScreen({ onMinus, onPlus }) {
 
         {message ? <div style={styles.message}>{message}</div> : null}
       </div>
-
-      <div style={styles.navButtons}>
-        <button style={styles.navBtn} onClick={onMinus} type="button">−</button>
-        <button style={styles.navBtn} onClick={onPlus} type="button">+</button>
-      </div>
-    </div>
+    </ScreenFrame>
   );
 }
 
@@ -121,17 +123,6 @@ SystemScreen.propTypes = {
 const AMBER = '#ffb300';
 
 const styles = {
-  root: {
-    width: '320px',
-    height: '480px',
-    background: '#000',
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '16px',
-  },
   unit: {
     width: '300px',
     background: '#0d0d0d',
@@ -222,28 +213,5 @@ const styles = {
     maxHeight: '100px',
     overflowY: 'auto',
     whiteSpace: 'pre-wrap',
-  },
-  navButtons: {
-    width: '300px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  navBtn: {
-    width: '128px',
-    height: '68px',
-    background: '#1a1a1a',
-    border: '2px solid #555',
-    borderRadius: '12px',
-    color: '#fff',
-    fontSize: '44px',
-    lineHeight: 1,
-    cursor: 'pointer',
-    fontFamily: "'Courier New', monospace",
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    WebkitTapHighlightColor: 'transparent',
-    userSelect: 'none',
   },
 };

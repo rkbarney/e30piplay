@@ -2,12 +2,11 @@ import { useState, useCallback, useEffect } from 'react';
 import LogoIntro       from './LogoIntro';
 import FactoryClock    from './FactoryClock';
 import DigitalClock    from './DigitalClock';
-import AnalogClock     from './AnalogClock';
 import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
 
 // Faces cycled by the − button
-const CLOCK_FACES = ['factory', 'digital', 'clock', 'system'];
+const CLOCK_FACES = ['factory', 'digital', 'system'];
 
 export default function DisplaySwitcher() {
   // Boot goes straight to the spinning roundel ('logo'), then to the clock.
@@ -50,8 +49,6 @@ export default function DisplaySwitcher() {
         <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
       {isClockScreen && clockFace === 'digital' &&
         <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {isClockScreen && clockFace === 'clock' &&
-        <AnalogClock  onMinus={handleMinus} onPlus={handlePlus} />}
       {isClockScreen && clockFace === 'system' &&
         <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
     </div>
