@@ -1,9 +1,12 @@
 /**
- * CarPlayReceiver — hands display to upstream Electron react-carplay from the Pi kiosk.
+ * CarPlayReceiver — hands the display to the upstream Electron react-carplay app.
  *
- * First entry from the clock (+) auto-launches via /api/launch-react-carplay.
- * After the user backs out, reconnect mode shows a large RECONNECT button instead
- * of auto-handoff (phone link may need another explicit nudge).
+ * Entering (via + from any clock face) auto-opens CarPlay (foreground). The kiosk
+ * page sits *behind* the Electron window, so when you exit/force-quit CarPlay you
+ * land back here — which is why both controls are ALWAYS tappable:
+ *   • BACK            → drop to the clock
+ *   • RESTART CARPLAY → full kill+respawn of the AppImage (/api/relaunch), the
+ *                       reliable kick when the phone link stalls on "searching".
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -11,152 +14,80 @@ import PropTypes from 'prop-types';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
-export default function CarPlayReceiver({ onBack, reconnect, onConnected }) {
-  const [phase, setPhase] = useState(reconnect ? 'idle' : 'starting');
+export default function CarPlayReceiver({ onBack }) {
+  const [phase, setPhase] = useState('opening'); // opening | idle | restarting
   const [err, setErr] = useState('');
-  const devGuardRef = useRef(false);
+  const openedRef = useRef(false);
 
-  const runLaunch = useCallback(async () => {
+  const call = useCallback(async (path, working) => {
     setErr('');
-    setPhase('starting');
+    setPhase(working);
     try {
-      const res = await fetch(`${API_BASE}/api/launch-react-carplay`, {
+      const res = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
         headers: { Accept: 'application/json' },
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setPhase('idle');
-        setErr(data.detail || data.error || `HTTP ${res.status}`);
-        return;
-      }
-      setPhase('handoff');
-      if (typeof onConnected === 'function') onConnected();
+      if (!res.ok) setErr(data.detail || data.error || `HTTP ${res.status}`);
     } catch (e) {
+      setErr(e.message || 'Request failed — needs the Pi build (nginx + carplay-server).');
+    } finally {
       setPhase('idle');
-      setErr(
-        e.message ||
-          'Request failed — use the Pi build (nginx + carplay-server). For desktop dev set VITE_S52_API_BASE=http://pi-host'
-      );
     }
-  }, [onConnected]);
+  }, []);
 
+  const openCarplay = useCallback(() => call('/api/launch-react-carplay', 'opening'), [call]);
+  const restartCarplay = useCallback(() => call('/api/relaunch-react-carplay', 'restarting'), [call]);
+
+  // Auto-open on first entry (the + handoff). Guard React 18 StrictMode double-run.
   useEffect(() => {
-    if (reconnect) return;
-    // React 18 Strict Mode (dev only) runs effects twice; avoid double POST to the Pi launcher.
-    if (import.meta.env.DEV) {
-      if (devGuardRef.current) return;
-      devGuardRef.current = true;
-    }
-    runLaunch();
-  }, [reconnect, runLaunch]);
+    if (openedRef.current) return;
+    openedRef.current = true;
+    openCarplay();
+  }, [openCarplay]);
 
-  const busy = phase === 'starting' || phase === 'handoff';
+  const restarting = phase === 'restarting';
+  const label =
+    phase === 'opening' ? 'OPENING…' : restarting ? 'RESTARTING…' : 'RESTART\nCARPLAY';
 
   return (
     <div style={styles.root}>
       <div style={styles.statusBar}>
         <div style={styles.statusLeft}>
           {typeof onBack === 'function' && (
-            <button
-              type="button"
-              style={{ ...styles.backBtn, ...(reconnect ? styles.backBtnLarge : null) }}
-              onClick={onBack}
-              disabled={busy}
-            >
+            <button type="button" style={{ ...styles.backBtn, ...styles.backBtnLarge }} onClick={onBack}>
               ← BACK
             </button>
           )}
-          {!reconnect && <span style={styles.brand}>S52 SOLUTIONS</span>}
         </div>
         <span style={styles.mode}>CARPLAY</span>
       </div>
 
       <div style={styles.main}>
-        {reconnect ? (
-          <>
-            <button
-              type="button"
-              style={{
-                ...styles.reconnectBtn,
-                ...(busy ? styles.reconnectBtnBusy : null),
-              }}
-              onClick={runLaunch}
-              disabled={busy}
-            >
-              {phase === 'starting'
-                ? 'CONNECTING…'
-                : phase === 'handoff'
-                  ? 'SWITCHING…'
-                  : 'RECONNECT\nCARPLAY'}
-            </button>
-            {err ? <div style={styles.error}>{err}</div> : null}
-            <div style={styles.hint}>
-              Phone not connecting? Check wireless CarPlay on your phone, then tap reconnect.
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={styles.iconWrap}>
-              <div style={styles.bigIcon} aria-hidden>
-                <svg width="56" height="56" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <rect
-                    x="6.5"
-                    y="2.5"
-                    width="11"
-                    height="19"
-                    rx="2.2"
-                    fill="none"
-                    stroke="#ffb300"
-                    strokeWidth="1.4"
-                  />
-                  <line x1="9" y1="4.5" x2="15" y2="4.5" stroke="#ffb300" strokeWidth="1" opacity="0.35" />
-                  <circle cx="12" cy="18.5" r="1.1" fill="#ffb300" />
-                </svg>
-              </div>
-              <div style={styles.title}>CarPlay</div>
-            </div>
-
-            <div style={styles.col}>
-              <div style={styles.instructions}>
-                <div style={styles.step}>Connecting to CarPlay…</div>
-              </div>
-
-              {err ? (
-                <button type="button" style={styles.primaryBtn} onClick={runLaunch}>
-                  Retry Open CarPlay
-                </button>
-              ) : null}
-
-              {err ? <div style={styles.error}>{err}</div> : null}
-            </div>
-          </>
-        )}
+        <button
+          type="button"
+          style={{ ...styles.reconnectBtn, ...(restarting ? styles.reconnectBtnBusy : null) }}
+          onClick={restartCarplay}
+          disabled={restarting}
+        >
+          {label}
+        </button>
+        {err ? <div style={styles.error}>{err}</div> : null}
+        <div style={styles.hint}>
+          CarPlay should be on screen. Exited, or stuck on “searching for phone”? Tap RESTART CARPLAY.
+        </div>
       </div>
 
       <div style={styles.footer}>
         <span style={styles.footerLeft}>CARLINKIT WIRELESS</span>
-        <span style={styles.footerRight}>
-          {phase === 'starting'
-            ? 'STARTING…'
-            : phase === 'handoff'
-              ? 'SWITCHING…'
-              : err
-                ? 'ERROR'
-                : reconnect
-                  ? 'READY'
-                  : 'READY'}
-        </span>
+        <span style={styles.footerRight}>{restarting ? 'RESTARTING…' : err ? 'ERROR' : 'READY'}</span>
       </div>
-      {!reconnect && !err ? <div style={styles.waitDot} /> : null}
     </div>
   );
 }
 
 CarPlayReceiver.propTypes = {
   onBack: PropTypes.func,
-  reconnect: PropTypes.bool,
-  onConnected: PropTypes.func,
 };
 
 const styles = {
