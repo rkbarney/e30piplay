@@ -404,6 +404,13 @@ else
   fi
 fi
 
+# CarPlay screen tuning (dpi / resolution / band / buffer) from the single
+# source of truth at scripts/s52-carplay-config.json. Runs regardless of the
+# AppImage step so the values are enforced even on offline/skip installs.
+echo "[10b] Applying CarPlay DongleConfig (scripts/s52-carplay-config.json)…"
+bash "$SOURCE_DIR/scripts/s52-apply-carplay-config.sh" || \
+  echo "  NOTE: CarPlay config apply skipped/failed (non-fatal)." >&2
+
 echo ""
 echo "============================================"
 echo "  Setup complete"
