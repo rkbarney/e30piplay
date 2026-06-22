@@ -107,11 +107,6 @@ export default function SystemScreen({ onMinus, onPlus }) {
         <div style={styles.divider} />
 
         <div style={styles.body}>
-          <div style={styles.label}>BUILD</div>
-          <div style={styles.buildLine}>
-            {version ? `${current} @ ${version.sha}` : '—'}{version?.dirty ? ' *' : ''}
-          </div>
-
           <button
             type="button"
             style={styles.branchBtn}
@@ -227,49 +222,35 @@ const styles = {
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
     justifyContent: 'center',
-  },
-  label: {
-    color: '#888',
-    fontSize: '9px',
-    fontFamily: MONO,
-    fontWeight: 'bold',
-    letterSpacing: '0.08em',
-  },
-  buildLine: {
-    color: '#ccc',
-    fontSize: '12px',
-    fontFamily: MONO,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    marginBottom: '4px',
   },
   branchBtn: {
     display: 'flex',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '8px',
     width: '100%',
-    padding: '12px 12px',
+    height: '120px',
     background: '#161208',
-    border: '1px solid #3a2800',
-    borderRadius: '8px',
+    border: '2px solid #3a2800',
+    borderRadius: '10px',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
   },
   branchBtnLabel: {
     color: '#888',
-    fontSize: '10px',
+    fontSize: '11px',
     fontFamily: MONO,
     fontWeight: 'bold',
-    letterSpacing: '0.08em',
+    letterSpacing: '0.1em',
   },
   branchBtnValue: {
     color: AMBER,
-    fontSize: '13px',
+    fontSize: '20px',
+    fontWeight: 'bold',
     fontFamily: MONO,
+    maxWidth: '260px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',

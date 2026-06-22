@@ -1,6 +1,5 @@
 import { useLayoutEffect, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-import KioskExit from './KioskExit.jsx';
 
 const DW = 320;
 const DH = 480;
@@ -58,7 +57,6 @@ export default function ViewportScale({ children }) {
           }}
         >
           {children}
-          <KioskExit />
         </div>
       </div>
     </div>
