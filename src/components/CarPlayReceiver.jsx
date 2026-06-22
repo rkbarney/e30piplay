@@ -1,13 +1,12 @@
 /**
  * CarPlayReceiver — hands the display to the upstream Electron react-carplay app.
  *
- * Uses the shared ScreenFrame, so it lines up with the clock/system screens.
  * Entering (via + from any face) auto-opens CarPlay (foreground). The kiosk page
  * sits *behind* the Electron window, so when you exit/force-quit CarPlay you land
- * back here — which is why both bottom buttons are ALWAYS tappable:
- *   ← BACK   → drop to the clock
- *   RESTART  → full kill+respawn (/api/relaunch), the reliable kick for a stalled
- *              "searching for phone" handshake.
+ * back here. Two clear paths, both always tappable:
+ *   • the big RESTART CARPLAY button (content) — full kill+respawn (/api/relaunch),
+ *     the reliable kick for a stalled "searching for phone" handshake.
+ *   • BACK (full-width button below) — drop to the clock.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -48,34 +47,27 @@ export default function CarPlayReceiver({ onBack }) {
     openCarplay();
   }, [openCarplay]);
 
-  const restarting = phase === 'restarting';
-  const statusLine =
-    phase === 'opening' ? 'Opening CarPlay…'
-      : restarting ? 'Restarting CarPlay…'
-        : err ? err
-          : 'CarPlay is on screen.';
+  const busy = phase === 'opening' || phase === 'restarting';
+  const label =
+    phase === 'opening' ? 'OPENING…' : phase === 'restarting' ? 'RESTARTING…' : 'RESTART\nCARPLAY';
 
   return (
     <ScreenFrame
       variant="amber"
-      buttons={[
-        { key: 'back', label: '← BACK', onClick: onBack },
-        {
-          key: 'restart',
-          label: restarting ? 'RESTARTING' : 'RESTART',
-          onClick: restartCarplay,
-          disabled: restarting,
-        },
-      ]}
+      buttons={[{ key: 'back', label: 'BACK', onClick: onBack }]}
     >
       <div style={styles.title}>CARPLAY</div>
-      <svg width="56" height="56" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-        <rect x="6.5" y="2.5" width="11" height="19" rx="2.2" fill="none" stroke="#ffb300" strokeWidth="1.4" />
-        <line x1="9" y1="4.5" x2="15" y2="4.5" stroke="#ffb300" strokeWidth="1" opacity="0.35" />
-        <circle cx="12" cy="18.5" r="1.1" fill="#ffb300" />
-      </svg>
-      <div style={{ ...styles.status, ...(err ? styles.statusErr : null) }}>{statusLine}</div>
-      <div style={styles.hint}>Exited, or stuck on “searching for phone”? Tap RESTART.</div>
+      <button
+        type="button"
+        style={{ ...styles.bigBtn, ...(busy ? styles.bigBtnBusy : null) }}
+        onClick={restartCarplay}
+        disabled={busy}
+      >
+        {label}
+      </button>
+      {err
+        ? <div style={styles.err}>{err}</div>
+        : <div style={styles.hint}>Exited, or stuck on “searching for phone”? Tap to restart.</div>}
     </ScreenFrame>
   );
 }
@@ -87,21 +79,33 @@ CarPlayReceiver.propTypes = {
 const styles = {
   title: {
     color: '#ffb300',
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: 'bold',
     letterSpacing: '0.25em',
+    fontFamily: "'Courier New', monospace",
   },
-  status: {
-    color: '#cc8800',
-    fontSize: '12px',
-    textAlign: 'center',
-    padding: '0 16px',
-    lineHeight: 1.4,
+  // Clock-sized primary action.
+  bigBtn: {
+    width: '288px',
+    height: '288px',
+    borderRadius: '16px',
+    border: '3px solid #ffdd77',
+    background: 'linear-gradient(180deg, #ffc940 0%, #e6a000 100%)',
+    color: '#1a1200',
+    fontFamily: "'Courier New', monospace",
+    fontSize: '30px',
+    fontWeight: 'bold',
+    letterSpacing: '0.08em',
+    lineHeight: 1.2,
+    whiteSpace: 'pre-line',
+    boxShadow: '0 4px 24px rgba(255, 179, 0, 0.30)',
+    WebkitTapHighlightColor: 'transparent',
+    cursor: 'pointer',
   },
-  statusErr: {
-    color: '#ff6b6b',
-    fontSize: '10px',
-    wordBreak: 'break-word',
+  bigBtnBusy: {
+    opacity: 0.7,
+    cursor: 'wait',
+    fontSize: '24px',
   },
   hint: {
     color: '#665533',
@@ -109,5 +113,14 @@ const styles = {
     textAlign: 'center',
     padding: '0 20px',
     lineHeight: 1.4,
+    fontFamily: "'Courier New', monospace",
+  },
+  err: {
+    color: '#ff6b6b',
+    fontSize: '10px',
+    textAlign: 'center',
+    padding: '0 16px',
+    wordBreak: 'break-word',
+    fontFamily: "'Courier New', monospace",
   },
 };

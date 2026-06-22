@@ -95,17 +95,19 @@ async function getVersion() {
     online = false;
   }
 
-  // Selectable branches (from the refs the fetch above just refreshed — no extra
-  // network), current first, so the UI can offer a branch picker for free.
+  // Selectable branches, most-recently-committed first (from the refs the fetch
+  // above just refreshed — no extra network), so the UI can show "top N recent".
   let branches = [];
   try {
-    const raw = await out(['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']);
+    const raw = await out([
+      'for-each-ref', '--sort=-committerdate',
+      '--format=%(refname:short)', 'refs/remotes/origin',
+    ]);
     branches = raw.split('\n')
       .map(s => s.trim())
       .filter(s => s && s !== 'origin' && s !== 'origin/HEAD')
       .map(s => s.replace(/^origin\//, ''));
   } catch { /* ignore */ }
-  if (!branches.includes(branch)) branches.unshift(branch);
   branches = [...new Set(branches)];
 
   return { sha, branch, dirty, online, behind, updateAvailable: behind > 0, branches };
