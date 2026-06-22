@@ -12,12 +12,25 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/home/${SUDO_USER:-$(id -un)}/e30piplay}"
 WEB_ROOT="${S52_WEB_ROOT:-/var/www/s52-display}"
 
+# Self-update from repo so new privileged steps (e.g. GPS setup) land without
+# re-running full setup.sh. Runs as root via NOPASSWD s52-deploy.sh.
+_repo_deploy="$APP_DIR/scripts/s52-deploy.sh"
+if [[ -f "$_repo_deploy" ]] && ! cmp -s "$0" "$_repo_deploy" 2>/dev/null; then
+  install -m 755 "$_repo_deploy" "$0"
+  exec "$0" "$@"
+fi
+
 if [[ ! -d "$APP_DIR/dist" ]]; then
   echo "No build at $APP_DIR/dist — run npm run build first." >&2
   exit 1
 fi
 
 rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
+
+# GPS provisioning (idempotent; no-op once gpsd + udev are in place).
+if [[ -f "$APP_DIR/scripts/s52-gps-setup.sh" ]]; then
+  APP_DIR="$APP_DIR" SOURCE_DIR="$APP_DIR" bash "$APP_DIR/scripts/s52-gps-setup.sh"
+fi
 
 # Restart the API server AFTER this request returns. carplay-server is the very
 # process handling POST /api/update (this script runs inside that request), so a

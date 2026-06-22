@@ -225,17 +225,26 @@ function parseTpv(raw) {
 const GPS_LINES = 20;
 const GPS_TIMEOUT_MS = 2500;
 
+const GPSPIPE_CANDIDATES = [
+  'gpspipe',
+  path.join(process.env.HOME || '', 'local/gpsd-root/usr/bin/gpspipe'),
+].filter((p, i, a) => p && a.indexOf(p) === i);
+
 async function getGpsFix() {
   let stdout = '';
-  try {
-    ({ stdout } = await run(
-      'gpspipe',
-      ['-w', `-n${GPS_LINES}`],
-      { timeout: GPS_TIMEOUT_MS },
-    ));
-  } catch {
-    return { ok: true, mode: 0 };
+  for (const gpspipe of GPSPIPE_CANDIDATES) {
+    try {
+      ({ stdout } = await run(
+        gpspipe,
+        ['-w', `-n${GPS_LINES}`],
+        { timeout: GPS_TIMEOUT_MS },
+      ));
+      break;
+    } catch {
+      stdout = '';
+    }
   }
+  if (!stdout) return { ok: true, mode: 0 };
   const tpv = parseTpv(stdout);
   if (!tpv) return { ok: true, mode: 0 };
   return {
