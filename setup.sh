@@ -245,7 +245,7 @@ sudo udevadm trigger --subsystem-match=tty 2>/dev/null || true
 sudo tee /etc/default/gpsd > /dev/null <<'GPSD'
 START_DAEMON="true"
 GPSD_OPTIONS="-n"
-DEVICES="/dev/gps0"
+DEVICES="-s 4800 /dev/gps0"
 USBAUTO="false"
 GPSD
 sudo systemctl enable gpsd 2>/dev/null || true
