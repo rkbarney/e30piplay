@@ -28,6 +28,10 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a9", \
 SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
     ATTRS{product}=="CP2102*GPS*", SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"
 
+# Prolific PL2303 USB-UART — ATEN Serial Bridge / GlobalSat BU-353 variants (067b:23a3)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="23a3", \
+    ENV{ID_USB_DRIVER}=="pl2303", SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"
+
 # Prolific PL2303 USB-UART (some cheap clones)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", \
     ENV{ID_USB_DRIVER}=="pl2303", SYMLINK+="gps0", MODE="0660", GROUP="dialout", TAG+="systemd"
