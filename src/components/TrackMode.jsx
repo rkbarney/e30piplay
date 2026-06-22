@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
+import ScreenFrame from './ScreenFrame';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
@@ -225,7 +226,14 @@ export default function TrackMode({ onMinus, onPlus }) {
     'IDLE';
 
   return (
-    <div style={S.root}>
+    <ScreenFrame
+      variant="amber"
+      buttons={[
+        { label: '−', onClick: onMinus },
+        { label: '+', onClick: onPlus },
+      ]}
+    >
+      <div style={S.panel}>
 
       {/* ── Header ── */}
       <div style={S.header}>
@@ -241,7 +249,6 @@ export default function TrackMode({ onMinus, onPlus }) {
         <div style={S.speedUnit}>MPH</div>
       </div>
 
-      {/* ── Divider ── */}
       <div style={S.divider} />
 
       {/* ── Heading / Alt / G-force ── */}
@@ -251,7 +258,6 @@ export default function TrackMode({ onMinus, onPlus }) {
         <InfoRow label="G-FORCE" value={gDisplay} />
       </div>
 
-      {/* ── Divider ── */}
       <div style={S.divider} />
 
       {/* ── 0-60 timer ── */}
@@ -266,7 +272,6 @@ export default function TrackMode({ onMinus, onPlus }) {
         </div>
       </div>
 
-      {/* ── Divider ── */}
       <div style={S.divider} />
 
       {/* ── Drive log ── */}
@@ -285,13 +290,8 @@ export default function TrackMode({ onMinus, onPlus }) {
         </div>
       </div>
 
-      {/* ── Nav buttons ── */}
-      <div style={S.navButtons}>
-        <button style={S.navBtn} onClick={onMinus} type="button">−</button>
-        <button style={S.navBtn} onClick={onPlus}  type="button">+</button>
       </div>
-
-    </div>
+    </ScreenFrame>
   );
 }
 
@@ -316,17 +316,12 @@ const AMBER = '#ffb300';
 const MONO  = "'Courier New', monospace";
 
 const S = {
-  root: {
-    width:      '320px',
-    height:     '480px',
-    background: '#000',
-    position:   'relative',
-    display:    'flex',
+  panel: {
+    width:         '300px',
+    display:       'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    boxSizing:  'border-box',
-    padding:    '8px 12px 0',
-    gap:        '6px',
+    gap:           '4px',
+    paddingTop:    '2px',
   },
 
   // Header
@@ -358,16 +353,15 @@ const S = {
     flexDirection:  'column',
     alignItems:     'center',
     justifyContent: 'center',
-    flex:           1,
-    minHeight:      '120px',
+    padding:        '2px 0',
   },
   speedNum: {
     color:       '#fff',
-    fontSize:    '96px',
+    fontSize:    '72px',
     fontFamily:  MONO,
     fontWeight:  'bold',
     lineHeight:  1,
-    letterSpacing: '-4px',
+    letterSpacing: '-3px',
     textShadow:  '0 0 18px rgba(255,255,255,0.25)',
   },
   speedUnit: {
@@ -438,7 +432,7 @@ const S = {
     flexShrink:  0,
   },
   timerValue: {
-    fontSize:    '22px',
+    fontSize:    '18px',
     fontFamily:  MONO,
     fontWeight:  'bold',
     flex:        1,
@@ -479,34 +473,5 @@ const S = {
     background:  '#2a0000',
     borderColor: '#ef5350',
     color:       '#ef5350',
-  },
-
-  // Nav buttons
-  navButtons: {
-    position:       'absolute',
-    bottom:         '10px',
-    left:           '50%',
-    transform:      'translateX(-50%)',
-    width:          '296px',
-    display:        'flex',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-  },
-  navBtn: {
-    width:       '128px',
-    height:      '48px',
-    background:  '#1a1000',
-    border:      `2px solid #7a5500`,
-    borderRadius: '10px',
-    color:       AMBER,
-    fontSize:    '32px',
-    lineHeight:  1,
-    cursor:      'pointer',
-    fontFamily:  MONO,
-    display:     'flex',
-    alignItems:  'center',
-    justifyContent: 'center',
-    WebkitTapHighlightColor: 'transparent',
-    userSelect:  'none',
   },
 };
