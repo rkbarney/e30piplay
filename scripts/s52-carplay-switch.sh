@@ -5,7 +5,7 @@
 # focus/minimize on the react-carplay toplevel — instant, no service churn.
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/home/${SUDO_USER:-admin}/e30piplay}"
+APP_DIR="${APP_DIR:-/home/${SUDO_USER:-$(id -un)}/e30piplay}"
 
 # Self-update privileged helpers from repo (runs as root via NOPASSWD).
 for _script in s52-carplay-switch.sh s52-deploy.sh; do
