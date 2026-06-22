@@ -1,0 +1,13 @@
+{
+  "_comment": "SINGLE SOURCE OF TRUTH for react-carplay DongleConfig on the Pi. These keys are merged into ~/.config/react-carplay/config.json by s52-apply-carplay-config.sh (run automatically by setup.sh). Edit a value here, then on the Pi run:  bash scripts/s52-apply-carplay-config.sh  — it applies and restarts CarPlay. Keys starting with _ are docs and are ignored.",
+  "_dpi": "CarPlay UI/font scale reported to the phone. Higher = bigger text/icons/buttons. 165 = tiny on the 2.8in panel; 220 = comfortable. Bump toward 240-280 for larger, drop toward 190 for more on screen.",
+  "_resolution": "width/height (px, portrait after rotation) sent to the phone. Lowering (e.g. 360x480) enlarges everything further at a slight sharpness cost; DPI is the cleaner first lever.",
+  "_wifiType": "Phone link band. MUST match the dongle's wifi5GSwitch (1=5ghz). This dongle defaults to 5 GHz. See docs/carlinkit-dongle-reference.md.",
+  "_mediaDelay": "Audio buffer in ms. Higher = fewer dropouts, more latency. 2000 is the tuned value for this build.",
+  "dpi": 220,
+  "width": 480,
+  "height": 640,
+  "fps": 20,
+  "wifiType": "5ghz",
+  "mediaDelay": 2000
+}
