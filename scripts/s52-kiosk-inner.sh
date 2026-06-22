@@ -1,6 +1,6 @@
 #!/bin/bash
 # Chromium kiosk inside cage (Pi OS Lite). Invoked as: cage -- this-script
-# Reads ~/.config/s52-display-layout.conf for kiosk URL / exit port.
+# Reads ~/.config/s52-display-layout.conf for the kiosk URL.
 
 set -euo pipefail
 
@@ -10,7 +10,6 @@ if [[ -f "$CONFIG" ]]; then
   source "$CONFIG"
 fi
 
-: "${S52_KIOSK_EXIT_PORT:=8765}"
 : "${S52_KIOSK_URL:=http://localhost}"
 : "${S52_HTTP_RETRIES:=90}"
 : "${S52_KIOSK_STATIC_ROOT:=${HOME}/e30piplay/dist}"
@@ -24,10 +23,6 @@ if [[ -n "${S52_KIOSK_STATIC_PORT:-}" ]] && [[ -d "${S52_KIOSK_STATIC_ROOT}" ]];
   sleep 0.4
   S52_KIOSK_URL="http://127.0.0.1:${S52_KIOSK_STATIC_PORT}"
 fi
-
-SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
-LAUNCH_DIR="$(cd "$(dirname -- "$SCRIPT_PATH")" && pwd)"
-EXIT_PY="${LAUNCH_DIR}/s52-kiosk-exit-server.py"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
@@ -43,31 +38,16 @@ if [[ ! -d "$XDG_RUNTIME_DIR" ]] || [[ ! -w "$XDG_RUNTIME_DIR" ]]; then
 fi
 
 KIOSK_PID_FILE="${XDG_RUNTIME_DIR}/s52-kiosk-chromium.pid"
-EXIT_SERVER_PID=""
 CHROMIUM_PID=""
 
 cleanup() {
   [[ -n "${STATIC_SRV_PID:-}" ]] && kill "${STATIC_SRV_PID}" 2>/dev/null || true
-  [[ -n "${EXIT_SERVER_PID:-}" ]] && kill "${EXIT_SERVER_PID}" 2>/dev/null || true
   if [[ -n "${CHROMIUM_PID:-}" ]] && kill -0 "${CHROMIUM_PID}" 2>/dev/null; then
     kill "${CHROMIUM_PID}" 2>/dev/null || true
   fi
   rm -f "${KIOSK_PID_FILE}"
 }
 trap cleanup EXIT INT TERM
-
-if [[ -f "${EXIT_PY}" ]]; then
-  S52_KIOSK_PID_FILE="${KIOSK_PID_FILE}" S52_KIOSK_EXIT_PORT="${S52_KIOSK_EXIT_PORT}" \
-    python3 "${EXIT_PY}" &
-  EXIT_SERVER_PID=$!
-fi
-
-KIOSK_URL_WITH_EXIT="${S52_KIOSK_URL}"
-if [[ "${KIOSK_URL_WITH_EXIT}" == *\?* ]]; then
-  KIOSK_URL_WITH_EXIT="${KIOSK_URL_WITH_EXIT}&s52ExitPort=${S52_KIOSK_EXIT_PORT}"
-else
-  KIOSK_URL_WITH_EXIT="${KIOSK_URL_WITH_EXIT}?s52ExitPort=${S52_KIOSK_EXIT_PORT}"
-fi
 
 for ((i = 1; i <= S52_HTTP_RETRIES; i++)); do
   if curl -sf -o /dev/null --connect-timeout 1 --max-time 3 "${S52_KIOSK_URL}/" 2>/dev/null; then
@@ -106,7 +86,7 @@ fi
   --disable-features=Translate \
   --check-for-update-interval=31536000 \
   --default-background-color=000000 \
-  "${KIOSK_URL_WITH_EXIT}" &
+  "${S52_KIOSK_URL}" &
 
 CHROMIUM_PID=$!
 echo "${CHROMIUM_PID}" > "${KIOSK_PID_FILE}"

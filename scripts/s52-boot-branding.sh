@@ -59,7 +59,8 @@ create_plymouth_theme() {
   cat > "${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.plymouth" <<EOF
 [Plymouth Theme]
 Name=S52 Tech
-Description=S52 Solutions / M-TECH OEM boot splash
+Description=Blank black splash — holds the screen during early boot until
+ labwc/Chromium take over and the app's own BMW roundel starts spinning.
 ModuleName=script
 
 [script]
@@ -67,52 +68,14 @@ ImageDir=${PLYMOUTH_THEME_DIR}
 ScriptFile=${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.script
 EOF
 
-  # Plymouth script theme — kept defensively simple. Plymouth Script is a
-  # custom embedded interpreter; complex constructs (helper fns with object
-  # params, per-frame Image.Text spam) can silently fall back to the text
-  # plugin. Stick to: pre-rendered Sprites, primitive math, single refresh
-  # callback. Image.Text(label, r, g, b[, alpha]) — no font arg.
+  # Intentionally blank: no logo, no text, no spinner. This theme exists only
+  # to hold a black framebuffer during kernel/initramfs/systemd boot (hiding
+  # Pi OS branding and console text) — the actual "loading" indicator the
+  # user sees is the React BMW roundel (LogoIntro.jsx), which takes over the
+  # instant labwc/Chromium map (plymouth quit --retain-splash bridges the gap).
   cat > "${PLYMOUTH_THEME_DIR}/${PLYMOUTH_THEME_NAME}.script" <<'EOF'
 Window.SetBackgroundTopColor(0.0, 0.0, 0.0);
 Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
-
-w = Window.GetWidth();
-h = Window.GetHeight();
-
-title_img = Image.Text("S52 SOLUTIONS", 1.0, 0.70, 0.0);
-title_spr = Sprite();
-title_spr.SetImage(title_img);
-title_spr.SetX(w / 2 - title_img.GetWidth() / 2);
-title_spr.SetY(h / 2 - 40);
-
-sub_img = Image.Text("M - T E C H", 0.6, 0.42, 0.0);
-sub_spr = Sprite();
-sub_spr.SetImage(sub_img);
-sub_spr.SetX(w / 2 - sub_img.GetWidth() / 2);
-sub_spr.SetY(h / 2 - 12);
-
-# Pre-render the four spinner frames once so refresh() never allocates.
-dots_a = Image.Text(".",    1.0, 0.70, 0.0);
-dots_b = Image.Text("..",   1.0, 0.70, 0.0);
-dots_c = Image.Text("...",  1.0, 0.70, 0.0);
-dots_d = Image.Text("....", 1.0, 0.70, 0.0);
-
-dots_spr = Sprite();
-phase = 0;
-
-fun refresh () {
-    phase = phase + 1;
-    n = Math.Int(phase / 12);
-    n = n - Math.Int(n / 4) * 4;
-    if (n == 0) { img = dots_a; }
-    if (n == 1) { img = dots_b; }
-    if (n == 2) { img = dots_c; }
-    if (n == 3) { img = dots_d; }
-    dots_spr.SetImage(img);
-    dots_spr.SetX(w / 2 - img.GetWidth() / 2);
-    dots_spr.SetY(h / 2 + 28);
-}
-Plymouth.SetRefreshFunction(refresh);
 EOF
 }
 

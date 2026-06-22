@@ -279,7 +279,6 @@ mkdir -p "/home/$SERVICE_USER/.config"
 mkdir -p "/home/$SERVICE_USER/.config/labwc"
 
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-inner.sh"
-install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-exit-server.py" "/home/$SERVICE_USER/.local/bin/s52-kiosk-exit-server.py"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
 
 # labwc autostart + rc.xml. We always write these — they are appliance config,
