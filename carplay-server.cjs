@@ -87,7 +87,7 @@ async function getVersion() {
   let online = false;
   let behind = 0;
   try {
-    await git(['fetch', '--quiet', 'origin'], { timeout: 20000 });
+    await git(['fetch', '--quiet', '--prune', 'origin'], { timeout: 20000 });
     online = true;
     // Commits upstream has that we don't (0 = up to date).
     behind = Number.parseInt(await out(['rev-list', '--count', 'HEAD..@{u}']), 10) || 0;
@@ -95,7 +95,20 @@ async function getVersion() {
     online = false;
   }
 
-  return { sha, branch, dirty, online, behind, updateAvailable: behind > 0 };
+  // Selectable branches (from the refs the fetch above just refreshed — no extra
+  // network), current first, so the UI can offer a branch picker for free.
+  let branches = [];
+  try {
+    const raw = await out(['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']);
+    branches = raw.split('\n')
+      .map(s => s.trim())
+      .filter(s => s && s !== 'origin' && s !== 'origin/HEAD')
+      .map(s => s.replace(/^origin\//, ''));
+  } catch { /* ignore */ }
+  if (!branches.includes(branch)) branches.unshift(branch);
+  branches = [...new Set(branches)];
+
+  return { sha, branch, dirty, online, behind, updateAvailable: behind > 0, branches };
 }
 
 // Pull + build + deploy. Long-running (npm ci + build), so a generous timeout.
@@ -107,6 +120,62 @@ async function runUpdate() {
     maxBuffer: 10 * 1024 * 1024,
   });
   return { log: `${stdout}${stderr}`.trim() };
+}
+
+// Branch names we'll accept from the UI. Anything else is rejected outright.
+const BRANCH_RE = /^[A-Za-z0-9._/-]+$/;
+
+// Selectable branches from origin (current first). `git fetch` refreshes the
+// remote refs; if offline we still return the current branch.
+async function getBranches() {
+  const git = (args, opts) => run(GIT, ['-C', APP_DIR, ...args], opts);
+  const out = async (args) => (await git(args)).stdout.trim();
+
+  const current = await out(['rev-parse', '--abbrev-ref', 'HEAD']);
+  try {
+    await git(['fetch', '--quiet', '--prune', 'origin'], { timeout: 20000 });
+  } catch { /* offline — fall back to whatever refs we have */ }
+
+  let branches = [];
+  try {
+    const raw = await out(['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']);
+    branches = raw.split('\n')
+      .map(s => s.trim())
+      .filter(s => s && s !== 'origin' && s !== 'origin/HEAD')
+      .map(s => s.replace(/^origin\//, ''));
+  } catch { /* ignore */ }
+
+  if (!branches.includes(current)) branches.unshift(current);
+  return { current, branches: [...new Set(branches)] };
+}
+
+// Switch to a remote branch, then build + deploy. The branch is validated and
+// passed as an argv (execFile = no shell), so it cannot inject.
+async function runSwitch(branch) {
+  if (!BRANCH_RE.test(branch)) throw new Error(`invalid branch name: ${branch}`);
+  const { branches } = await getBranches();
+  if (!branches.includes(branch)) throw new Error(`unknown branch: ${branch}`);
+
+  const script = path.join(APP_DIR, 'scripts', 's52-switch-branch.sh');
+  const { stdout, stderr } = await run('bash', [script, branch], {
+    timeout: 600000,
+    cwd: APP_DIR,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return { log: `${stdout}${stderr}`.trim() };
+}
+
+// Read a small JSON request body (bounded; never rejects).
+function readJson(req, limit = 10000) {
+  return new Promise((resolve) => {
+    let data = '';
+    req.on('data', (c) => {
+      data += c;
+      if (data.length > limit) { req.destroy(); resolve({}); }
+    });
+    req.on('end', () => { try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); } });
+    req.on('error', () => resolve({}));
+  });
 }
 
 const WLRCTL = '/usr/bin/wlrctl';
@@ -155,6 +224,18 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/update') {
       const { log } = await runUpdate();
+      json(res, 200, { ok: true, log });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/branches') {
+      json(res, 200, { ok: true, ...(await getBranches()) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/switch-branch') {
+      const body = await readJson(req);
+      const { log } = await runSwitch(String(body.branch || ''));
       json(res, 200, { ok: true, log });
       return;
     }

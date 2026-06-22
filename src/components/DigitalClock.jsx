@@ -69,15 +69,18 @@ DigitalClock.propTypes = {
 const LED = '#ff5500';
 
 const styles = {
-  // The whole OEM unit — expanded to fill most of the screen width
+  // Shared panel footprint — matches SystemScreen so every screen lines up.
   unit: {
-    width: '296px',
+    width: '300px',
+    height: '320px',
+    boxSizing: 'border-box',
     background: '#0d0d0d',
     border: '1px solid #2a2a2a',
     borderRadius: '8px',
-    padding: '14px 16px 16px',
+    padding: '18px 16px',
     display: 'flex',
     flexDirection: 'column',
+    justifyContent: 'space-evenly',
     gap: '10px',
   },
 
