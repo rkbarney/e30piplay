@@ -5,6 +5,17 @@
 # focus/minimize on the react-carplay toplevel — instant, no service churn.
 set -euo pipefail
 
+APP_DIR="${APP_DIR:-/home/${SUDO_USER:-admin}/e30piplay}"
+
+# Self-update privileged helpers from repo (runs as root via NOPASSWD).
+for _script in s52-carplay-switch.sh s52-deploy.sh; do
+  _repo="$APP_DIR/scripts/$_script"
+  _inst="/usr/local/bin/$_script"
+  if [[ -f "$_repo" ]] && ! cmp -s "$_inst" "$_repo" 2>/dev/null; then
+    install -m 755 "$_repo" "$_inst"
+  fi
+done
+
 # sudoers preserves WAYLAND_DISPLAY/XDG_RUNTIME_DIR; fall back for SSH usage.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
