@@ -24,12 +24,13 @@ const VARIANTS = {
 
 export default function ScreenFrame({ children, variant = 'amber', buttons = [] }) {
   const v = VARIANTS[variant] || VARIANTS.amber;
+  const single = buttons.length === 1; // one button spans the full button-row width
 
   return (
     <div style={styles.root}>
       <div style={styles.content}>{children}</div>
 
-      <div style={styles.buttons}>
+      <div style={{ ...styles.buttons, justifyContent: single ? 'center' : 'space-between' }}>
         {buttons.map((b, i) => {
           const big = String(b.label).length <= 1;
           return (
@@ -40,6 +41,7 @@ export default function ScreenFrame({ children, variant = 'amber', buttons = [] 
               disabled={b.disabled}
               style={{
                 ...styles.btn,
+                width: single ? '100%' : '128px',
                 color: v.color,
                 background: v.bg,
                 border: `2px solid ${v.border}`,
