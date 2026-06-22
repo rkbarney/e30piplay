@@ -51,9 +51,16 @@ function sleep(ms) {
 // Kill the AppImage; the autostart relaunch loop respawns it. Wait until the
 // Wayland toplevel exists again, then focus it — used when CarPlay lost the
 // phone link and wlrctl focus alone is not enough.
+//
+// Match by exact process name (-x), not a path pattern: the AppImage install
+// path varies (squashfs-root mount vs an extracted -arm64-extracted dir
+// depending on install method/version), so a path-based `pkill -f` can
+// silently match nothing — this endpoint would then report {"ok":true}
+// without ever actually restarting the app, with carplayReady() staying
+// true because the same never-killed process is still registered.
 async function restartReactCarplay() {
   try {
-    await run('pkill', ['-f', 'squashfs-root/react-carplay']);
+    await run('pkill', ['-x', 'react-carplay']);
   } catch {
     /* already stopped */
   }
