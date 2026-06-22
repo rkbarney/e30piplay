@@ -1,0 +1,18 @@
+# Standalone gpsd for USB pucks (GlobalSat BU-353 / Prolific 067b:23a3).
+# Debian's socket-activated gpsd.service races with hotplug and often leaves
+# USB receivers silent. Install via scripts/s52-gps-setup.sh.
+[Unit]
+Description=S52 gpsd standalone (USB GPS puck)
+After=dev-gps0.device
+Wants=dev-gps0.device
+
+[Service]
+Type=simple
+User=gpsd
+Group=dialout
+ExecStart=/usr/sbin/gpsd -N -n -s 4800 /dev/gps0
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
