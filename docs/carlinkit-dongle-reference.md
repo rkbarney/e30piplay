@@ -1,95 +1,115 @@
-# Carlinkit / AutoKit dongle — config API & reference
+# Carlinkit dongle — connection fix & reference
 
-Hard-won reference for the wireless-CarPlay dongle used in this build. Captured
-2026-06-20 by querying the dongle's own web config directly. Keep this — the
-vendor docs are wrong about the IP and there is no public API doc.
+Wireless CarPlay path: **iPhone → dongle (BT + 5 GHz WiFi) → Pi USB → react-carplay**.
 
----
-
-## ⭐ THE FIX — "CarPlay won't connect" (read this first)
-
-On 2026-06-20 CarPlay died ("searching for dongle" → "searching for phone"). A
-day was lost reverting code. **The code was never the problem.** The actual
-causes and the fix that worked, in order:
-
-1. **It is almost never the Pi code or the AppImage.** They were byte-identical
-   to a known-good day. Do NOT revert/redeploy code to "fix" a dead dongle.
-2. **Band mismatch.** The Pi's `~/.config/react-carplay/config.json`
-   `wifiType` MUST equal the dongle's `wifi5GSwitch` (5 GHz ↔ `1`). A mismatch
-   sticks the screen on **"searching for phone"**. This dongle wants **5 GHz**,
-   so `wifiType: "5ghz"`. After changing it, restart the app (see below).
-3. **Wedged dongle / stale pairings → factory reset the dongle** (its web UI at
-   `http://192.168.43.1`, or hold its button ~15 s). This clears the scrambled
-   wireless state from the phone-hotspot incident.
-4. **`needActive: 1` after a reset** — re-pair the iPhone with its **internet ON**
-   so the box reactivates against `paplink.cn`.
-5. **Restart react-carplay** (don't reboot — a cold boot re-arms the USB
-   enumeration race):
-   ```bash
-   ssh s52eth 'for p in $(pgrep -x react-carplay); do kill -9 "$p"; done'   # respawns in ~3s
-   ```
-6. **Force CarPlay to the foreground without touching the screen:**
-   ```bash
-   ssh s52eth 'curl -s -X POST http://127.0.0.1/api/launch-react-carplay'    # {"ok":true}
-   ```
-
-Verify it grabbed the dongle: `curl http://127.0.0.1/api/carplay-ready` →
-`{"ready":true}` and `lsusb -t | grep "Vendor Specific"` shows `Driver=usbfs`.
-
-> The phone-hotspot feature is what scrambled the dongle's 5 GHz radio in the
-> first place — it shares the WiFi band with wireless CarPlay. Keep it disabled.
+Vendor docs are wrong about the config IP; this file is the source of truth for this
+build (AutoKit **A15W**, AP **`AutoKit-2041`**, fw **`2025.10.15.1127`**).
 
 ---
 
-## This unit's identity (from `cmd=infos` → `BoxInfo`)
+## Fix — "searching for phone" / CarPlay won't connect
 
-| Field | Value |
-|---|---|
-| Product type | `A15W` (boxType `YA`, logFileSuffix `YA15W`) |
-| Hardware ver | `YMA0-WN16-0003` |
-| Firmware ver | `2025.10.15.1127` (cgiVer `Sep 5 2025 11:05:47`) — **latest as of 2026-06** |
-| AP name (BT + WiFi) | `AutoKit-2041` |
-| MAC / AP BSSID | `REDACTED-MAC` |
-| uuid | `REDACTED-UUID` |
-| Update image | `A15W_Update.img` |
-| Vendor backend | `paplink.cn` (`api.paplink.cn`, `file.paplink.cn`, `cgi.paplink.cn`) |
+Apply **in order**. Do **not** revert Pi code or the AppImage to fix a wedged dongle.
 
-## Reaching the config page
+| Step | Action | Why |
+|------|--------|-----|
+| 1 | **`usb_max_current_enable=1`** in `/boot/firmware/config.txt` | Dongle drops off USB when video ramps. Often lost after `s52-boot-branding.sh revert`. `vcgencmd get_config int \| grep usb_max` → `=1`. **Reboot** after change. |
+| 2 | **`wifiType: "5ghz"`** matches dongle **`wifi5GSwitch: 1`** | Band mismatch → stuck on "searching for phone". Repo: `scripts/s52-carplay-config.json` → `bash scripts/s52-apply-carplay-config.sh` on the Pi. |
+| 3 | **5 GHz channel → 149** in dongle web UI | Default ch 36 congested at the bench. Channel sticks (unlike `mediaDelay`). Dongle on a **charger**, join `AutoKit-2041`, open **`http://192.168.43.1`**. |
+| 4 | **Personal Hotspot OFF** on the phone; no Pi hotspot profiles | Hotspot shares the phone WiFi radio with wireless CarPlay. |
+| 5 | **Restart react-carplay** after changes | `for p in $(pgrep -x react-carplay); do kill -9 "$p"; done` — autostart respawns in ~3 s. Use **RESTART CARPLAY** in the UI (`pkill -x`, not `pkill -f squashfs-root/…`). |
+| 6 | **Foreground CarPlay** (optional) | `curl -s -X POST http://127.0.0.1/api/launch-react-carplay` |
 
-1. **Power the dongle from a dumb USB charger / power bank** (NOT a host). When
-   plugged into the Pi or a Mac it acts as a CarPlay adapter, not a joinable
-   config AP. Powered-only = it broadcasts its AP and serves the web UI.
-2. Join WiFi **`AutoKit-2041`** (may show as `AutoKit_****` / `Carlinkit_****`),
-   password **`12345678`**. "No internet" warning is expected — stay on it.
-3. Config page: **`http://192.168.43.1`** (this unit hands out the
-   `192.168.43.x` subnet — the vendor's documented `192.168.50.2` does NOT work
-   here). Find the real IP from the DHCP lease, don't guess:
-   ```bash
-   ipconfig getifaddr en0                                    # your IP (e.g. 192.168.43.100)
-   ipconfig getpacket en0 | grep -E 'server_identifier|router'  # the dongle = .1
-   ```
+**Verify:**
 
-### Gotchas (each cost real time)
-- **`ping` is useless** — the dongle blocks ICMP but serves HTTP. A failed ping
-  ≠ no config page. Always just open the browser.
-- **Don't ping your own `.100/.101`** — that's the Mac, not the dongle.
-- **From a phone, turn Cellular Data OFF** to reach the page (a no-internet AP
-  makes iOS route the browser over cellular). A laptop is easier.
-- **For activation / pairing, the opposite is true** — leave the phone's
-  internet ON so the dongle can reactivate (see `needActive` below).
-
-## The signed CGI API
-
-All calls: `POST http://192.168.43.1/cgi-bin/server.cgi`, `multipart/form-data`.
-Every request is **signed**:
-
-```
-fields["ts"]  = milliseconds (Date.now())
-joined        = "&".join("k=v" for k in sorted(fields))     # excludes the sign itself
-fields["sign"]= md5( joined + "HweL*@M@JEYUnvPw9G36MVB9X6u@2qxK" )   # hex
+```bash
+ssh s52 'vcgencmd get_config int | grep usb_max; \
+  python3 -c "import json; c=json.load(open(\"/home/admin/.config/react-carplay/config.json\")); print(c.get(\"wifiType\"), c.get(\"mediaDelay\"))"; \
+  curl -s http://127.0.0.1/api/carplay-ready; lsusb -d 1314:1520'
 ```
 
-Working reader (no deps):
+Expect `usb_max_current_enable=1`, `5ghz 2000`, `{"ready":true}`, dongle `1314:1520`.
+
+**Notes:**
+
+- Phone USB into the dongle still uses **wireless** CarPlay (`wifi: 1` in renderer logs).
+- **`needActive: 1`** is normal after factory reset — re-pair with phone **internet ON**.
+- **`Failed to init microphone`** in renderer console is benign.
+- Switching to **2.4 GHz** did not fix this unit; keep **5 GHz + channel 149** first.
+
+---
+
+## Symptoms
+
+| Screen | Meaning | Fix |
+|--------|---------|-----|
+| **searching for dongle** | Pi↔dongle USB session stale | Restart react-carplay (step 5) |
+| **searching for phone** | Dongle up; phone↔dongle link not completing | Steps 2–4; factory reset if wedged |
+| Loops at **`wifi avail`** in renderer | BT ok; 5 GHz session never finishes | Band match + channel 149 + hotspot off |
+
+**Failure signatures (renderer console via CDP — see below):**
+
+- **USB drop:** `dmesg` `usb … USB disconnect` + `No such device (19)` → step 1.
+- **WiFi stall:** `wifi avail, phone type: CarPlay wifi: 1` but no video → steps 2–4.
+
+---
+
+## Dongle web UI
+
+1. Power dongle from a **USB charger** (not Pi/Mac — host mode hides the config AP).
+2. Join WiFi **`AutoKit-2041`**, password **`12345678`**.
+3. Browser: **`http://192.168.43.1`** (not `192.168.50.2` on this unit).
+4. **iPhone:** turn **Cellular Data OFF** so Safari uses the dongle AP.
+
+**Factory reset:** Settings → Reset in web UI, or hold dongle button ~15 s. Clears pairings;
+`needActive` returns to `1` until re-paired with internet.
+
+**Remote dongle power-cycle** (confirm USB port via `dmesg`, e.g. `3-2`):
+
+```bash
+echo 0 | sudo tee /sys/bus/usb/devices/3-2/authorized; sleep 4; echo 1 | sudo tee /sys/bus/usb/devices/3-2/authorized
+```
+
+Then restart react-carplay.
+
+---
+
+## Pi config (react-carplay)
+
+Runtime: `~/.config/react-carplay/config.json`. **Repo source of truth:**
+`scripts/s52-carplay-config.json` (dpi, resolution, `wifiType`, `mediaDelay`).
+Apply on the Pi: `bash scripts/s52-apply-carplay-config.sh`.
+
+| Setting | This build | Notes |
+|---------|------------|-------|
+| `wifiType` | `"5ghz"` | Must match dongle `wifi5GSwitch: 1` |
+| `mediaDelay` | `2000` | Overwritten on connect from AppImage patch; dongle UI alone does not stick |
+| `dpi` | `220` | 165 is tiny on the 2.8″ Waveshare |
+
+---
+
+## Renderer debugging (handshake logs)
+
+`/tmp/react-carplay.log` is mostly Electron noise. Real CarPlay logs are in the **renderer**
+console. Add to `~/.config/labwc/autostart` launcher (after `--no-sandbox`):
+
+`--remote-debugging-port=9223 --remote-debugging-address=127.0.0.1`
+
+Attach via `http://127.0.0.1:9223/json/list` (CDP `Log.enable` + `Runtime.enable`).
+
+**After a drive:** `ssh s52 '~/.local/bin/s52-drive-report.sh'`
+
+---
+
+## Signed CGI API (`cmd=infos`, etc.)
+
+`POST http://192.168.43.1/cgi-bin/server.cgi`, multipart form, MD5-signed:
+
+```
+fields["ts"] = ms since epoch
+joined = "&".join sorted k=v (excludes sign)
+fields["sign"] = md5(joined + "HweL*@M@JEYUnvPw9G36MVB9X6u@2qxK")
+```
 
 ```python
 import hashlib, time, urllib.request, json
@@ -103,95 +123,23 @@ def call(cmd, extra=None):
     b="----b8f3"+hashlib.md5(joined.encode()).hexdigest()[:8]
     body=b"".join(f"--{b}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode() for k,v in f.items())+f"--{b}--\r\n".encode()
     req=urllib.request.Request(BASE,data=body,headers={"Content-Type":f"multipart/form-data; boundary={b}"})
-    return urllib.request.urlopen(req,timeout=8).read().decode("utf-8","replace")
-print(json.loads(call("infos")))
+    return json.loads(urllib.request.urlopen(req,timeout=8).read())
+print(call("infos"))
 ```
 
-### Known commands (`cmd=`)
-| cmd | purpose |
-|---|---|
-| `infos` | full state: BoxInfo, Settings, DevList, WifiChannelList (works freely) |
-| `carInfo` | car/head-unit info — **403 unless a car/HU is actively connected** |
-| `set` | change a setting: add `item=<key>` + `val=<value>` |
-| `get` | read a setting (item/val form) |
-| `syncTime` | push time to the box |
-| `a` | **activation** (params `is`, `code`, `burnType`, `tabId`) — used by `/act` |
-| `appLogFile` / `sdkLogFile` | download logs (blob) |
+**Useful `Settings` keys:** `wifi5GSwitch` (1=5G), `wifiChannel` (5G: 36,40,44,48,149,157,161),
+`mediaDelay`. **`mediaDelay`** is pushed by react-carplay on connect; **`wifiChannel`** is not.
 
-### Settings keys (`Settings` in `infos`; set via `cmd=set item=<key> val=<n>`)
-| key | meaning | notes |
-|---|---|---|
-| `wifi5GSwitch` | **WiFi band: `1`=5 GHz, `0`=2.4 GHz** | UI: "Used to select 2.4G/5G WiFi. If other 5G interference in the car, try 2.4G." |
-| `wifiChannel` | channel id (see WifiChannelList) | `36`=5180MHz(5G); `1-7`=2.4G |
-| `mediaDelay` | audio buffer (ms) | higher = fewer dropouts, more latency; this unit at `2000` |
-| `startDelay` | startup delay | |
-| `autoConn` | auto-connect last phone | `1` on |
-| `autoPlay` | auto-resume media | |
-| `mediaSound` | media sound mode | |
-| `CallQuality` | call audio quality | |
-| `bitRate` | video bit rate | |
-| `backRecording` | background recording | |
-| `naviVolume` / `displaySize` / `ScreenDPI` / `Udisk` | nav vol / display style / dpi / U-disk | |
+Example snapshot: [`carlinkit-dongle-infos.snapshot.json`](carlinkit-dongle-infos.snapshot.json).
 
-WifiChannelList (this firmware): 2.4G ids 1-7 (2412–2442 MHz); 5G ids 36,40,44,48 (5180–5240) and 149,157,161 (5745–5805).
+---
 
-### SPA routes
-`/` HomePage · `/index` · `/settings` · `/devices` (paired list) · `/act`
-(activation) · `/infoPage` · `/helpPage` · `/feedback`. App is Vue
-(`/js/PublicV2.*.js` + `chunk-vendors`), langs under `/lang/`.
+## This unit
 
-## `needActive` — the activation gotcha
-
-`BoxInfo.needActive: 1` means the box is **not activated** (license check vs
-`paplink.cn`). **A factory reset wipes activation**, so after a reset it shows
-`1` again. It reactivates automatically once it can reach the internet — which
-it does through the **connected phone's** internet on the next successful pair
-(so keep the phone's cellular/WiFi internet ON when re-pairing). The `/act`
-page / `cmd=a` drives it manually.
-
-## Factory reset
-
-- **Web UI:** Settings page → "Reset". Clears `DevList` (paired phones) and
-  resets settings; the box reboots (watch `upTime` drop to ~0). Verify via
-  `cmd=infos`: `DevList: []` + low `upTime` = reset took.
-- **Hardware:** hold the dongle's button ~15 s until the LED flashes/reboots.
-- Both also reset `needActive` to `1` (see above).
-
-## Relationship to the Pi (react-carplay)
-
-The Pi's runtime app config lives at `~/.config/react-carplay/config.json`, but
-**the source of truth in this repo is [`scripts/s52-carplay-config.json`](../scripts/s52-carplay-config.json)** —
-the one place to set CarPlay **dpi (font/UI size)**, **resolution**, **band**, and
-**media buffer**. `scripts/s52-apply-carplay-config.sh` (run by `setup.sh`) merges
-it into the runtime config and restarts CarPlay. To change the on-screen font size:
-edit `dpi` there (165 = tiny on the 2.8″, **220 = current**), then on the Pi run
-`bash scripts/s52-apply-carplay-config.sh`.
-
-The **`wifiType`** (`"5ghz"` / `"2.4ghz"`) that node-carplay sends to the dongle
-**must match the dongle's `wifi5GSwitch`** — a mismatch leaves the screen stuck on
-"searching for phone" (the band the app commands ≠ the band the box advertises).
-This dongle defaults to **5 GHz** (`wifi5GSwitch: 1`), so keep `wifiType: "5ghz"`.
-
-Restart the app after a config change (the labwc autostart runs a
-`while true; react-carplay; sleep 3` loop, so it respawns ~3 s after a kill):
-```bash
-for p in $(pgrep -x react-carplay); do kill -9 "$p"; done   # kill by PID, not pkill -f
-```
-(`pkill -f squashfs-root/react-carplay` also matches your own SSH command line
-and kills the session — use the PID form above.)
-
-## Symptom decode
-- **"searching for dongle"** = Pi↔dongle USB/session not establishing (app
-  holding a stale handle after a boot-time re-enumeration; restart the app).
-- **"searching for phone"** = dongle session up, phone↔dongle wireless link not
-  completing (band mismatch, phone not pairing, or `needActive`).
-
-## Live snapshot (2026-06-20, after factory reset + re-pair)
-```json
-{
-  "BoxInfo": {"ver":"2025.10.15.1127","productType":"A15W","mac":"REDACTED-MAC",
-              "wifi":"AutoKit-2041","needActive":1},
-  "Settings": {"wifi5GSwitch":1,"wifiChannel":36,"mediaDelay":2000,"autoConn":1},
-  "DevList": [{"id":"REDACTED-MAC","type":"CarPlay","name":"REDACTED-DEVICE-NAME"}]
-}
-```
+| Field | Value |
+|-------|-------|
+| Product | A15W (`YMA0-WN16-0003`) |
+| Firmware | `2025.10.15.1127` |
+| AP / BT name | `AutoKit-2041` |
+| MAC | `REDACTED-MAC` |
+| USB | `1314:1520` (Magic Communication Tec. Auto Box) |
