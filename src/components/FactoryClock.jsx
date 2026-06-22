@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import ScreenFrame from './ScreenFrame';
 
 const SIZE = 320;        // SVG canvas — full design width
 const CX   = SIZE / 2;
@@ -33,7 +34,13 @@ export default function FactoryClock({ onMinus, onPlus }) {
   const minorAngles = [30, 60, 120, 150, 210, 240, 300, 330];
 
   return (
-    <div style={styles.root}>
+    <ScreenFrame
+      variant="mono"
+      buttons={[
+        { label: '−', onClick: onMinus },
+        { label: '+', onClick: onPlus },
+      ]}
+    >
       <svg
         width={SIZE}
         height={SIZE}
@@ -99,13 +106,7 @@ export default function FactoryClock({ onMinus, onPlus }) {
         <circle cx={CX} cy={CY} r={11} fill="#fff" />
         <circle cx={CX} cy={CY} r={5}  fill="#0d0d0d" />
       </svg>
-
-      {/* OEM-style -/+ buttons */}
-      <div style={styles.buttons}>
-        <button style={styles.btn} onClick={onMinus} type="button">−</button>
-        <button style={styles.btn} onClick={onPlus} type="button">+</button>
-      </div>
-    </div>
+    </ScreenFrame>
   );
 }
 
@@ -115,41 +116,7 @@ FactoryClock.propTypes = {
 };
 
 const styles = {
-  root: {
-    width: '320px',
-    height: '480px',
-    background: '#000',
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '16px',
-  },
   svg: {
     filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.10))',
-  },
-  buttons: {
-    width: '300px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  btn: {
-    width: '128px',
-    height: '68px',
-    background: '#1a1a1a',
-    border: '2px solid #555',
-    borderRadius: '12px',
-    color: '#fff',
-    fontSize: '44px',
-    lineHeight: 1,
-    cursor: 'pointer',
-    fontFamily: "'Courier New', monospace",
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    WebkitTapHighlightColor: 'transparent',
-    userSelect: 'none',
   },
 };

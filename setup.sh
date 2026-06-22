@@ -187,9 +187,8 @@ SERVICE
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
 
 # Privileged deploy step for in-UI GitHub updates (POST /api/update → s52-update.sh
-# → sudo -n s52-deploy.sh). Keeps the only root-requiring actions allow-listed.
+# → sudo -n s52-deploy.sh). Keeps the only root-requiring action allow-listed.
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-deploy.sh" /usr/local/bin/s52-deploy.sh
-sudo install -m 755 "$SOURCE_DIR/scripts/s52-remove-hotspot.sh" /usr/local/bin/s52-remove-hotspot.sh
 
 # Preserve WAYLAND_DISPLAY/XDG_RUNTIME_DIR through sudo so wlrctl can find labwc.
 sudo tee /etc/sudoers.d/s52-carplay-launcher > /dev/null <<SUDOERS
@@ -197,7 +196,6 @@ Defaults!/usr/local/bin/s52-carplay-switch.sh env_keep += "WAYLAND_DISPLAY XDG_R
 Defaults!/usr/local/bin/s52-deploy.sh env_keep += "APP_DIR"
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-carplay-switch.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-deploy.sh
-$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-remove-hotspot.sh
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/s52-carplay-launcher
 sudo visudo -cf /etc/sudoers.d/s52-carplay-launcher
@@ -281,7 +279,6 @@ mkdir -p "/home/$SERVICE_USER/.config"
 mkdir -p "/home/$SERVICE_USER/.config/labwc"
 
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-inner.sh"
-install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-exit-server.py" "/home/$SERVICE_USER/.local/bin/s52-kiosk-exit-server.py"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
 
 # labwc autostart + rc.xml. We always write these — they are appliance config,
@@ -325,7 +322,15 @@ install -m 755 "$SOURCE_DIR/scripts/s52-boot-branding.sh" "/home/$SERVICE_USER/.
 sudo tee /etc/systemd/system/s52-cage-kiosk.service > /dev/null <<SERVICE
 [Unit]
 Description=S52 labwc kiosk (Chromium + pre-loaded react-carplay)
-After=nginx.service plymouth-quit.service
+# plymouth-quit.service only SENDS the quit command and returns immediately —
+# it does not wait for plymouthd to actually exit and release the DRM master.
+# Ordering only against it left a race: labwc could start and try to grab DRM
+# while plymouthd still held it, lose, and sit there silently retrying with
+# Plymouth's last frame frozen on screen — while every service (this one
+# included) still reports "active/running", because labwc never crashes, it
+# just never wins DRM. plymouth-quit-wait.service blocks until plymouth has
+# fully torn down, so labwc never starts before the display is actually free.
+After=nginx.service plymouth-quit-wait.service
 Wants=nginx.service
 
 [Service]
@@ -405,6 +410,13 @@ else
     echo "" >&2
   fi
 fi
+
+# CarPlay screen tuning (dpi / resolution / band / buffer) from the single
+# source of truth at scripts/s52-carplay-config.json. Runs regardless of the
+# AppImage step so the values are enforced even on offline/skip installs.
+echo "[10b] Applying CarPlay DongleConfig (scripts/s52-carplay-config.json)…"
+bash "$SOURCE_DIR/scripts/s52-apply-carplay-config.sh" || \
+  echo "  NOTE: CarPlay config apply skipped/failed (non-fatal)." >&2
 
 echo ""
 echo "============================================"

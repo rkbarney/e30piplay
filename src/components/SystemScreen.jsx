@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
+import ScreenFrame from './ScreenFrame';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
 export default function SystemScreen({ onMinus, onPlus }) {
-  const [version, setVersion] = useState(null);   // { sha, branch, online, behind, updateAvailable, dirty }
+  const [version, setVersion] = useState(null);   // { sha, branch, online, behind, updateAvailable, dirty, branches }
   const [status, setStatus]   = useState('loading'); // loading | idle | checking | installing | error
   const [message, setMessage] = useState('');
+  const [picker, setPicker]   = useState(false);   // branch dialog open?
 
   const check = useCallback(async () => {
     setStatus(prev => (prev === 'loading' ? 'loading' : 'checking'));
@@ -35,11 +37,10 @@ export default function SystemScreen({ onMinus, onPlus }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         setStatus('error');
-        setMessage(data.detail || 'Update failed. Check the working tree over SSH.');
+        setMessage(data.detail || data.error || 'Update failed. Check the working tree over SSH.');
         return;
       }
       setMessage('Update complete — reloading…');
-      // Vite emits hash-named assets, so a reload picks up the new build.
       setTimeout(() => window.location.reload(), 1200);
     } catch {
       setStatus('error');
@@ -47,26 +48,74 @@ export default function SystemScreen({ onMinus, onPlus }) {
     }
   }, []);
 
+  const switchBranch = useCallback(async (branch) => {
+    setPicker(false);
+    setStatus('installing');
+    setMessage(`Switching to ${branch} — pull, build, deploy. This can take a few minutes.`);
+    try {
+      const res = await fetch(`${API_BASE}/api/switch-branch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ branch }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setStatus('error');
+        setMessage(data.detail || data.error || 'Switch failed. Check the working tree over SSH.');
+        return;
+      }
+      setMessage(`Switched to ${branch} — reloading…`);
+      setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      setStatus('error');
+      setMessage('Switch request failed (lost connection during restart?). Try reloading.');
+    }
+  }, []);
+
   const busy = status === 'installing' || status === 'checking' || status === 'loading';
   const online = version?.online;
   const canUpdate = version?.updateAvailable && !version?.dirty && !busy;
+  const current = version?.branch;
+
+  // main always first, then the 3 most-recently-committed branches (server sorts).
+  const recent = version?.branches ?? [];
+  const choices = [
+    ...(recent.includes('main') ? ['main'] : []),
+    ...recent.filter(b => b !== 'main').slice(0, 3),
+  ];
 
   let headline = 'Up to date';
   if (status === 'loading') headline = 'Loading…';
+  else if (status === 'installing') headline = 'Working…';
   else if (version?.dirty) headline = 'Local changes on Pi';
   else if (!online) headline = 'Offline';
   else if (version?.updateAvailable) headline = `Update available (+${version.behind})`;
 
   return (
-    <div style={styles.root}>
+    <ScreenFrame
+      variant="amber"
+      buttons={[
+        { label: '−', onClick: onMinus },
+        { label: '+', onClick: onPlus },
+      ]}
+    >
       <div style={styles.unit}>
-        <div style={styles.title}>SYSTEM</div>
+        <div style={styles.headRow}>
+          <span style={styles.title}>SYSTEM</span>
+          <span style={styles.status}>{headline}</span>
+        </div>
         <div style={styles.divider} />
 
-        <div style={styles.rows}>
-          <Row label="BUILD" value={version ? `${version.branch} @ ${version.sha}` : '—'} />
-          <Row label="GITHUB" value={online ? 'reachable' : 'unreachable'} dim={!online} />
-          <Row label="STATUS" value={headline} />
+        <div style={styles.body}>
+          <button
+            type="button"
+            style={styles.branchBtn}
+            onClick={() => setPicker(true)}
+            disabled={busy || choices.length <= 1}
+          >
+            <span style={styles.branchBtnLabel}>BRANCH</span>
+            <span style={styles.branchBtnValue}>{current || '—'} ▾</span>
+          </button>
         </div>
 
         <div style={styles.actions}>
@@ -84,35 +133,41 @@ export default function SystemScreen({ onMinus, onPlus }) {
             disabled={!canUpdate}
             type="button"
           >
-            {status === 'installing' ? 'UPDATING…' : 'INSTALL'}
+            {status === 'installing' ? 'WORKING…' : 'UPDATE'}
           </button>
         </div>
 
         {message ? <div style={styles.message}>{message}</div> : null}
-      </div>
 
-      <div style={styles.navButtons}>
-        <button style={styles.navBtn} onClick={onMinus} type="button">−</button>
-        <button style={styles.navBtn} onClick={onPlus} type="button">+</button>
+        {picker ? (
+          <div style={styles.dialog}>
+            <div style={styles.dialogTitle}>SWITCH BRANCH</div>
+            <div style={styles.dialogList}>
+              {choices.map(b => {
+                const isCurrent = b === current;
+                return (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => !isCurrent && switchBranch(b)}
+                    disabled={isCurrent}
+                    style={{ ...styles.choice, ...(isCurrent ? styles.choiceCurrent : null) }}
+                  >
+                    <span style={styles.choiceName}>{b}</span>
+                    <span style={styles.choiceTag}>{isCurrent ? '● ON' : '›'}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" style={styles.dialogCancel} onClick={() => setPicker(false)}>
+              CANCEL
+            </button>
+          </div>
+        ) : null}
       </div>
-    </div>
+    </ScreenFrame>
   );
 }
-
-function Row({ label, value, dim }) {
-  return (
-    <div style={styles.row}>
-      <span style={styles.rowLabel}>{label}</span>
-      <span style={{ ...styles.rowValue, ...(dim ? styles.rowValueDim : null) }}>{value}</span>
-    </div>
-  );
-}
-
-Row.propTypes = {
-  label: PropTypes.string.isRequired,
-  value: PropTypes.node,
-  dim: PropTypes.bool,
-};
 
 SystemScreen.propTypes = {
   onMinus: PropTypes.func,
@@ -120,131 +175,183 @@ SystemScreen.propTypes = {
 };
 
 const AMBER = '#ffb300';
+const MONO = "'Courier New', monospace";
 
 const styles = {
-  root: {
-    width: '320px',
-    height: '480px',
-    background: '#000',
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  // Shared panel footprint — matches DigitalClock so every screen lines up.
   unit: {
-    width: '296px',
+    position: 'relative',
+    width: '300px',
+    height: '320px',
+    boxSizing: 'border-box',
     background: '#0d0d0d',
-    border: '1px solid #2a2a2a',
-    borderRadius: '8px',
-    padding: '14px 16px 16px',
+    border: '2px solid #3a2800',
+    borderRadius: '12px',
+    padding: '14px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '10px',
   },
-  title: {
-    color: AMBER,
-    fontSize: '12px',
-    fontFamily: "'Courier New', monospace",
-    letterSpacing: '0.25em',
-    textShadow: `0 0 6px ${AMBER}66`,
-  },
-  divider: {
-    height: '1px',
-    background: '#2a2a2a',
-    margin: '0 -2px',
-  },
-  rows: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  row: {
+  headRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'baseline',
     gap: '8px',
   },
-  rowLabel: {
-    color: '#777',
-    fontSize: '9px',
-    fontFamily: "'Courier New', monospace",
-    letterSpacing: '0.08em',
-    flexShrink: 0,
+  title: {
+    color: AMBER,
+    fontSize: '17px',
+    fontFamily: MONO,
+    fontWeight: 'bold',
+    letterSpacing: '0.2em',
+    textShadow: `0 0 8px ${AMBER}66`,
   },
-  rowValue: {
-    color: '#ddd',
-    fontSize: '11px',
-    fontFamily: "'Courier New', monospace",
+  status: {
+    color: '#aa8844',
+    fontSize: '10px',
+    fontFamily: MONO,
+    letterSpacing: '0.04em',
     textAlign: 'right',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  rowValueDim: {
-    color: '#777',
+  divider: { height: '1px', background: '#3a2800' },
+  body: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+  },
+  branchBtn: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    width: '100%',
+    height: '120px',
+    background: '#161208',
+    border: '2px solid #3a2800',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    WebkitTapHighlightColor: 'transparent',
+  },
+  branchBtnLabel: {
+    color: '#888',
+    fontSize: '11px',
+    fontFamily: MONO,
+    fontWeight: 'bold',
+    letterSpacing: '0.1em',
+  },
+  branchBtnValue: {
+    color: AMBER,
+    fontSize: '20px',
+    fontWeight: 'bold',
+    fontFamily: MONO,
+    maxWidth: '260px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   actions: {
     display: 'flex',
-    gap: '8px',
-    marginTop: '2px',
+    gap: '10px',
   },
   actionBtn: {
     flex: 1,
-    height: '34px',
+    height: '46px',
     background: '#1a1000',
-    border: '1px solid #7a5500',
-    borderRadius: '5px',
+    border: '2px solid #7a5500',
+    borderRadius: '10px',
     color: AMBER,
-    fontSize: '11px',
-    fontFamily: "'Courier New', monospace",
+    fontSize: '14px',
+    fontWeight: 'bold',
+    fontFamily: MONO,
     letterSpacing: '0.08em',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
     userSelect: 'none',
   },
-  actionBtnPrimary: {
-    background: '#2a1c00',
-    borderColor: AMBER,
-  },
-  actionBtnDisabled: {
-    opacity: 0.35,
-    cursor: 'default',
-  },
+  actionBtnPrimary: { background: '#2a1c00', borderColor: AMBER },
+  actionBtnDisabled: { opacity: 0.35, cursor: 'default' },
   message: {
-    color: '#aaa',
-    fontSize: '9px',
-    fontFamily: "'Courier New', monospace",
-    lineHeight: 1.5,
+    color: '#bbb',
+    fontSize: '10px',
+    fontFamily: MONO,
+    lineHeight: 1.4,
     wordBreak: 'break-word',
-    maxHeight: '120px',
+    maxHeight: '54px',
     overflowY: 'auto',
     whiteSpace: 'pre-wrap',
+    flexShrink: 0,
   },
-  navButtons: {
+
+  // Branch picker dialog — overlays the panel.
+  dialog: {
     position: 'absolute',
-    bottom: '52px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: '200px',
+    inset: 0,
+    background: 'rgba(8,6,0,0.97)',
+    borderRadius: '12px',
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  dialogTitle: {
+    color: AMBER,
+    fontSize: '13px',
+    fontFamily: MONO,
+    fontWeight: 'bold',
+    letterSpacing: '0.15em',
+    textAlign: 'center',
+  },
+  dialogList: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  choice: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  navBtn: {
-    width: '56px',
-    height: '28px',
-    background: '#1a1000',
-    border: '1px solid #7a5500',
-    borderRadius: '5px',
-    color: AMBER,
-    fontSize: '18px',
-    lineHeight: 1,
+    gap: '8px',
+    width: '100%',
+    padding: '12px 12px',
+    background: '#161208',
+    border: '1px solid #3a2800',
+    borderRadius: '8px',
+    color: '#eee',
+    fontFamily: MONO,
+    fontSize: '13px',
     cursor: 'pointer',
-    fontFamily: "'Courier New', monospace",
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     WebkitTapHighlightColor: 'transparent',
-    userSelect: 'none',
+    textAlign: 'left',
+  },
+  choiceCurrent: {
+    background: '#2a1c00',
+    borderColor: AMBER,
+    color: AMBER,
+    cursor: 'default',
+  },
+  choiceName: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  choiceTag: { flexShrink: 0, fontSize: '11px', opacity: 0.85 },
+  dialogCancel: {
+    flexShrink: 0,
+    height: '40px',
+    background: '#1a1000',
+    border: '2px solid #7a5500',
+    borderRadius: '10px',
+    color: AMBER,
+    fontSize: '13px',
+    fontWeight: 'bold',
+    fontFamily: MONO,
+    letterSpacing: '0.1em',
+    cursor: 'pointer',
+    WebkitTapHighlightColor: 'transparent',
   },
 };

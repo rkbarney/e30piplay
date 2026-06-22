@@ -25,7 +25,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Component | Model | Status |
 |---|---|---|
-| Display | Waveshare 2.8" HDMI Capacitive Touch, 480×640 | ✅ Installed |
+| Display | OSOYOO 3.5" HDMI Capacitive Touch, 480×320 | 🛒 Order |
 | Computer | Raspberry Pi 5 (8GB) | ✅ Ordered |
 | Pi case | Official Pi 5 case with fan | ✅ Ordered |
 | CarPlay dongle | Carlinkit Wireless CarPlay (USB) | ✅ Ordered |
@@ -49,14 +49,15 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 ## Display Screens
 
-### Boot / Logo Intro
-- **No terminal boot screen.** The old ASCII "S52 Solutions" boot sequence was
-  removed (2026-06-19); boot goes straight to the spinning roundel.
-- BMW logo (1970–1989 era) spins in fast, decelerates, settles, then cross-fades
-  into the clock face (~5.2 s total).
-- Roundel is scaled near edge-to-edge (`objectFit: cover`) on a **white**
-  background — the screen flips to **black** when the clock face mounts.
-- Roundel center is aligned to the clock face center (no jump on transition).
+### Boot Sequence
+- ASCII terminal aesthetic, Courier New font
+- M-TECH logo + S52 Solutions branding
+- Scrolling system init messages
+- Progress bar 0→100%
+
+### Logo Intro
+- BMW logo (1970–1989 era) spins in fast, decelerates, settles
+- Fades into clock face
 
 ### OEM Clock (default)
 - White on black, no numbers
@@ -97,7 +98,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
                                           ┌───────────┼───────────┐
                                        micro HDMI   USB-C      USB-A
                                           │         power        │
-                                       [Display] [Supercap UPS] [USB DAC]
+                                       [Display]  [Buck conv]  [USB DAC]
                                        (E30 dash)  (ACC 12V)     │
                                                               [Kenwood AUX]
 ```
@@ -105,31 +106,15 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 ### Mounting
 - Display flush in E30 clock opening (portrait, PCB behind dash panel)
 - Pi 5 mounted behind dash with VHB tape or velcro
-- **Carlinkit dongle:** direct to a Pi USB port (not through the USB3 hub); keep the dongle body
-  **physically away from the Pi and its USB3 ports** — glove-box proximity to the Pi may cause
-  2.4 GHz / USB3 interference (see HANDOFF issue #2). A short USB extension can relocate the
-  dongle while keeping a direct port connection.
-- Power tapped from stereo switched-ignition line via a supercap UPS (replaces
-  the old buck — it rides through the crank voltage sag; see HANDOFF issue #1)
+- Power tapped from stereo ACC 12V line via buck converter
 - AUX cable to Kenwood head unit
-
-### Power fix (install pending — parts ordered)
-
-**Goal:** Pi 5 not auto-booting after engine crank — plain buck browns out during crank voltage
-sag; replace with Fockety supercap UPS + TVS diodes on input and output.
-
-**Parts ordered:** Fockety supercap UPS (9–24 V → 5 V/3 A, 4S), Chanzon 1.5KE24A (input TVS),
-P6KE6.8A (output TVS). Full step-by-step install checklist and post-crank test procedure are in
-`HANDOFF.md` issue #1.
 
 ### Power Chain
 ```
-Switched-ignition 12V (terminal 15 / purple accessory wire)
-  │   (stays live through crank on the E30 — voltage just sags)
-  └─► [Add-a-Circuit fuse tap / Posi connector]   (solderless)
-        └─► [Fockety supercap UPS  9–24V in → 5V/3A out, 4S]
-              │   (bridges the crank sag; TVS diode clamped on DC_IN and DC_OUT)
-              └─► USB-C (≥4A) → Pi 5
+ACC 12V (stereo wire)
+  └─► [solder splice + XT30 inline connector]
+        └─► [12V→5V 5A buck converter]
+              └─► USB-C → Pi 5
 ```
 
 ---
@@ -143,7 +128,8 @@ e30piplay/
 │   ├── global.css
 │   └── components/
 │       ├── DisplaySwitcher.jsx   # Screen routing, button logic
-│       ├── LogoIntro.jsx         # BMW roundel spin animation (boot)
+│       ├── BootScreen.jsx        # ASCII terminal boot
+│       ├── LogoIntro.jsx         # BMW logo spin animation
 │       ├── FactoryClock.jsx      # OEM white analog clock
 │       ├── DigitalClock.jsx      # OEM red LED digital clock
 │       ├── AnalogClock.jsx       # S52 amber analog clock
@@ -166,7 +152,7 @@ npm run build      # Production build → dist/
 ```
 
 Test at exact screen resolution in Chrome:
-DevTools → Device toolbar → Custom → **480 × 640**
+DevTools → Device toolbar → Custom → **320 × 480**
 
 ---
 

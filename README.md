@@ -7,10 +7,9 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 ## What it does
 
 - Shows a terminal-style boot screen and logo intro
-- Cycles between three clock faces (`Factory`, `Digital`, `S52 Analog`)
-- Uses `-` to cycle clock faces and `+` to open the CarPlay screen (launch Electron from there on the Pi)
+- Cycles between clock faces (`Factory`, `Digital`) and the `System` (OTA) screen
+- Uses `-` to cycle faces and `+` to open the CarPlay screen (launch Electron from there on the Pi)
 - Runs in a fixed 320x480 design viewport with auto scaling
-- Supports kiosk exit via localhost helper when launched with kiosk scripts
 
 ## Stack
 
@@ -172,7 +171,6 @@ Runtime references:
 - labwc rc.xml (windowRule iconifies AppImage on first map): `scripts/s52-labwc-rc.xml` → `~/.config/labwc/rc.xml`
 - Chromium wrapper (foreground kiosk window): `scripts/s52-kiosk-inner.sh` (installed to `~/.local/bin`)
 - CarPlay focus bridge: **`carplay-server.cjs`** + **`scripts/s52-carplay-switch.sh`** → **`/usr/local/bin/s52-carplay-switch.sh`** (`wlrctl toplevel focus|minimize app_id:react-carplay`)
-- Exit helper: `scripts/s52-kiosk-exit-server.py`
 - Optional kiosk URL / ports: `scripts/s52-display-layout.conf.example` → `~/.config/s52-display-layout.conf`
 - Boot branding: `scripts/s52-boot-branding.sh`
 
