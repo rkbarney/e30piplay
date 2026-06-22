@@ -322,7 +322,15 @@ install -m 755 "$SOURCE_DIR/scripts/s52-boot-branding.sh" "/home/$SERVICE_USER/.
 sudo tee /etc/systemd/system/s52-cage-kiosk.service > /dev/null <<SERVICE
 [Unit]
 Description=S52 labwc kiosk (Chromium + pre-loaded react-carplay)
-After=nginx.service plymouth-quit.service
+# plymouth-quit.service only SENDS the quit command and returns immediately —
+# it does not wait for plymouthd to actually exit and release the DRM master.
+# Ordering only against it left a race: labwc could start and try to grab DRM
+# while plymouthd still held it, lose, and sit there silently retrying with
+# Plymouth's last frame frozen on screen — while every service (this one
+# included) still reports "active/running", because labwc never crashes, it
+# just never wins DRM. plymouth-quit-wait.service blocks until plymouth has
+# fully torn down, so labwc never starts before the display is actually free.
+After=nginx.service plymouth-quit-wait.service
 Wants=nginx.service
 
 [Service]
