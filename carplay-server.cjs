@@ -10,6 +10,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const fs   = require('fs');
 const { execFile } = require('child_process');
 
 const PORT = Number.parseInt(process.env.PORT || '3001', 10) || 3001;
@@ -266,6 +267,41 @@ async function carplayReady() {
   }
 }
 
+// ── ROM listing ───────────────────────────────────────────────────────────────
+// Maps file extension → libretro core name.
+const EXT_TO_CORE = {
+  '.nes': 'nes',
+  '.gb':  'gb',
+  '.gbc': 'gbc',
+  '.sfc': 'snes',
+  '.smc': 'snes',
+};
+
+// Returns [{name, url, core}] sorted by name, or [] if the roms/ dir is absent.
+// ROM bytes are served statically by nginx at /roms/<filename>.
+function listRoms() {
+  const dir = path.join(APP_DIR, 'roms');
+  let entries;
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return []; // dir not yet created — treat as empty
+  }
+  const roms = [];
+  for (const file of entries) {
+    const ext  = path.extname(file).toLowerCase();
+    const core = EXT_TO_CORE[ext];
+    if (!core) continue; // skip unknown extensions
+    roms.push({
+      name: path.basename(file, ext).replace(/[_-]+/g, ' ').trim(),
+      url:  `/roms/${encodeURIComponent(file)}`,
+      core,
+    });
+  }
+  roms.sort((a, b) => a.name.localeCompare(b.name));
+  return roms;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -294,6 +330,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/version') {
       json(res, 200, { ok: true, ...(await getVersion()) });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/roms') {
+      json(res, 200, listRoms());
       return;
     }
 

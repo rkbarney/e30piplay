@@ -91,6 +91,20 @@ mkdir -p "$APP_DIR"
 rsync -a --exclude node_modules --exclude .git "$SOURCE_DIR/" "$APP_DIR/"
 cd "$APP_DIR"
 npm install --silent
+
+# Create roms directory (populated by the user over SSH; never committed).
+mkdir -p "$APP_DIR/roms"
+
+# Download EmulatorJS data (nes/gb/gbc/snes cores + loader) to public/emulatorjs/.
+# The Vite build will include it in dist/ automatically.
+echo "[3a/10] Installing EmulatorJS assets…"
+if bash "$APP_DIR/scripts/install-emulatorjs.sh"; then
+  echo "    EmulatorJS assets installed."
+else
+  echo "    WARNING: EmulatorJS install failed (network issue?). Re-run later:" >&2
+  echo "             bash $APP_DIR/scripts/install-emulatorjs.sh" >&2
+fi
+
 npm run build
 
 WEB_ROOT="/var/www/s52-display"
@@ -103,7 +117,9 @@ sudo find "$WEB_ROOT" -type f -exec chmod 644 {} \;
 
 # ── 4. nginx ───────────────────────────────────────────────────────────────────
 echo "[4/10] Configuring nginx…"
-sudo tee /etc/nginx/sites-available/s52 > /dev/null <<'NGINX'
+# Note: heredoc is NOT single-quoted so $APP_DIR expands for the /roms/ alias.
+# Dollar signs inside nginx config variables (e.g. $host) are escaped.
+sudo tee /etc/nginx/sites-available/s52 > /dev/null <<NGINX
 server {
     listen 80 default_server;
     root /var/www/s52-display;
@@ -113,10 +129,17 @@ server {
     location ^~ /api {
         proxy_pass         http://127.0.0.1:3001;
         proxy_http_version 1.1;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Host \$host;
+        proxy_set_header   X-Real-IP \$remote_addr;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+    }
+
+    # ROM files — served directly from the roms/ directory in the app folder.
+    # Copy ROMs to ${APP_DIR}/roms/ over SSH; they are never committed to git.
+    location ^~ /roms/ {
+        alias   ${APP_DIR}/roms/;
+        add_header Cache-Control "no-cache";
     }
 
     # Never cache index.html — Chromium kiosk reuses a persistent profile; a stale
@@ -124,17 +147,17 @@ server {
     # even after rsync deploys new assets.
     location = /index.html {
         add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
-        try_files $uri =404;
+        try_files \$uri =404;
     }
 
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files \$uri \$uri/ /index.html;
     }
 
     location /ws {
         proxy_pass         http://127.0.0.1:3001;
         proxy_http_version 1.1;
-        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Upgrade \$http_upgrade;
         proxy_set_header   Connection "upgrade";
     }
 }

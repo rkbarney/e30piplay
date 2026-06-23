@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!--
+  Standalone EmulatorJS player page.
+  Loaded inside an <iframe> by Games.jsx when a ROM is selected.
+
+  URL params:
+    rom   — absolute path to the ROM file (e.g. /roms/tetris.nes)
+    core  — libretro core name (nes | gb | gbc | snes)
+    name  — human-readable game name (used by EmulatorJS UI)
+
+  EmulatorJS data (loader.js, cores) must be present at /emulatorjs/.
+  Install them with:  bash scripts/install-emulatorjs.sh
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #game { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+<div id="game"></div>
+<script>
+  (function () {
+    var p = new URLSearchParams(location.search);
+    var rom  = p.get('rom');
+    var core = p.get('core');
+    var name = p.get('name') || 'Game';
+
+    if (!rom || !core) {
+      document.body.innerHTML =
+        '<p style="color:#f44;font-family:monospace;padding:20px">Missing rom= or core= param.</p>';
+      return;
+    }
+
+    // EmulatorJS configuration (set before loader.js is parsed).
+    window.EJS_player          = '#game';
+    window.EJS_gameUrl         = rom;
+    window.EJS_gameName        = name;
+    window.EJS_core            = core;
+    window.EJS_pathtodata      = '/emulatorjs/';
+    window.EJS_startOnLoaded   = true;
+    window.EJS_color            = '#ffb300';   // accent colour (EmulatorJS UI chrome)
+    window.EJS_backgroundColor  = '#000000';
+    window.EJS_VirtualGamepad  = false;        // physical USB pad is used
+    window.EJS_Saves           = false;        // no save-state UI for now
+
+    var s = document.createElement('script');
+    s.src = '/emulatorjs/loader.js';
+    s.onerror = function () {
+      document.body.innerHTML =
+        '<p style="color:#f44;font-family:monospace;padding:20px">' +
+        'EmulatorJS not found at /emulatorjs/.<br>' +
+        'Run: bash scripts/install-emulatorjs.sh' +
+        '</p>';
+    };
+    document.body.appendChild(s);
+  }());
+</script>
+</body>
+</html>

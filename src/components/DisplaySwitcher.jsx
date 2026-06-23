@@ -31,11 +31,6 @@ export default function DisplaySwitcher() {
     setScreen(prev => (prev === 'carplay' ? 'clock' : 'carplay'));
   }, []);
 
-  // BACK from the Games screen returns to the previous face (SystemScreen)
-  const handleGamesBack = useCallback(() => {
-    setClockFace('system');
-  }, []);
-
   const isClockScreen = screen === 'clock';
 
   // Boot timeline (spinning roundel) is white so the startup white flash blends
@@ -58,7 +53,7 @@ export default function DisplaySwitcher() {
       {isClockScreen && clockFace === 'system' &&
         <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
       {isClockScreen && clockFace === 'games' &&
-        <Games onBack={handleGamesBack} />}
+        <Games onMinus={handleMinus} onPlus={handlePlus} />}
     </div>
   );
 }
