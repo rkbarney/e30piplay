@@ -1,0 +1,27 @@
+name: CI
+
+# Lint + build on every PR and on pushes to main, so review iterations
+# (including Copilot's) get an automatic pass/fail instead of a manual check.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Matches package.json: eslint with --max-warnings 0
+      - run: npm run lint
+
+      # Vite production build must succeed
+      - run: npm run build
