@@ -4,9 +4,10 @@ import FactoryClock    from './FactoryClock';
 import DigitalClock    from './DigitalClock';
 import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
+import Games           from './Games';
 
-// Faces cycled by the − button
-const CLOCK_FACES = ['factory', 'digital', 'system'];
+// Faces cycled by the − button (Games is reached after SystemScreen)
+const CLOCK_FACES = ['factory', 'digital', 'system', 'games'];
 
 export default function DisplaySwitcher() {
   // Boot goes straight to the spinning roundel ('logo'), then to the clock.
@@ -30,6 +31,11 @@ export default function DisplaySwitcher() {
     setScreen(prev => (prev === 'carplay' ? 'clock' : 'carplay'));
   }, []);
 
+  // BACK from the Games screen returns to the previous face (SystemScreen)
+  const handleGamesBack = useCallback(() => {
+    setClockFace('system');
+  }, []);
+
   const isClockScreen = screen === 'clock';
 
   // Boot timeline (spinning roundel) is white so the startup white flash blends
@@ -51,6 +57,8 @@ export default function DisplaySwitcher() {
         <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
       {isClockScreen && clockFace === 'system' &&
         <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
+      {isClockScreen && clockFace === 'games' &&
+        <Games onBack={handleGamesBack} />}
     </div>
   );
 }
