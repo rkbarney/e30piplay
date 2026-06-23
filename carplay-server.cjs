@@ -268,11 +268,15 @@ async function carplayReady() {
 }
 
 // ── ROM listing ───────────────────────────────────────────────────────────────
-// Maps file extension → libretro core name.
+// Maps file extension → EmulatorJS system name (EJS_core / config.system).
+// NES uses the 'nes' system (fceumm core).
+// Both .gb and .gbc use the 'gb' system — the gambatte core handles both
+// Game Boy and Game Boy Color ROMs under the same system name.
+// SNES uses the 'snes' system (snes9x core).
 const EXT_TO_CORE = {
   '.nes': 'nes',
   '.gb':  'gb',
-  '.gbc': 'gbc',
+  '.gbc': 'gb',
   '.sfc': 'snes',
   '.smc': 'snes',
 };

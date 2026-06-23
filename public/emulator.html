@@ -5,7 +5,10 @@
 
   URL params:
     rom   — absolute path to the ROM file (e.g. /roms/tetris.nes)
-    core  — libretro core name (nes | gb | gbc | snes)
+    core  — EmulatorJS system name (nes | gb | snes)
+              .nes → nes (fceumm core)
+              .gb / .gbc → gb (gambatte core handles both)
+              .sfc / .smc → snes (snes9x core)
     name  — human-readable game name (used by EmulatorJS UI)
 
   EmulatorJS data (loader.js, cores) must be present at /emulatorjs/.
