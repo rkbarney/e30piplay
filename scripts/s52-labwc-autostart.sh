@@ -40,24 +40,72 @@ fi
 SWAYBG_SETTLE="${S52_SWAYBG_SETTLE_SEC:-0.2}"
 sleep "${SWAYBG_SETTLE}" 2>/dev/null || sleep 1
 
-# Hide the pointer on touchscreen installs; keep it visible at the bench with a mouse.
+# Hide the pointer once the car's audio out (USB DAC -> Kenwood AUX) is
+# plugged in — that's the reliable "installed in the car, not sitting on the
+# bench with a debugging mouse" signal. Touchscreen presence is a secondary
+# signal for installs that never use a USB DAC. Polled every few seconds so
+# plugging/unplugging the DAC while the kiosk is running takes effect without
+# a reboot — no separate restart needed when the Pi leaves/returns to the car.
 # Override: S52_HIDE_CURSOR=1 (always hide) or S52_HIDE_CURSOR=0 (always show).
-hide_cursor="${S52_HIDE_CURSOR:-auto}"
-if [ "$hide_cursor" = "auto" ]; then
-  hide_cursor=0
+hide_cursor_mode="${S52_HIDE_CURSOR:-auto}"
+cursor_poll_sec="${S52_CURSOR_POLL_SEC:-5}"
+
+usb_audio_out_present() {
+  if command -v wpctl >/dev/null 2>&1 && wpctl status 2>/dev/null | grep -qi 'usb audio'; then
+    return 0
+  fi
+  if command -v pactl >/dev/null 2>&1 && pactl list sinks short 2>/dev/null \
+      | grep -vi 'hdmi\|vc4hdmi' | grep -qi 'usb\|dac\|cmedia\|c-media\|fosi\|sabrent\|ugreen'; then
+    return 0
+  fi
+  if command -v aplay >/dev/null 2>&1 && aplay -l 2>/dev/null | grep -qi usb; then
+    return 0
+  fi
+  return 1
+}
+
+touchscreen_present() {
   for namefile in /sys/class/input/event*/device/name; do
     [ -f "$namefile" ] || continue
     name=$(cat "$namefile" 2>/dev/null || true)
     case $name in
       *[Tt]ouch*|*Wave*|*Goodix*|*ft5406*|*"Multi-Touch"*|*Touchscreen*)
-        hide_cursor=1
-        break
+        return 0
         ;;
     esac
   done
-fi
-if [ "$hide_cursor" = "1" ] && command -v unclutter >/dev/null 2>&1; then
-  unclutter -idle 0.1 -root >/dev/null 2>&1 &
+  return 1
+}
+
+if command -v unclutter >/dev/null 2>&1; then
+  (
+    unclutter_pid=""
+    while true; do
+      case "$hide_cursor_mode" in
+        1) want_hide=1 ;;
+        0) want_hide=0 ;;
+        *)
+          if usb_audio_out_present || touchscreen_present; then
+            want_hide=1
+          else
+            want_hide=0
+          fi
+          ;;
+      esac
+      if [ "$want_hide" = "1" ]; then
+        if [ -z "$unclutter_pid" ] || ! kill -0 "$unclutter_pid" 2>/dev/null; then
+          unclutter -idle 0.1 -root >/dev/null 2>&1 &
+          unclutter_pid=$!
+        fi
+      else
+        if [ -n "$unclutter_pid" ] && kill -0 "$unclutter_pid" 2>/dev/null; then
+          kill "$unclutter_pid" 2>/dev/null || true
+        fi
+        unclutter_pid=""
+      fi
+      sleep "$cursor_poll_sec"
+    done
+  ) &
 fi
 
 "${HOME}/.local/bin/s52-kiosk-inner.sh" &
