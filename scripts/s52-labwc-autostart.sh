@@ -30,6 +30,13 @@ echo "[$(date)] labwc autostart"
 CARPLAY_LAUNCHER="${HOME}/.local/bin/react-carplay"
 CARPLAY_LOG="${S52_CARPLAY_LOG:-/tmp/react-carplay.log}"
 CARPLAY_START_DELAY="${S52_CARPLAY_START_DELAY:-4}"
+# Which CarPlay receiver to boot. Default react-carplay (the proven path —
+# behaviour is byte-for-behaviour identical unless this is set). Set
+# S52_CARPLAY_RECEIVER=livi to A/B the LIVI receiver (HW GStreamer decode) that
+# scripts/s52-install-livi.sh puts at ~/.local/bin/s52-livi. See issue #23 /
+# docs/livi-receiver-trial.md.
+CARPLAY_RECEIVER="${S52_CARPLAY_RECEIVER:-react-carplay}"
+LIVI_LAUNCHER="${S52_LIVI_LAUNCHER:-${HOME}/.local/bin/s52-livi}"
 
 # Solid-black background layer underneath every client.
 if command -v swaybg >/dev/null 2>&1; then
@@ -115,7 +122,32 @@ fi
 # both don't fight for the GPU. (CarPlay video is decoded inside the dongle
 # and composited via Wayland; software paint is fine for the chrome around
 # it.) Override with S52_CARPLAY_GPU=1 if you want hardware accel.
-if [ -x "${CARPLAY_LAUNCHER}" ]; then
+#
+# LIVI branch: when S52_CARPLAY_RECEIVER=livi we run the LIVI receiver instead.
+# LIVI decodes CarPlay video through its own native GStreamer hardware pipeline,
+# so we deliberately do NOT force software GL here (none of the
+# LIBGL_ALWAYS_SOFTWARE / --disable-gpu / Vulkan-off treatment below) — that is
+# react-carplay-specific. The react-carplay branch is unchanged. (issue #23)
+if [ "${CARPLAY_RECEIVER}" = "livi" ]; then
+  if [ -x "${LIVI_LAUNCHER}" ]; then
+    (
+      sleep "${CARPLAY_START_DELAY}"
+      CARPLAY_AUDIO_ENV="${HOME}/.config/s52-carplay-audio.env"
+      if [ -f "${CARPLAY_AUDIO_ENV}" ]; then
+        echo "[$(date)] sourcing ${CARPLAY_AUDIO_ENV}"
+        # shellcheck disable=SC1090
+        . "${CARPLAY_AUDIO_ENV}"
+      fi
+      while true; do
+        "${LIVI_LAUNCHER}" \
+          2>&1 | { if command -v systemd-cat >/dev/null 2>&1; then tee -a "${CARPLAY_LOG}" | systemd-cat -t s52-carplay-app; else cat >>"${CARPLAY_LOG}"; fi; } || true
+        sleep 3
+      done
+    ) &
+  else
+    echo "[$(date)] S52_CARPLAY_RECEIVER=livi but ${LIVI_LAUNCHER} missing; run scripts/s52-install-livi.sh" >&2
+  fi
+elif [ -x "${CARPLAY_LAUNCHER}" ]; then
   (
     sleep "${CARPLAY_START_DELAY}"
     # Optional: ~/.config/s52-carplay-audio.env (e.g. PULSE_SINK=...) so
