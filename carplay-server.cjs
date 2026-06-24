@@ -59,9 +59,15 @@ function normalizeAppId(raw, fallback) {
   return ALLOWED_APP_IDS.has(raw) ? raw : fallback;
 }
 
+function normalizeReceiver(raw) {
+  return raw === 'livi' ? 'livi' : 'react-carplay';
+}
+
 function getReceiverConfig() {
   const file = readReceiverEnvFile();
-  const receiver = process.env.S52_CARPLAY_RECEIVER || file.S52_CARPLAY_RECEIVER || 'react-carplay';
+  const receiver = normalizeReceiver(
+    process.env.S52_CARPLAY_RECEIVER || file.S52_CARPLAY_RECEIVER || 'react-carplay',
+  );
   if (receiver === 'livi') {
     return {
       receiver: 'livi',
@@ -106,7 +112,6 @@ function sleep(ms) {
 // true because the same never-killed process is still registered.
 async function restartCarplayReceiver() {
   const { processName } = getReceiverConfig();
-  const wasReady = await carplayReady();
   try {
     await run('pkill', ['-x', processName]);
   } catch {
@@ -115,7 +120,7 @@ async function restartCarplayReceiver() {
 
   const deadline = Date.now() + 90000;
 
-  if (wasReady) {
+  if (await carplayReady()) {
     const goneDeadline = Date.now() + 30000;
     while (Date.now() < goneDeadline) {
       if (!(await carplayReady())) break;

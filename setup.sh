@@ -185,6 +185,7 @@ WantedBy=multi-user.target
 SERVICE
 
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
+sudo install -m 755 "$SOURCE_DIR/scripts/s52-enable-livi-receiver-root.sh" /usr/local/bin/s52-enable-livi-receiver-root.sh
 
 # Privileged deploy step for in-UI GitHub updates (POST /api/update → s52-update.sh
 # → sudo -n s52-deploy.sh). Keeps the only root-requiring action allow-listed.
@@ -195,6 +196,7 @@ sudo tee /etc/sudoers.d/s52-carplay-launcher > /dev/null <<SUDOERS
 Defaults!/usr/local/bin/s52-carplay-switch.sh env_keep += "WAYLAND_DISPLAY XDG_RUNTIME_DIR"
 Defaults!/usr/local/bin/s52-deploy.sh env_keep += "APP_DIR"
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-carplay-switch.sh
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-enable-livi-receiver-root.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-deploy.sh
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/s52-carplay-launcher
