@@ -54,6 +54,6 @@ if [ ! -x /usr/local/bin/s52-enable-livi-receiver-root.sh ]; then
   echo "!! ${REPO}/scripts/s52-enable-livi-receiver-root.sh not installed — re-run setup.sh on the Pi" >&2
   exit 1
 fi
-sudo -n /usr/local/bin/s52-enable-livi-receiver-root.sh "${RECEIVER}" "${REPO}"
+sudo -n /usr/local/bin/s52-enable-livi-receiver-root.sh "${RECEIVER}"
 
 echo "=== done — reboot-safe. Receiver=${RECEIVER}, app_id=${APP_ID} ==="
