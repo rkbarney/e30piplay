@@ -23,9 +23,9 @@ APP_DIR="${APP_DIR:-$HOME/e30piplay}"
 S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
-# Opt-in SSH hardening (key-only auth, no root login, no mDNS advertisement of
-# the host). Default 0 so a fresh install with only a password set is not locked
-# out. Set S52_SSH_HARDEN=1 ONLY after you have confirmed key-based SSH works.
+# Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
+# install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
+# after you have confirmed key-based SSH works.
 S52_SSH_HARDEN="${S52_SSH_HARDEN:-0}"
 
 echo ""
@@ -78,6 +78,15 @@ sudo systemctl start ssh
 if [[ "$S52_SSH_HARDEN" == "1" ]]; then
   if [[ -s "$HOME/.ssh/authorized_keys" ]]; then
     echo "    SSH hardening: key-only auth, no root login (S52_SSH_HARDEN=1)…"
+    # The drop-in dir is not guaranteed to exist on every target; create it (and
+    # make sure sshd actually Includes it) before writing, or `tee` would abort
+    # setup under `set -e`.
+    sudo mkdir -p /etc/ssh/sshd_config.d
+    # Distro stock configs Include this dir, but if a minimal sshd_config doesn't,
+    # the drop-in would be silently ignored — prepend the Include so it wins.
+    if ! sudo grep -rqsE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config; then
+      sudo sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+    fi
     sudo tee /etc/ssh/sshd_config.d/10-s52-harden.conf > /dev/null <<'SSHD'
 # Managed by e30piplay setup.sh (S52_SSH_HARDEN=1)
 PasswordAuthentication no
