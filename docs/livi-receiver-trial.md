@@ -45,15 +45,15 @@ ssh s52 'cat /etc/os-release | grep -E "VERSION_CODENAME|PRETTY_NAME"'
 ssh s52 'bash ~/e30piplay/scripts/s52-install-livi.sh'
 
 # 2. Smoke test by hand (kiosk still on react-carplay) — does it find the dongle?
-ssh s52 'XDG_RUNTIME_DIR=/run/user/1000 ~/.local/bin/s52-livi'   # Ctrl-C to stop
+#    labwc must be running (s52-cage-kiosk active). LIVI needs WAYLAND_DISPLAY or
+#    its nested compositor tries DRM and fails with "Cannot create session".
+ssh s52 'XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 ~/.local/bin/s52-livi'   # Ctrl-C to stop
 
-# 3. Make LIVI the booted receiver. Put the flag where the kiosk session reads
-#    env (e.g. the s52-cage-kiosk unit's Environment= or ~/.config/labwc env),
-#    then restart the kiosk:
-ssh s52 'sudo systemctl restart s52-cage-kiosk'
+# 3. Make LIVI the booted receiver (survives reboot — no SSH in the car):
+ssh s52 'bash ~/e30piplay/scripts/s52-enable-livi-receiver.sh'
 
-# 4. Revert anytime: remove S52_CARPLAY_RECEIVER (default react-carplay) +
-ssh s52 'sudo systemctl restart s52-cage-kiosk'
+# 4. Revert anytime:
+ssh s52 'bash ~/e30piplay/scripts/s52-enable-livi-receiver.sh react-carplay'
 ```
 
 ## Open integration items (resolve on the Pi)

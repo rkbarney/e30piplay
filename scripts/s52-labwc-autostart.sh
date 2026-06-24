@@ -139,7 +139,10 @@ if [ "${CARPLAY_RECEIVER}" = "livi" ]; then
         . "${CARPLAY_AUDIO_ENV}"
       fi
       while true; do
-        "${LIVI_LAUNCHER}" \
+        # LIVI ships a nested wlroots compositor. labwc's systemd unit sets
+        # WLR_BACKENDS=drm,libinput for the kiosk session — if LIVI inherits
+        # that, livi-compositor tries DRM, fails, and crash-loops (issue #23).
+        WLR_BACKENDS=wayland "${LIVI_LAUNCHER}" \
           2>&1 | { if command -v systemd-cat >/dev/null 2>&1; then tee -a "${CARPLAY_LOG}" | systemd-cat -t s52-carplay-app; else cat >>"${CARPLAY_LOG}"; fi; } || true
         sleep 3
       done

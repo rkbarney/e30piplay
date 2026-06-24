@@ -23,5 +23,8 @@
     <windowRule identifier="react-carplay" serverDecoration="no">
       <action name="Iconify"/>
     </windowRule>
+    <windowRule identifier="dev.f-io.livi" serverDecoration="no">
+      <action name="Iconify"/>
+    </windowRule>
   </windowRules>
 </openbox_config>
