@@ -89,6 +89,12 @@ cat > "${LAUNCHER}" <<EOF
 #!/usr/bin/env sh
 # LIVI launcher for the S52 kiosk. Wayland/Electron flags only; video decode is
 # handled by LIVI's native GStreamer pipeline, so we do NOT force software GL.
+#
+# LIVI ships a nested compositor (livi-compositor). Without WAYLAND_DISPLAY it
+# tries to grab DRM directly — which fails over SSH and when labwc already owns
+# the display. Always attach to the labwc session (wayland-0).
+export XDG_RUNTIME_DIR="\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}"
+export WAYLAND_DISPLAY="\${WAYLAND_DISPLAY:-wayland-0}"
 exec "${LIVI_APPIMAGE}" --no-sandbox \\
   --ozone-platform=wayland --enable-features=UseOzonePlatform \\
   --password-store=basic "\$@"
@@ -100,6 +106,9 @@ chmod +x "${LAUNCHER}"
 for f in "${HOME}/.config/autostart/LIVI.desktop" "${HOME}/Desktop/LIVI.desktop"; do
   [ -f "$f" ] && { echo "[5] Removing conflicting ${f}"; rm -f "$f"; }
 done
+
+echo "[6] Applying S52 480×640 LIVI display config…"
+bash "$(dirname -- "${BASH_SOURCE[0]}")/s52-apply-livi-config.sh" || echo "   (apply-livi-config failed — run manually after editing s52-livi-config.json)"
 
 cat <<EOF
 
