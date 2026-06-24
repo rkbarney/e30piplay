@@ -95,20 +95,26 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 SSHD
-    # Don't claim success blindly: confirm with `sshd -T` (the effective, fully
-    # resolved config) that the hardening actually won. If another directive in
-    # sshd_config silently overrides it, warn loudly and leave ssh as-is instead
-    # of restarting into a false sense of security.
+    # Don't claim success blindly: confirm with the EFFECTIVE config that the
+    # hardening actually won, and warn (leaving ssh as-is) if some directive
+    # overrides it. Plain `sshd -T` reports only the global defaults and skips
+    # Match blocks, so pass a representative external connection (-C); a Match
+    # that re-enables password/root auth for real clients would otherwise slip
+    # through. Root and the login user are checked separately because Match can
+    # gate them on different conditions.
+    _hc="host=harden-check.invalid,addr=203.0.113.1"   # TEST-NET-3, simulates a remote client
     if sudo sshd -t 2>/dev/null \
-       && sudo sshd -T 2>/dev/null | grep -qiE '^passwordauthentication[[:space:]]+no$' \
-       && sudo sshd -T 2>/dev/null | grep -qiE '^permitrootlogin[[:space:]]+no$'; then
+       && sudo sshd -T -C "user=root,$_hc" 2>/dev/null | grep -qiE '^permitrootlogin[[:space:]]+no$' \
+       && sudo sshd -T -C "user=$SERVICE_USER,$_hc" 2>/dev/null | grep -qiE '^passwordauthentication[[:space:]]+no$'; then
       sudo systemctl restart ssh
-      echo "    SSH hardening verified effective (sshd -T): password + root login disabled."
+      echo "    SSH hardening verified effective (sshd -T -C): password + root login disabled."
     else
-      echo "    WARNING: hardening drop-in written but NOT in effect — a directive in" >&2
-      echo "             /etc/ssh/sshd_config is overriding it. ssh left unchanged." >&2
-      echo "             Inspect: sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'" >&2
+      echo "    WARNING: hardening drop-in written but NOT in effect for a remote" >&2
+      echo "             connection — a directive or Match block in /etc/ssh/sshd_config" >&2
+      echo "             overrides it. ssh left unchanged." >&2
+      echo "             Inspect: sudo sshd -T -C user=$SERVICE_USER,$_hc | grep -E 'passwordauthentication|permitrootlogin'" >&2
     fi
+    unset _hc
   else
     echo "    WARNING: S52_SSH_HARDEN=1 but no ~/.ssh/authorized_keys found." >&2
     echo "             Skipping — add your public key first or you would be locked out." >&2

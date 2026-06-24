@@ -64,5 +64,5 @@ fi
 
 echo "Saved '${CON_NAME}' (priority 5; '${HOME_CONN}' stays 20 when present)."
 echo "Test: turn on the phone hotspot, then:"
-echo "  nmcli connection up ${CON_NAME}"
+echo "  nmcli connection up \"${CON_NAME}\""
 echo "  ip -4 addr show wlan0"
