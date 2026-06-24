@@ -20,10 +20,24 @@ fi
 
 mkdir -p "$(dirname "$DST")"
 
-python3 - "$SRC" "$DST" <<'PY'
+# Route LIVI's audio to the same USB DAC react-carplay uses, instead of
+# whatever PipeWire's default sink happens to be (see
+# scripts/s52-carplay-audio.env.example / pi-audio-usb-default.sh, which
+# discover and write PULSE_SINK). LIVI reads this as audioOutputDevice and
+# passes it to its GStreamer pulsesink — matching react-carplay when PULSE_SINK
+# is set (react-carplay skips --alsa-output-device in that case).
+CARPLAY_AUDIO_ENV="${HOME}/.config/s52-carplay-audio.env"
+if [[ -f "${CARPLAY_AUDIO_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  . "${CARPLAY_AUDIO_ENV}"
+fi
+
+python3 - "$SRC" "$DST" "${PULSE_SINK:-}" <<'PY'
 import json, os, sys
-src, dst = sys.argv[1], sys.argv[2]
+src, dst, pulse_sink = sys.argv[1], sys.argv[2], sys.argv[3]
 overrides = {k: v for k, v in json.load(open(src)).items() if not k.startswith("_")}
+if pulse_sink:
+    overrides["audioOutputDevice"] = pulse_sink
 cfg = {}
 if os.path.exists(dst):
     try:
@@ -39,7 +53,11 @@ PY
 echo "Applied S52 LIVI config -> ${DST}"
 
 if pgrep -x livi >/dev/null 2>&1; then
-  for p in $(pgrep -x livi); do kill -9 "$p" 2>/dev/null || true; done
+  pkill -x livi 2>/dev/null || true
+  for _ in $(seq 1 10); do pgrep -x livi >/dev/null || break; sleep 1; done
+  if pgrep -x livi >/dev/null 2>&1; then
+    pkill -9 -x livi 2>/dev/null || true
+  fi
   echo "Restarted LIVI (autostart will respawn). Reconnect iPhone if stream size unchanged."
 else
   echo "LIVI not running; new config applies on next launch."

@@ -31,7 +31,7 @@ CARPLAY_LAUNCHER="${HOME}/.local/bin/react-carplay"
 CARPLAY_LOG="${S52_CARPLAY_LOG:-/tmp/react-carplay.log}"
 CARPLAY_START_DELAY="${S52_CARPLAY_START_DELAY:-4}"
 # Which CarPlay receiver to boot. Default react-carplay (the proven path —
-# behaviour is byte-for-behaviour identical unless this is set). Set
+# behaviour is byte-for-byte identical unless this is set). Set
 # S52_CARPLAY_RECEIVER=livi to A/B the LIVI receiver (HW GStreamer decode) that
 # scripts/s52-install-livi.sh puts at ~/.local/bin/s52-livi. See issue #23 /
 # docs/livi-receiver-trial.md.
@@ -138,7 +138,25 @@ if [ "${CARPLAY_RECEIVER}" = "livi" ]; then
         # shellcheck disable=SC1090
         . "${CARPLAY_AUDIO_ENV}"
       fi
+      # USB class-compliant DACs often expose an "Extension Unit" that defaults
+      # to off — analog out stays silent until turned on (resets on reboot).
+      # LIVI routes its own audio via scripts/s52-apply-livi-config.sh
+      # (audioOutputDevice), but the DAC's analog path still needs unmuting —
+      # same as the react-carplay branch below.
+      USB_ALSA_CARD="${ALSA_CARD:-${S52_USB_ALSA_CARD:-Audio}}"
       while true; do
+        if command -v amixer >/dev/null 2>&1; then
+          amixer -c "${USB_ALSA_CARD}" sset Speaker 100% unmute >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset PCM 100% >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset 'Extension Unit' on >/dev/null 2>&1 || true
+          # Capture path — Siri / phone call mic (same as react-carplay branch).
+          amixer -c "${USB_ALSA_CARD}" sset Capture 90% >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset Capture cap >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset Capture on >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' 90% >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' cap >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset Mic 90% >/dev/null 2>&1 || true
+        fi
         # LIVI ships a nested wlroots compositor. labwc's systemd unit sets
         # WLR_BACKENDS=drm,libinput for the kiosk session — if LIVI inherits
         # that, livi-compositor tries DRM, fails, and crash-loops (issue #23).

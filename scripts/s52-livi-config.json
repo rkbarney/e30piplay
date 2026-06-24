@@ -4,6 +4,7 @@
   "_mainScreen": "LIVI window/compositor output size — separate from stream resolution in v7+, but both must match our panel for kiosk.",
   "_dpi": "220 matches react-carplay; bump toward 240 if UI still feels small.",
   "_mediaDelay": "Audio buffer in ms. Higher = fewer dropouts, more latency. 4000 for skip testing; scale back if tolerable.",
+  "_audioOutputDevice": "Not set here — s52-apply-livi-config.sh injects this from PULSE_SINK in ~/.config/s52-carplay-audio.env (the discovered USB DAC), the same env file react-carplay uses. Without it LIVI follows PipeWire's default sink, which can silently stop being the DAC.",
   "projectionWidth": 480,
   "projectionHeight": 640,
   "projectionFps": 20,
