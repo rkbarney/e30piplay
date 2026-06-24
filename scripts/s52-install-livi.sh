@@ -68,6 +68,10 @@ if [ -z "${ASSET_URL}" ] || [ "${ASSET_URL}" = "null" ]; then
   echo "   Check https://github.com/${REPO}/releases and set the URL by hand." >&2
   exit 1
 fi
+if [ -z "${LIVI_TAG}" ] || [ "${LIVI_TAG}" = "null" ]; then
+  echo "!! Could not resolve release tag for ${REPO}." >&2
+  exit 1
+fi
 echo "    -> ${ASSET_URL} (${LIVI_TAG})"
 curl -fL --retry 4 --retry-delay 2 -o "${LIVI_APPIMAGE}.part" "${ASSET_URL}"
 mv -f "${LIVI_APPIMAGE}.part" "${LIVI_APPIMAGE}"
@@ -78,7 +82,8 @@ GST_VER="$(gst-launch-1.0 --version 2>/dev/null | head -n1 | awk '{print $NF}')"
 echo "[3] GStreamer ${GST_VER:-unknown}; applying Pi v4l2codecs patch if needed…"
 if printf '%s\n' "$GST_VER" | grep -qE '^1\.26\.(0|1|2|3|4|5|6|7|8|9|10)$'; then
   PATCH_URL="https://raw.githubusercontent.com/${REPO}/${LIVI_TAG}/scripts/gstreamer/patch-pi-v4l2codecs.sh"
-  curl -fsSL "${PATCH_URL}" -o /tmp/patch-pi-v4l2codecs.sh && bash /tmp/patch-pi-v4l2codecs.sh \
+  PATCH_FILE="/tmp/patch-pi-v4l2codecs-${LIVI_TAG}.sh"
+  curl -fsSL "${PATCH_URL}" -o "${PATCH_FILE}" && bash "${PATCH_FILE}" \
     || echo "   (patch step failed/non-fatal — note for the in-car test)"
 else
   echo "    not in the affected range; skipping."

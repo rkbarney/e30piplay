@@ -13,7 +13,6 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 RECEIVER="${1:-livi}"
-DROPIN="/etc/systemd/system/s52-cage-kiosk.service.d/receiver.conf"
 RECEIVER_ENV="${HOME}/.config/s52-carplay-receiver.env"
 
 case "${RECEIVER}" in
@@ -51,22 +50,10 @@ if [ "${RECEIVER}" = "livi" ]; then
   bash "${REPO}/scripts/s52-apply-livi-config.sh"
 fi
 
-sudo install -m 755 "${REPO}/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
-
-if [ "${RECEIVER}" = "livi" ]; then
-  sudo mkdir -p /etc/systemd/system/s52-cage-kiosk.service.d
-  sudo tee "${DROPIN}" > /dev/null <<EOF
-[Service]
-Environment=S52_CARPLAY_RECEIVER=livi
-EOF
-  echo "  wrote ${DROPIN}"
-else
-  sudo rm -f "${DROPIN}"
-  echo "  removed ${DROPIN} (default react-carplay)"
+if [ ! -x /usr/local/bin/s52-enable-livi-receiver-root.sh ]; then
+  echo "!! ${REPO}/scripts/s52-enable-livi-receiver-root.sh not installed — re-run setup.sh on the Pi" >&2
+  exit 1
 fi
-
-sudo systemctl daemon-reload
-sudo systemctl restart s52-carplay
-sudo systemctl restart s52-cage-kiosk
+sudo -n /usr/local/bin/s52-enable-livi-receiver-root.sh "${RECEIVER}" "${REPO}"
 
 echo "=== done — reboot-safe. Receiver=${RECEIVER}, app_id=${APP_ID} ==="
