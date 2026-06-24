@@ -1,0 +1,28 @@
+{
+  "_comment": "SINGLE SOURCE OF TRUTH for LIVI on the S52 480×640 portrait panel. Merged into ~/.config/LIVI/config.json by scripts/s52-apply-livi-config.sh. Keys starting with _ are docs only.",
+  "_projection": "Stream resolution sent to the phone (portrait, after HDMI rotate). Match react-carplay: scripts/s52-carplay-config.json.",
+  "_mainScreen": "LIVI window/compositor output size — separate from stream resolution in v7+, but both must match our panel for kiosk.",
+  "_dpi": "220 matches react-carplay; bump toward 240 if UI still feels small.",
+  "_mediaDelay": "Audio buffer in ms. Higher = fewer dropouts, more latency. 4000 for skip testing; scale back if tolerable.",
+  "projectionWidth": 480,
+  "projectionHeight": 640,
+  "projectionFps": 20,
+  "projectionDpi": 220,
+  "projectionViewAreaTop": 0,
+  "projectionViewAreaBottom": 0,
+  "projectionViewAreaLeft": 0,
+  "projectionViewAreaRight": 0,
+  "projectionSafeAreaTop": 0,
+  "projectionSafeAreaBottom": 0,
+  "projectionSafeAreaLeft": 0,
+  "projectionSafeAreaRight": 0,
+  "mainScreenWidth": 480,
+  "mainScreenHeight": 640,
+  "mediaDelay": 4000,
+  "wifiType": "5ghz",
+  "kiosk": {
+    "main": true,
+    "dash": false,
+    "aux": false
+  }
+}

@@ -6,7 +6,9 @@
  * for specific systemctl commands (see /etc/sudoers.d/s52-carplay-launcher).
  */
 
+const fs = require('fs');
 const http = require('http');
+const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 
@@ -36,7 +38,57 @@ function run(cmd, args, opts = {}) {
   });
 }
 
-async function launchReactCarplay() {
+function readReceiverEnvFile() {
+  const envPath = path.join(os.homedir(), '.config', 's52-carplay-receiver.env');
+  try {
+    const out = {};
+    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+      const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Which receiver is booted: react-carplay (default) or LIVI (issue #23). */
+const ALLOWED_APP_IDS = new Set(['react-carplay', 'dev.f-io.livi']);
+
+function normalizeAppId(raw, fallback) {
+  return ALLOWED_APP_IDS.has(raw) ? raw : fallback;
+}
+
+function normalizeReceiver(raw) {
+  return raw === 'livi' ? 'livi' : 'react-carplay';
+}
+
+function getReceiverConfig() {
+  const file = readReceiverEnvFile();
+  const receiver = normalizeReceiver(
+    process.env.S52_CARPLAY_RECEIVER || file.S52_CARPLAY_RECEIVER || 'react-carplay',
+  );
+  if (receiver === 'livi') {
+    return {
+      receiver: 'livi',
+      appId: normalizeAppId(
+        process.env.S52_CARPLAY_APP_ID || file.S52_CARPLAY_APP_ID,
+        'dev.f-io.livi',
+      ),
+      processName: 'livi',
+    };
+  }
+  return {
+    receiver: 'react-carplay',
+    appId: normalizeAppId(
+      process.env.S52_CARPLAY_APP_ID || file.S52_CARPLAY_APP_ID,
+      'react-carplay',
+    ),
+    processName: 'react-carplay',
+  };
+}
+
+async function launchCarplayReceiver() {
   await run('sudo', ['-n', '/usr/local/bin/s52-carplay-switch.sh', 'launch']);
 }
 
@@ -58,22 +110,35 @@ function sleep(ms) {
 // silently match nothing — this endpoint would then report {"ok":true}
 // without ever actually restarting the app, with carplayReady() staying
 // true because the same never-killed process is still registered.
-async function restartReactCarplay() {
+async function restartCarplayReceiver() {
+  const { processName } = getReceiverConfig();
   try {
-    await run('pkill', ['-x', 'react-carplay']);
+    await run('pkill', ['-x', processName]);
   } catch {
     /* already stopped */
   }
 
   const deadline = Date.now() + 90000;
+
+  if (await carplayReady()) {
+    const goneDeadline = Date.now() + 30000;
+    while (Date.now() < goneDeadline) {
+      if (!(await carplayReady())) break;
+      await sleep(500);
+    }
+    if (await carplayReady()) {
+      throw new Error(`${processName} toplevel did not disappear after kill`);
+    }
+  }
+
   while (Date.now() < deadline) {
     if (await carplayReady()) {
-      await launchReactCarplay();
+      await launchCarplayReceiver();
       return;
     }
     await sleep(1000);
   }
-  throw new Error('react-carplay did not become ready within 90s');
+  throw new Error(`${processName} did not become ready within 90s`);
 }
 
 const GIT = 'git';
@@ -189,12 +254,12 @@ function readJson(req, limit = 10000) {
 
 const WLRCTL = '/usr/bin/wlrctl';
 
-// Used by the React splash to know when the AppImage is alive as a labwc
-// toplevel — i.e. when tapping `+` will be instant. Resolves true iff
-// `wlrctl toplevel find app_id:react-carplay` returns 0.
+// Used by the React splash to know when the receiver is alive as a labwc
+// toplevel — i.e. when tapping `+` will be instant.
 async function carplayReady() {
+  const { appId } = getReceiverConfig();
   try {
-    await run(WLRCTL, ['toplevel', 'find', 'app_id:react-carplay']);
+    await run(WLRCTL, ['toplevel', 'find', `app_id:${appId}`]);
     return true;
   } catch {
     return false;
@@ -222,7 +287,8 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/carplay-ready') {
       const ready = await carplayReady();
-      json(res, ready ? 200 : 503, { ready });
+      const { receiver, appId } = getReceiverConfig();
+      json(res, ready ? 200 : 503, { ready, receiver, appId });
       return;
     }
 
@@ -250,14 +316,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/launch-react-carplay') {
-      await launchReactCarplay();
-      json(res, 200, { ok: true });
+      await launchCarplayReceiver();
+      json(res, 200, { ok: true, ...getReceiverConfig() });
       return;
     }
 
     if (req.method === 'POST' && url.pathname === '/api/relaunch-react-carplay') {
-      await restartReactCarplay();
-      json(res, 200, { ok: true });
+      await restartCarplayReceiver();
+      json(res, 200, { ok: true, ...getReceiverConfig() });
       return;
     }
 
