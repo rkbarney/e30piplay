@@ -9,15 +9,18 @@ set -euo pipefail
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 
-# sudo runs this as root; read the kiosk user's receiver config (react-carplay
-# default, or dev.f-io.livi when S52_CARPLAY_RECEIVER=livi).
+# sudo runs this as root; read app_id from the kiosk user's env file without
+# sourcing it (user-writable — must not execute arbitrary shell as root).
 S52_USER="${SUDO_USER:-${USER:-admin}}"
 RECEIVER_ENV="/home/${S52_USER}/.config/s52-carplay-receiver.env"
-if [ -f "${RECEIVER_ENV}" ]; then
-  # shellcheck disable=SC1090
-  . "${RECEIVER_ENV}"
+CARPLAY_APP_ID="react-carplay"
+if [[ -r "${RECEIVER_ENV}" ]]; then
+  _parsed="$(grep -E '^S52_CARPLAY_APP_ID=' "${RECEIVER_ENV}" 2>/dev/null | head -1 | cut -d= -f2- | tr -d "\"'")"
+  case "${_parsed}" in
+    react-carplay|dev.f-io.livi) CARPLAY_APP_ID="${_parsed}" ;;
+  esac
 fi
-CARPLAY_APP_ID="${S52_CARPLAY_APP_ID:-react-carplay}"
+unset _parsed
 
 case "${1:-}" in
   launch)

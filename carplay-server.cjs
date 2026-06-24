@@ -53,19 +53,31 @@ function readReceiverEnvFile() {
 }
 
 /** Which receiver is booted: react-carplay (default) or LIVI (issue #23). */
+const ALLOWED_APP_IDS = new Set(['react-carplay', 'dev.f-io.livi']);
+
+function normalizeAppId(raw, fallback) {
+  return ALLOWED_APP_IDS.has(raw) ? raw : fallback;
+}
+
 function getReceiverConfig() {
   const file = readReceiverEnvFile();
   const receiver = process.env.S52_CARPLAY_RECEIVER || file.S52_CARPLAY_RECEIVER || 'react-carplay';
   if (receiver === 'livi') {
     return {
       receiver: 'livi',
-      appId: process.env.S52_CARPLAY_APP_ID || file.S52_CARPLAY_APP_ID || 'dev.f-io.livi',
+      appId: normalizeAppId(
+        process.env.S52_CARPLAY_APP_ID || file.S52_CARPLAY_APP_ID,
+        'dev.f-io.livi',
+      ),
       processName: 'livi',
     };
   }
   return {
     receiver: 'react-carplay',
-    appId: process.env.S52_CARPLAY_APP_ID || file.S52_CARPLAY_APP_ID || 'react-carplay',
+    appId: normalizeAppId(
+      process.env.S52_CARPLAY_APP_ID || file.S52_CARPLAY_APP_ID,
+      'react-carplay',
+    ),
     processName: 'react-carplay',
   };
 }
@@ -94,6 +106,7 @@ function sleep(ms) {
 // true because the same never-killed process is still registered.
 async function restartCarplayReceiver() {
   const { processName } = getReceiverConfig();
+  const wasReady = await carplayReady();
   try {
     await run('pkill', ['-x', processName]);
   } catch {
@@ -101,6 +114,18 @@ async function restartCarplayReceiver() {
   }
 
   const deadline = Date.now() + 90000;
+
+  if (wasReady) {
+    const goneDeadline = Date.now() + 30000;
+    while (Date.now() < goneDeadline) {
+      if (!(await carplayReady())) break;
+      await sleep(500);
+    }
+    if (await carplayReady()) {
+      throw new Error(`${processName} toplevel did not disappear after kill`);
+    }
+  }
+
   while (Date.now() < deadline) {
     if (await carplayReady()) {
       await launchCarplayReceiver();

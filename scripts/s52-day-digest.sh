@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Summarize every boot on Jun 23 (plus overnight boot -10) for drive review.
+# Summarize every boot on a given day for drive review.
+# Usage: s52-day-digest.sh [YYYY-MM-DD]   (default: today)
 set -u
 
-echo "TODAY SESSION DIGEST"
+TARGET_DATE="${1:-$(date +%F)}"
+
+echo "SESSION DIGEST — ${TARGET_DATE}"
 echo
 
 tot_disc=0 tot_send=0 tot_stall=0 tot_up=0
@@ -10,7 +13,7 @@ tot_disc=0 tot_send=0 tot_stall=0 tot_up=0
 for b in $(seq -10 0); do
   line=$(journalctl --list-boots --no-pager | awk -v b="$b" '{gsub(/^ +/,"",$1); if($1==b) {print; exit}}')
   [[ -z "$line" ]] && continue
-  [[ "$line" != *"2026-06-23"* && "$b" != "-10" ]] && continue
+  [[ "$line" != *"${TARGET_DATE}"* ]] && continue
 
   app=$(journalctl -b "$b" -t s52-carplay-app --no-pager 2>/dev/null || true)
   drive=$(journalctl -b "$b" -t s52-drive --no-pager 2>/dev/null || true)
@@ -52,4 +55,4 @@ for b in $(seq -10 0); do
 done
 
 echo
-echo "DAY TOTALS: ~$((tot_up * 5 / 60)) min in-car | ${tot_disc} USB disconnects | ${tot_send} LIVI errors | ${tot_stall} GPU stalls"
+echo "DAY TOTALS (${TARGET_DATE}): ~$((tot_up * 5 / 60)) min in-car | ${tot_disc} USB disconnects | ${tot_send} LIVI errors | ${tot_stall} GPU stalls"

@@ -58,7 +58,9 @@ sudo apt-get install -y --no-install-recommends \
 # --- 2. Download the latest arm64 AppImage. ---
 echo "[2] Resolving latest ${REPO} arm64 AppImage…"
 mkdir -p "${APP_DIR}" "${HOME}/.local/bin"
-ASSET_URL="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+RELEASE_JSON="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")"
+LIVI_TAG="$(printf '%s\n' "$RELEASE_JSON" | jq -r '.tag_name')"
+ASSET_URL="$(printf '%s\n' "$RELEASE_JSON" \
   | jq -r '.assets[] | select(.name | test("arm64\\.AppImage$")) | .browser_download_url' \
   | head -n1)"
 if [ -z "${ASSET_URL}" ] || [ "${ASSET_URL}" = "null" ]; then
@@ -66,7 +68,7 @@ if [ -z "${ASSET_URL}" ] || [ "${ASSET_URL}" = "null" ]; then
   echo "   Check https://github.com/${REPO}/releases and set the URL by hand." >&2
   exit 1
 fi
-echo "    -> ${ASSET_URL}"
+echo "    -> ${ASSET_URL} (${LIVI_TAG})"
 curl -fL --retry 4 --retry-delay 2 -o "${LIVI_APPIMAGE}.part" "${ASSET_URL}"
 mv -f "${LIVI_APPIMAGE}.part" "${LIVI_APPIMAGE}"
 chmod +x "${LIVI_APPIMAGE}"
@@ -75,8 +77,8 @@ chmod +x "${LIVI_APPIMAGE}"
 GST_VER="$(gst-launch-1.0 --version 2>/dev/null | head -n1 | awk '{print $NF}')"
 echo "[3] GStreamer ${GST_VER:-unknown}; applying Pi v4l2codecs patch if needed…"
 if printf '%s\n' "$GST_VER" | grep -qE '^1\.26\.(0|1|2|3|4|5|6|7|8|9|10)$'; then
-  curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/scripts/gstreamer/patch-pi-v4l2codecs.sh" \
-    -o /tmp/patch-pi-v4l2codecs.sh && bash /tmp/patch-pi-v4l2codecs.sh \
+  PATCH_URL="https://raw.githubusercontent.com/${REPO}/${LIVI_TAG}/scripts/gstreamer/patch-pi-v4l2codecs.sh"
+  curl -fsSL "${PATCH_URL}" -o /tmp/patch-pi-v4l2codecs.sh && bash /tmp/patch-pi-v4l2codecs.sh \
     || echo "   (patch step failed/non-fatal — note for the in-car test)"
 else
   echo "    not in the affected range; skipping."
