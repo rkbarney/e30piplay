@@ -9,24 +9,37 @@ set -euo pipefail
 CON_NAME="rkb-main-hotspot"
 SSID="rkbarney's main"
 
+read -r -s -p "Password for '${SSID}': " PW
+echo
+
+# Avoid passing the PSK on the nmcli argv (visible in ps); use a short-lived keyfile.
+KEYFILE="$(mktemp)"
+chmod 600 "${KEYFILE}"
+trap 'rm -f "${KEYFILE}"; unset PW' EXIT
+
 if nmcli -t -f NAME connection show 2>/dev/null | grep -qxF "${CON_NAME}"; then
   echo "Profile '${CON_NAME}' already exists — updating password…"
-  read -r -s -p "Password for '${SSID}': " PW
-  echo
-  nmcli connection modify "${CON_NAME}" wifi-sec.psk "${PW}"
-else
-  read -r -s -p "Password for '${SSID}': " PW
-  echo
-  nmcli connection add \
-    type wifi \
-    con-name "${CON_NAME}" \
-    ifname wlan0 \
-    ssid "${SSID}" \
-    wifi-sec.key-mgmt wpa-psk \
-    wifi-sec.psk "${PW}" \
-    connection.autoconnect yes \
-    connection.autoconnect-priority 5
+  nmcli connection delete "${CON_NAME}" >/dev/null
 fi
+
+cat > "${KEYFILE}" <<EOF
+[connection]
+id=${CON_NAME}
+type=wifi
+interface-name=wlan0
+autoconnect=true
+autoconnect-priority=5
+
+[wifi]
+mode=infrastructure
+ssid=${SSID}
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=${PW}
+EOF
+
+nmcli connection import type keyfile file "${KEYFILE}" >/dev/null
 
 # Prefer home WiFi when the Pi can see both networks.
 if nmcli -t -f NAME connection show 2>/dev/null | grep -qxF biscuit; then

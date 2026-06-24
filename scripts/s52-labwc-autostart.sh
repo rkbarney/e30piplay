@@ -149,6 +149,13 @@ if [ "${CARPLAY_RECEIVER}" = "livi" ]; then
           amixer -c "${USB_ALSA_CARD}" sset Speaker 100% unmute >/dev/null 2>&1 || true
           amixer -c "${USB_ALSA_CARD}" sset PCM 100% >/dev/null 2>&1 || true
           amixer -c "${USB_ALSA_CARD}" sset 'Extension Unit' on >/dev/null 2>&1 || true
+          # Capture path — Siri / phone call mic (same as react-carplay branch).
+          amixer -c "${USB_ALSA_CARD}" sset Capture 90% >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset Capture cap >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset Capture on >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' 90% >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset 'Mic Capture' cap >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset Mic 90% >/dev/null 2>&1 || true
         fi
         # LIVI ships a nested wlroots compositor. labwc's systemd unit sets
         # WLR_BACKENDS=drm,libinput for the kiosk session — if LIVI inherits
