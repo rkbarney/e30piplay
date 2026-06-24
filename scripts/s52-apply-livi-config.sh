@@ -24,8 +24,8 @@ mkdir -p "$(dirname "$DST")"
 # whatever PipeWire's default sink happens to be (see
 # scripts/s52-carplay-audio.env.example / pi-audio-usb-default.sh, which
 # discover and write PULSE_SINK). LIVI reads this as audioOutputDevice and
-# passes it straight to its GStreamer pulsesink — the LIVI equivalent of
-# react-carplay's --alsa-output-device flag.
+# passes it to its GStreamer pulsesink — matching react-carplay when PULSE_SINK
+# is set (react-carplay skips --alsa-output-device in that case).
 CARPLAY_AUDIO_ENV="${HOME}/.config/s52-carplay-audio.env"
 if [[ -f "${CARPLAY_AUDIO_ENV}" ]]; then
   # shellcheck disable=SC1090
