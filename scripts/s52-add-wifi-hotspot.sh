@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
-# Save the iPhone hotspot as a fallback WiFi profile on the Pi.
-# Home "home-wifi" keeps higher autoconnect priority when both are in range.
+# Save a phone hotspot as a fallback WiFi profile on the Pi.
+# Your primary/home network keeps higher autoconnect priority when both are in
+# range (set S52_HOME_CONN to its NetworkManager profile name; default "home").
 #
-# Run on the Pi (phone hotspot ON for a live test):
-#   bash ~/e30piplay/scripts/s52-add-wifi-hotspot.sh
+# SSID and password are NOT stored in the repo. Pass the SSID via env or enter
+# it (and the password) interactively when prompted:
+#   S52_HOTSPOT_SSID="My Hotspot" bash ~/e30piplay/scripts/s52-add-wifi-hotspot.sh
 set -euo pipefail
 
-CON_NAME="rkb-main-hotspot"
-SSID="REDACTED-DEVICE-NAME"
+CON_NAME="${S52_HOTSPOT_CON_NAME:-phone-hotspot}"
+SSID="${S52_HOTSPOT_SSID:-}"
+HOME_CONN="${S52_HOME_CONN:-home}"
+
+if [[ -z "${SSID}" ]]; then
+  read -r -p "Hotspot SSID: " SSID
+fi
+[[ -n "${SSID}" ]] || { echo "No SSID given." >&2; exit 1; }
 
 read -r -s -p "Password for '${SSID}': " PW
 echo
+
+# This script only configures WPA-PSK, which requires an 8–63 character
+# passphrase. Fail fast with a clear message rather than letting `nmcli
+# connection import` reject it later with an opaque error.
+if (( ${#PW} < 8 || ${#PW} > 63 )); then
+  echo "Password must be 8–63 characters (WPA-PSK). Aborting." >&2
+  exit 1
+fi
 
 # Avoid passing the PSK on the nmcli argv (visible in ps); use a short-lived keyfile.
 KEYFILE="$(mktemp)"
@@ -41,12 +57,12 @@ EOF
 
 nmcli connection import type keyfile file "${KEYFILE}" >/dev/null
 
-# Prefer home WiFi when the Pi can see both networks.
-if nmcli -t -f NAME connection show 2>/dev/null | grep -qxF home-wifi; then
-  nmcli connection modify home-wifi connection.autoconnect-priority 20
+# Prefer the home/primary WiFi when the Pi can see both networks.
+if nmcli -t -f NAME connection show 2>/dev/null | grep -qxF "${HOME_CONN}"; then
+  nmcli connection modify "${HOME_CONN}" connection.autoconnect-priority 20
 fi
 
-echo "Saved '${CON_NAME}' (priority 5; home-wifi stays 20 when present)."
+echo "Saved '${CON_NAME}' (priority 5; '${HOME_CONN}' stays 20 when present)."
 echo "Test: turn on the phone hotspot, then:"
-echo "  nmcli connection up ${CON_NAME}"
+echo "  nmcli connection up \"${CON_NAME}\""
 echo "  ip -4 addr show wlan0"

@@ -23,6 +23,10 @@ APP_DIR="${APP_DIR:-$HOME/e30piplay}"
 S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
+# Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
+# install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
+# after you have confirmed key-based SSH works.
+S52_SSH_HARDEN="${S52_SSH_HARDEN:-0}"
 
 echo ""
 echo "=== S52 Solutions — Pi OS Lite + cage ==="
@@ -65,6 +69,69 @@ sudo apt-get install -y -qq \
 
 sudo systemctl enable ssh
 sudo systemctl start ssh
+
+# SSH hardening (opt-in). The Pi is reachable on whatever network it joins —
+# home WiFi, a phone hotspot, or any other AP — so on shared/untrusted networks
+# password auth is a brute-force target. With S52_SSH_HARDEN=1 we disable
+# password + root login (key-only). Guard against lockout: only apply if at
+# least one authorized key is already present for this user.
+if [[ "$S52_SSH_HARDEN" == "1" ]]; then
+  if [[ -s "$HOME/.ssh/authorized_keys" ]]; then
+    echo "    SSH hardening: key-only auth, no root login (S52_SSH_HARDEN=1)…"
+    # The drop-in dir is not guaranteed to exist on every target; create it before
+    # writing, or `tee` would abort setup under `set -e`.
+    sudo mkdir -p /etc/ssh/sshd_config.d
+    # sshd uses the FIRST obtained value for each keyword, so the drop-in only wins
+    # if its Include is reached before any conflicting directive. Stock Debian/Pi OS
+    # already Includes this dir as the first line; if a minimal sshd_config doesn't,
+    # prepend it so our values are seen first. (We still verify the result below
+    # rather than trust ordering.)
+    if ! sudo grep -rqsE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config; then
+      sudo sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+    fi
+    sudo tee /etc/ssh/sshd_config.d/10-s52-harden.conf > /dev/null <<'SSHD'
+# Managed by e30piplay setup.sh (S52_SSH_HARDEN=1)
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+SSHD
+    # Don't claim success blindly: confirm with the EFFECTIVE config that the
+    # hardening actually won, and warn (leaving ssh as-is) if some directive
+    # overrides it. Plain `sshd -T` reports only the global defaults and skips
+    # Match blocks, so pass a representative external connection (-C); a Match
+    # that re-enables password/root auth for real clients would otherwise slip
+    # through. Root and the login user are checked separately because Match can
+    # gate them on different conditions.
+    _hc="host=harden-check.invalid,addr=203.0.113.1"   # TEST-NET-3, simulates a remote client
+    # Capture the effective config for each principal once, then assert on it.
+    # Check BOTH PasswordAuthentication and KbdInteractiveAuthentication: the
+    # drop-in disables both, and password logins can still happen via PAM /
+    # keyboard-interactive if only the former is off.
+    # `|| true` so a non-zero sshd -T (transient/parse error) can't abort the
+    # whole installer under `set -e`; the grep checks below drive the warn path.
+    _eff_root="$(sudo sshd -T -C "user=root,$_hc" 2>/dev/null || true)"
+    _eff_user="$(sudo sshd -T -C "user=$SERVICE_USER,$_hc" 2>/dev/null || true)"
+    if sudo sshd -t 2>/dev/null \
+       && grep -qiE '^permitrootlogin[[:space:]]+no$'            <<<"$_eff_root" \
+       && grep -qiE '^passwordauthentication[[:space:]]+no$'     <<<"$_eff_user" \
+       && grep -qiE '^kbdinteractiveauthentication[[:space:]]+no$' <<<"$_eff_user"; then
+      sudo systemctl restart ssh
+      echo "    SSH hardening verified effective (sshd -T -C): password, keyboard-interactive + root login disabled."
+    else
+      echo "    WARNING: hardening drop-in written but could NOT be verified in effect" >&2
+      echo "             for a remote connection — a directive or Match block in" >&2
+      echo "             /etc/ssh/sshd_config is overriding it. sshd was NOT restarted;" >&2
+      echo "             the drop-in (and any Include added above) is left in place for" >&2
+      echo "             inspection." >&2
+      echo "             Inspect: sudo sshd -T -C user=$SERVICE_USER,$_hc | grep -E 'passwordauthentication|kbdinteractiveauthentication|permitrootlogin'" >&2
+    fi
+    unset _hc _eff_root _eff_user
+  else
+    echo "    WARNING: S52_SSH_HARDEN=1 but no ~/.ssh/authorized_keys found." >&2
+    echo "             Skipping — add your public key first or you would be locked out." >&2
+  fi
+fi
+
 sudo systemctl enable avahi-daemon
 sudo systemctl restart avahi-daemon
 sudo systemctl enable seatd
@@ -110,7 +177,18 @@ server {
     index index.html;
 
     # ^~ stops regex/other locations from stealing /api/* ; POST must not hit try_files (→ 405).
+    #
+    # Loopback-only: the control API can switch branches, pull+build+deploy, and
+    # kill/restart the receiver. It is only ever called same-origin by the
+    # on-device Chromium kiosk (which loads http://localhost), so it must NOT be
+    # reachable from other devices on the WiFi/hotspot, nor driveable cross-origin
+    # (CSRF/DNS-rebinding) from a browser elsewhere on the network. Allow loopback
+    # only; everything else gets 403.
     location ^~ /api {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+
         proxy_pass         http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header   Host $host;
@@ -131,7 +209,13 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # Same trust boundary as /api — the WebSocket bridge also reaches the
+    # privileged launcher process, so keep it loopback-only.
     location /ws {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+
         proxy_pass         http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade $http_upgrade;
