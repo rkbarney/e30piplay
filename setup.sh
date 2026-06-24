@@ -103,18 +103,25 @@ SSHD
     # through. Root and the login user are checked separately because Match can
     # gate them on different conditions.
     _hc="host=harden-check.invalid,addr=203.0.113.1"   # TEST-NET-3, simulates a remote client
+    # Capture the effective config for each principal once, then assert on it.
+    # Check BOTH PasswordAuthentication and KbdInteractiveAuthentication: the
+    # drop-in disables both, and password logins can still happen via PAM /
+    # keyboard-interactive if only the former is off.
+    _eff_root="$(sudo sshd -T -C "user=root,$_hc" 2>/dev/null)"
+    _eff_user="$(sudo sshd -T -C "user=$SERVICE_USER,$_hc" 2>/dev/null)"
     if sudo sshd -t 2>/dev/null \
-       && sudo sshd -T -C "user=root,$_hc" 2>/dev/null | grep -qiE '^permitrootlogin[[:space:]]+no$' \
-       && sudo sshd -T -C "user=$SERVICE_USER,$_hc" 2>/dev/null | grep -qiE '^passwordauthentication[[:space:]]+no$'; then
+       && grep -qiE '^permitrootlogin[[:space:]]+no$'            <<<"$_eff_root" \
+       && grep -qiE '^passwordauthentication[[:space:]]+no$'     <<<"$_eff_user" \
+       && grep -qiE '^kbdinteractiveauthentication[[:space:]]+no$' <<<"$_eff_user"; then
       sudo systemctl restart ssh
-      echo "    SSH hardening verified effective (sshd -T -C): password + root login disabled."
+      echo "    SSH hardening verified effective (sshd -T -C): password, keyboard-interactive + root login disabled."
     else
       echo "    WARNING: hardening drop-in written but NOT in effect for a remote" >&2
       echo "             connection — a directive or Match block in /etc/ssh/sshd_config" >&2
       echo "             overrides it. ssh left unchanged." >&2
-      echo "             Inspect: sudo sshd -T -C user=$SERVICE_USER,$_hc | grep -E 'passwordauthentication|permitrootlogin'" >&2
+      echo "             Inspect: sudo sshd -T -C user=$SERVICE_USER,$_hc | grep -E 'passwordauthentication|kbdinteractiveauthentication|permitrootlogin'" >&2
     fi
-    unset _hc
+    unset _hc _eff_root _eff_user
   else
     echo "    WARNING: S52_SSH_HARDEN=1 but no ~/.ssh/authorized_keys found." >&2
     echo "             Skipping — add your public key first or you would be locked out." >&2
