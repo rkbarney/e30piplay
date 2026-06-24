@@ -38,6 +38,7 @@ S52_CARPLAY_APP_ID=${APP_ID}
 EOF
 echo "  wrote ${RECEIVER_ENV}"
 
+mkdir -p "${HOME}/.config/labwc"
 install -m 755 "${REPO}/scripts/s52-labwc-autostart.sh" "${HOME}/.config/labwc/autostart"
 install -m 644 "${REPO}/scripts/s52-labwc-rc.xml" "${HOME}/.config/labwc/rc.xml"
 echo "  refreshed labwc autostart + rc.xml"
@@ -50,22 +51,22 @@ if [ "${RECEIVER}" = "livi" ]; then
   bash "${REPO}/scripts/s52-apply-livi-config.sh"
 fi
 
-echo admin | sudo -S install -m 755 "${REPO}/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
+sudo install -m 755 "${REPO}/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
 
 if [ "${RECEIVER}" = "livi" ]; then
-  echo admin | sudo -S mkdir -p /etc/systemd/system/s52-cage-kiosk.service.d
-  echo admin | sudo -S tee "${DROPIN}" > /dev/null <<EOF
+  sudo mkdir -p /etc/systemd/system/s52-cage-kiosk.service.d
+  sudo tee "${DROPIN}" > /dev/null <<EOF
 [Service]
 Environment=S52_CARPLAY_RECEIVER=livi
 EOF
   echo "  wrote ${DROPIN}"
 else
-  echo admin | sudo -S rm -f "${DROPIN}"
+  sudo rm -f "${DROPIN}"
   echo "  removed ${DROPIN} (default react-carplay)"
 fi
 
-echo admin | sudo -S systemctl daemon-reload
-echo admin | sudo -S systemctl restart s52-carplay
-echo admin | sudo -S systemctl restart s52-cage-kiosk
+sudo systemctl daemon-reload
+sudo systemctl restart s52-carplay
+sudo systemctl restart s52-cage-kiosk
 
 echo "=== done — reboot-safe. Receiver=${RECEIVER}, app_id=${APP_ID} ==="
