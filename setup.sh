@@ -107,8 +107,10 @@ SSHD
     # Check BOTH PasswordAuthentication and KbdInteractiveAuthentication: the
     # drop-in disables both, and password logins can still happen via PAM /
     # keyboard-interactive if only the former is off.
-    _eff_root="$(sudo sshd -T -C "user=root,$_hc" 2>/dev/null)"
-    _eff_user="$(sudo sshd -T -C "user=$SERVICE_USER,$_hc" 2>/dev/null)"
+    # `|| true` so a non-zero sshd -T (transient/parse error) can't abort the
+    # whole installer under `set -e`; the grep checks below drive the warn path.
+    _eff_root="$(sudo sshd -T -C "user=root,$_hc" 2>/dev/null || true)"
+    _eff_user="$(sudo sshd -T -C "user=$SERVICE_USER,$_hc" 2>/dev/null || true)"
     if sudo sshd -t 2>/dev/null \
        && grep -qiE '^permitrootlogin[[:space:]]+no$'            <<<"$_eff_root" \
        && grep -qiE '^passwordauthentication[[:space:]]+no$'     <<<"$_eff_user" \
@@ -116,9 +118,11 @@ SSHD
       sudo systemctl restart ssh
       echo "    SSH hardening verified effective (sshd -T -C): password, keyboard-interactive + root login disabled."
     else
-      echo "    WARNING: hardening drop-in written but NOT in effect for a remote" >&2
-      echo "             connection — a directive or Match block in /etc/ssh/sshd_config" >&2
-      echo "             overrides it. ssh left unchanged." >&2
+      echo "    WARNING: hardening drop-in written but could NOT be verified in effect" >&2
+      echo "             for a remote connection — a directive or Match block in" >&2
+      echo "             /etc/ssh/sshd_config is overriding it. sshd was NOT restarted;" >&2
+      echo "             the drop-in (and any Include added above) is left in place for" >&2
+      echo "             inspection." >&2
       echo "             Inspect: sudo sshd -T -C user=$SERVICE_USER,$_hc | grep -E 'passwordauthentication|kbdinteractiveauthentication|permitrootlogin'" >&2
     fi
     unset _hc _eff_root _eff_user
