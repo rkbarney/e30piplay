@@ -136,7 +136,18 @@ server {
     index index.html;
 
     # ^~ stops regex/other locations from stealing /api/* ; POST must not hit try_files (→ 405).
+    #
+    # Loopback-only: the control API can switch branches, pull+build+deploy, and
+    # kill/restart the receiver. It is only ever called same-origin by the
+    # on-device Chromium kiosk (which loads http://localhost), so it must NOT be
+    # reachable from other devices on the WiFi/hotspot, nor driveable cross-origin
+    # (CSRF/DNS-rebinding) from a browser elsewhere on the network. Allow loopback
+    # only; everything else gets 403.
     location ^~ /api {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+
         proxy_pass         http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header   Host $host;
@@ -157,7 +168,13 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # Same trust boundary as /api — the WebSocket bridge also reaches the
+    # privileged launcher process, so keep it loopback-only.
     location /ws {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+
         proxy_pass         http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade $http_upgrade;
