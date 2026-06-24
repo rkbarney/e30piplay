@@ -141,5 +141,5 @@ Example snapshot: [`carlinkit-dongle-infos.snapshot.json`](carlinkit-dongle-info
 | Product | A15W (`YMA0-WN16-0003`) |
 | Firmware | `2025.10.15.1127` |
 | AP / BT name | `AutoKit-2041` |
-| MAC | `REDACTED-MAC` |
+| MAC | _redacted (device-specific; see your dongle web UI)_ |
 | USB | `1314:1520` (Magic Communication Tec. Auto Box) |

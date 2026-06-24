@@ -24,9 +24,9 @@
       "ver": "2025.10.15.1127",
       "cgiVer": "Sep  5 2025 11:05:47",
       "mfd": "20251015",
-      "uuid": "REDACTED-UUID",
+      "uuid": "REDACTED",
       "productType": "A15W",
-      "mac": "REDACTED-MAC",
+      "mac": "REDACTED",
       "wifiChipType": 7,
       "upTime": 176213,
       "customVer": 2,
@@ -35,7 +35,7 @@
       "boxType": "YA",
       "logFileSuffix": "YA15W",
       "tabId": "",
-      "code": "REDACTED-CODE",
+      "code": "REDACTED",
       "needActive": 1
     },
     "Settings": {
@@ -56,9 +56,9 @@
     },
     "DevList": [
       {
-        "id": "REDACTED-MAC",
+        "id": "REDACTED",
         "type": "CarPlay",
-        "name": "REDACTED-DEVICE-NAME",
+        "name": "REDACTED",
         "index": "1"
       }
     ],

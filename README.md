@@ -84,6 +84,8 @@ npm run build
 
 **SSH:** Turn **SSH** on in Imager’s **gear icon** (set hostname, username, and password there too). If you skipped it, `ssh user@pi-ip` will fail or **connection refused** until SSH is enabled (easiest fix: re-flash with SSH on, or enable from local keyboard on the Pi: `sudo systemctl enable --now ssh` after installing `openssh-server`).
 
+> **Security — SSH on shared networks.** This Pi joins whatever network you give it (home WiFi, a phone hotspot, etc.), so its SSH port is reachable by other devices on that network. Prefer **public-key auth** and a strong, unique password. In Imager, add your SSH **public key** instead of (or in addition to) a password. Once key login works, harden the Pi to key-only with `S52_SSH_HARDEN=1 bash setup.sh` (disables password + root SSH login; it refuses to apply if no `~/.ssh/authorized_keys` is present, to avoid locking you out).
+
 **Ethernet:** Works independently of Wi‑Fi; ignore rfkill Wi‑Fi messages if you’re on wired LAN.
 
 **First login:** Raspberry Pi OS Lite does **not** always ship with **`git`** installed. After SSH works:

@@ -23,6 +23,10 @@ APP_DIR="${APP_DIR:-$HOME/e30piplay}"
 S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
+# Opt-in SSH hardening (key-only auth, no root login, no mDNS advertisement of
+# the host). Default 0 so a fresh install with only a password set is not locked
+# out. Set S52_SSH_HARDEN=1 ONLY after you have confirmed key-based SSH works.
+S52_SSH_HARDEN="${S52_SSH_HARDEN:-0}"
 
 echo ""
 echo "=== S52 Solutions — Pi OS Lite + cage ==="
@@ -65,6 +69,28 @@ sudo apt-get install -y -qq \
 
 sudo systemctl enable ssh
 sudo systemctl start ssh
+
+# SSH hardening (opt-in). The Pi is reachable on whatever network it joins —
+# home WiFi, a phone hotspot, or any other AP — so on shared/untrusted networks
+# password auth is a brute-force target. With S52_SSH_HARDEN=1 we disable
+# password + root login (key-only). Guard against lockout: only apply if at
+# least one authorized key is already present for this user.
+if [[ "$S52_SSH_HARDEN" == "1" ]]; then
+  if [[ -s "$HOME/.ssh/authorized_keys" ]]; then
+    echo "    SSH hardening: key-only auth, no root login (S52_SSH_HARDEN=1)…"
+    sudo tee /etc/ssh/sshd_config.d/10-s52-harden.conf > /dev/null <<'SSHD'
+# Managed by e30piplay setup.sh (S52_SSH_HARDEN=1)
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+SSHD
+    sudo systemctl restart ssh
+  else
+    echo "    WARNING: S52_SSH_HARDEN=1 but no ~/.ssh/authorized_keys found." >&2
+    echo "             Skipping — add your public key first or you would be locked out." >&2
+  fi
+fi
+
 sudo systemctl enable avahi-daemon
 sudo systemctl restart avahi-daemon
 sudo systemctl enable seatd
