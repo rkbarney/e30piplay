@@ -53,7 +53,11 @@ PY
 echo "Applied S52 LIVI config -> ${DST}"
 
 if pgrep -x livi >/dev/null 2>&1; then
-  for p in $(pgrep -x livi); do kill -9 "$p" 2>/dev/null || true; done
+  pkill -x livi 2>/dev/null || true
+  for _ in $(seq 1 10); do pgrep -x livi >/dev/null || break; sleep 1; done
+  if pgrep -x livi >/dev/null 2>&1; then
+    pkill -9 -x livi 2>/dev/null || true
+  fi
   echo "Restarted LIVI (autostart will respawn). Reconnect iPhone if stream size unchanged."
 else
   echo "LIVI not running; new config applies on next launch."

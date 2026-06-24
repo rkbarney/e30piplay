@@ -31,7 +31,7 @@ CARPLAY_LAUNCHER="${HOME}/.local/bin/react-carplay"
 CARPLAY_LOG="${S52_CARPLAY_LOG:-/tmp/react-carplay.log}"
 CARPLAY_START_DELAY="${S52_CARPLAY_START_DELAY:-4}"
 # Which CarPlay receiver to boot. Default react-carplay (the proven path —
-# behaviour is byte-for-behaviour identical unless this is set). Set
+# behaviour is byte-for-byte identical unless this is set). Set
 # S52_CARPLAY_RECEIVER=livi to A/B the LIVI receiver (HW GStreamer decode) that
 # scripts/s52-install-livi.sh puts at ~/.local/bin/s52-livi. See issue #23 /
 # docs/livi-receiver-trial.md.
