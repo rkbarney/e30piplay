@@ -78,12 +78,14 @@ sudo systemctl start ssh
 if [[ "$S52_SSH_HARDEN" == "1" ]]; then
   if [[ -s "$HOME/.ssh/authorized_keys" ]]; then
     echo "    SSH hardening: key-only auth, no root login (S52_SSH_HARDEN=1)…"
-    # The drop-in dir is not guaranteed to exist on every target; create it (and
-    # make sure sshd actually Includes it) before writing, or `tee` would abort
-    # setup under `set -e`.
+    # The drop-in dir is not guaranteed to exist on every target; create it before
+    # writing, or `tee` would abort setup under `set -e`.
     sudo mkdir -p /etc/ssh/sshd_config.d
-    # Distro stock configs Include this dir, but if a minimal sshd_config doesn't,
-    # the drop-in would be silently ignored — prepend the Include so it wins.
+    # sshd uses the FIRST obtained value for each keyword, so the drop-in only wins
+    # if its Include is reached before any conflicting directive. Stock Debian/Pi OS
+    # already Includes this dir as the first line; if a minimal sshd_config doesn't,
+    # prepend it so our values are seen first. (We still verify the result below
+    # rather than trust ordering.)
     if ! sudo grep -rqsE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config; then
       sudo sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
     fi
@@ -93,7 +95,20 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 SSHD
-    sudo systemctl restart ssh
+    # Don't claim success blindly: confirm with `sshd -T` (the effective, fully
+    # resolved config) that the hardening actually won. If another directive in
+    # sshd_config silently overrides it, warn loudly and leave ssh as-is instead
+    # of restarting into a false sense of security.
+    if sudo sshd -t 2>/dev/null \
+       && sudo sshd -T 2>/dev/null | grep -qiE '^passwordauthentication[[:space:]]+no$' \
+       && sudo sshd -T 2>/dev/null | grep -qiE '^permitrootlogin[[:space:]]+no$'; then
+      sudo systemctl restart ssh
+      echo "    SSH hardening verified effective (sshd -T): password + root login disabled."
+    else
+      echo "    WARNING: hardening drop-in written but NOT in effect — a directive in" >&2
+      echo "             /etc/ssh/sshd_config is overriding it. ssh left unchanged." >&2
+      echo "             Inspect: sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'" >&2
+    fi
   else
     echo "    WARNING: S52_SSH_HARDEN=1 but no ~/.ssh/authorized_keys found." >&2
     echo "             Skipping — add your public key first or you would be locked out." >&2

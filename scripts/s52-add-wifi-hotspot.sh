@@ -20,6 +20,14 @@ fi
 read -r -s -p "Password for '${SSID}': " PW
 echo
 
+# This script only configures WPA-PSK, which requires an 8–63 character
+# passphrase. Fail fast with a clear message rather than letting `nmcli
+# connection import` reject it later with an opaque error.
+if (( ${#PW} < 8 || ${#PW} > 63 )); then
+  echo "Password must be 8–63 characters (WPA-PSK). Aborting." >&2
+  exit 1
+fi
+
 # Avoid passing the PSK on the nmcli argv (visible in ps); use a short-lived keyfile.
 KEYFILE="$(mktemp)"
 chmod 600 "${KEYFILE}"
