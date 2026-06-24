@@ -19,5 +19,10 @@
   "mainScreenWidth": 480,
   "mainScreenHeight": 640,
   "mediaDelay": 4000,
-  "wifiType": "5ghz"
+  "wifiType": "5ghz",
+  "kiosk": {
+    "main": true,
+    "dash": false,
+    "aux": false
+  }
 }
