@@ -138,7 +138,18 @@ if [ "${CARPLAY_RECEIVER}" = "livi" ]; then
         # shellcheck disable=SC1090
         . "${CARPLAY_AUDIO_ENV}"
       fi
+      # USB class-compliant DACs often expose an "Extension Unit" that defaults
+      # to off — analog out stays silent until turned on (resets on reboot).
+      # LIVI routes its own audio via scripts/s52-apply-livi-config.sh
+      # (audioOutputDevice), but the DAC's analog path still needs unmuting —
+      # same as the react-carplay branch below.
+      USB_ALSA_CARD="${ALSA_CARD:-${S52_USB_ALSA_CARD:-Audio}}"
       while true; do
+        if command -v amixer >/dev/null 2>&1; then
+          amixer -c "${USB_ALSA_CARD}" sset Speaker 100% unmute >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset PCM 100% >/dev/null 2>&1 || true
+          amixer -c "${USB_ALSA_CARD}" sset 'Extension Unit' on >/dev/null 2>&1 || true
+        fi
         # LIVI ships a nested wlroots compositor. labwc's systemd unit sets
         # WLR_BACKENDS=drm,libinput for the kiosk session — if LIVI inherits
         # that, livi-compositor tries DRM, fails, and crash-loops (issue #23).
