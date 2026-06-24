@@ -6,13 +6,13 @@
   URL params:
     rom   — absolute path to the ROM file (e.g. /roms/tetris.nes)
     core  — EmulatorJS system name (nes | gb | snes)
-              .nes → nes (fceumm core)
-              .gb / .gbc → gb (gambatte core handles both)
-              .sfc / .smc → snes (snes9x core)
+    id    — stable numeric game id (scopes save states per ROM)
     name  — human-readable game name (used by EmulatorJS UI)
 
-  EmulatorJS data (loader.js, cores) must be present at /emulatorjs/.
-  Install them with:  bash scripts/install-emulatorjs.sh
+  Parent postMessage protocol (type: s52-emulator):
+    { action: 'save' }         — persist save state + battery/SRAM to IndexedDB
+    { action: 'load' }         — restore snapshot from IndexedDB (not the in-game .srm)
+    { action: 'saveBattery' }  — flush battery/SRAM only (on exit; ack when synced)
 -->
 <html lang="en">
 <head>
@@ -23,6 +23,8 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
     #game { width: 100%; height: 100%; }
+    .ejs_menu_bar { display: none !important; }
+    .ejs_start_button { display: none !important; }
   </style>
 </head>
 <body>
@@ -33,6 +35,7 @@
     var rom  = p.get('rom');
     var core = p.get('core');
     var name = p.get('name') || 'Game';
+    var id   = parseInt(p.get('id') || '0', 10);
 
     if (!rom || !core) {
       document.body.innerHTML =
@@ -40,17 +43,140 @@
       return;
     }
 
-    // EmulatorJS configuration (set before loader.js is parsed).
+    function postResult(action, ok, detail) {
+      try {
+        window.parent.postMessage({
+          type: 's52-emulator-result',
+          action: action,
+          ok: ok,
+          detail: detail || null,
+        }, '*');
+      } catch (e) {}
+    }
+
+    function getEmu() {
+      var emu = window.EJS_emulator;
+      if (!emu || !emu.gameManager || !emu.started) return null;
+      return emu;
+    }
+
+    function syncFs(fs, populate) {
+      return new Promise(function (resolve) {
+        try {
+          fs.syncfs(populate, function (err) {
+            resolve(!err);
+          });
+        } catch (e) {
+          resolve(false);
+        }
+      });
+    }
+
+    function stateKey(emu) {
+      // ROM filename is stable; display name can vary in the launcher label.
+      var base = emu.getBaseFileName(true);
+      if (base && base !== 'game') {
+        return base.replace(/\.[^.]+$/, '') + '.state';
+      }
+      return emu.getBaseFileName() + '.state';
+    }
+
+    function toStateBytes(state) {
+      if (!state) return null;
+      if (state instanceof Uint8Array) return state;
+      if (state instanceof ArrayBuffer) return new Uint8Array(state);
+      if (Array.isArray(state)) return new Uint8Array(state);
+      if (state.buffer instanceof ArrayBuffer) {
+        return new Uint8Array(state.buffer, state.byteOffset || 0, state.byteLength);
+      }
+      return null;
+    }
+
+    window.addEventListener('message', function (e) {
+      var msg = e.data;
+      if (!msg || msg.type !== 's52-emulator') return;
+
+      var emu = getEmu();
+      if (!emu) {
+        postResult(msg.action, false, 'not_ready');
+        return;
+      }
+
+      if (msg.action === 'save') {
+        (async function () {
+          try {
+            var key = stateKey(emu);
+            // Flush in-game SRAM first so the snapshot includes the latest progress.
+            emu.gameManager.saveSaveFiles();
+            var state = emu.gameManager.getState();
+            await emu.storage.states.put(key, state);
+            var synced = await syncFs(emu.gameManager.FS, false);
+            postResult('save', synced, synced ? null : 'sync_failed');
+          } catch (err) {
+            console.error('s52 save failed', err);
+            postResult('save', false, String(err && err.message ? err.message : err));
+          }
+        })();
+        return;
+      }
+
+      if (msg.action === 'load') {
+        (async function () {
+          try {
+            var key = stateKey(emu);
+            var raw = await emu.storage.states.get(key);
+            var bytes = toStateBytes(raw);
+            if (!bytes) {
+              postResult('load', false, 'no_state');
+              return;
+            }
+            // Do NOT call loadSaveFiles() here — it reloads the .srm and wipes the
+            // snapshot we are about to apply.
+            emu.gameManager.loadState(bytes);
+            postResult('load', true);
+          } catch (err) {
+            console.error('s52 load failed', err);
+            postResult('load', false, String(err && err.message ? err.message : err));
+          }
+        })();
+        return;
+      }
+
+      if (msg.action === 'saveBattery') {
+        (async function () {
+          try {
+            emu.gameManager.saveSaveFiles();
+            var synced = await syncFs(emu.gameManager.FS, false);
+            postResult('saveBattery', synced, synced ? null : 'sync_failed');
+          } catch (err) {
+            console.error('s52 saveBattery failed', err);
+            postResult('saveBattery', false, String(err && err.message ? err.message : err));
+          }
+        })();
+      }
+    });
+
+    window.EJS_ready = function () {
+      try {
+        window.parent.postMessage({ type: 's52-emulator-ready' }, '*');
+      } catch (e) {}
+    };
+
     window.EJS_player          = '#game';
     window.EJS_gameUrl         = rom;
     window.EJS_gameName        = name;
     window.EJS_core            = core;
+    window.EJS_gameID          = id > 0 ? id : undefined;
     window.EJS_pathtodata      = '/emulatorjs/';
     window.EJS_startOnLoaded   = true;
-    window.EJS_color            = '#ffb300';   // accent colour (EmulatorJS UI chrome)
-    window.EJS_backgroundColor  = '#000000';
-    window.EJS_VirtualGamepad  = false;        // physical USB pad is used
-    window.EJS_Saves           = false;        // no save-state UI for now
+    window.EJS_color           = '#ff5500';
+    window.EJS_backgroundColor = '#000000';
+    window.EJS_VirtualGamepad  = false;
+    window.EJS_DEBUG_XX        = true;
+    window.EJS_defaultOptions  = {
+      'save-save-interval': 10,
+      'save-state-location': 'browser',
+    };
 
     var s = document.createElement('script');
     s.src = '/emulatorjs/loader.js';

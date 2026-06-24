@@ -10,10 +10,10 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
-const fs   = require('fs');
 const { execFile } = require('child_process');
 
 const PORT = Number.parseInt(process.env.PORT || '3001', 10) || 3001;
+const HOST = process.env.HOST || '127.0.0.1';
 
 // The systemd unit runs with WorkingDirectory=$APP_DIR, so cwd is the repo.
 const APP_DIR = process.env.APP_DIR || process.cwd();
@@ -281,7 +281,15 @@ const EXT_TO_CORE = {
   '.smc': 'snes',
 };
 
-// Returns [{name, url, core}] sorted by name, or [] if the roms/ dir is absent.
+function romGameId(file) {
+  let h = 0;
+  for (let i = 0; i < file.length; i += 1) {
+    h = (Math.imul(31, h) + file.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) || 1;
+}
+
+// Returns [{id, name, url, core}] sorted by name, or [] if the roms/ dir is absent.
 // ROM bytes are served statically by nginx at /roms/<filename>.
 function listRoms() {
   const dir = path.join(APP_DIR, 'roms');
@@ -297,6 +305,7 @@ function listRoms() {
     const core = EXT_TO_CORE[ext];
     if (!core) continue; // skip unknown extensions
     roms.push({
+      id:   romGameId(file),
       name: path.basename(file, ext).replace(/[_-]+/g, ' ').trim(),
       url:  `/roms/${encodeURIComponent(file)}`,
       core,
@@ -385,7 +394,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, HOST, () => {
   // eslint-disable-next-line no-console
-  console.log(`carplay-server listening on 127.0.0.1:${PORT}`);
+  console.log(`carplay-server listening on ${HOST}:${PORT}`);
 });

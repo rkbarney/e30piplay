@@ -12,7 +12,8 @@
  *
  * `buttons` entries: { label, onClick, disabled?, key? }. Single-character labels
  * (−/+) render large; word labels (BACK/RESTART) render smaller. Pass [] for no
- * buttons (e.g. the boot screen).
+ * buttons (e.g. the boot screen). Three buttons share the row evenly (e.g. SAVE /
+ * LOAD / EXIT while a game is running).
  */
 
 import PropTypes from 'prop-types';
@@ -24,15 +25,21 @@ const VARIANTS = {
 
 export default function ScreenFrame({ children, variant = 'amber', buttons = [] }) {
   const v = VARIANTS[variant] || VARIANTS.amber;
-  const single = buttons.length === 1; // one button spans the full button-row width
+  const single = buttons.length === 1;
+  const triple = buttons.length === 3;
 
   return (
     <div style={styles.root}>
       <div style={styles.content}>{children}</div>
 
-      <div style={{ ...styles.buttons, justifyContent: single ? 'center' : 'space-between' }}>
+      <div style={{
+        ...styles.buttons,
+        justifyContent: single ? 'center' : 'space-between',
+        gap: triple ? '6px' : 0,
+      }}>
         {buttons.map((b, i) => {
           const big = String(b.label).length <= 1;
+          const width = single ? '100%' : triple ? '96px' : '128px';
           return (
             <button
               key={b.key ?? b.label ?? i}
@@ -41,11 +48,11 @@ export default function ScreenFrame({ children, variant = 'amber', buttons = [] 
               disabled={b.disabled}
               style={{
                 ...styles.btn,
-                width: single ? '100%' : '128px',
+                width,
                 color: v.color,
                 background: v.bg,
                 border: `2px solid ${v.border}`,
-                fontSize: big ? '44px' : '16px',
+                fontSize: big ? '44px' : triple ? '13px' : '16px',
                 letterSpacing: big ? 0 : '0.06em',
                 opacity: b.disabled ? 0.4 : 1,
                 cursor: b.disabled ? 'default' : 'pointer',

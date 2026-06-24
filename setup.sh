@@ -142,6 +142,11 @@ server {
         add_header Cache-Control "no-cache";
     }
 
+    # EmulatorJS assets — never SPA-fallback; missing files must 404.
+    location ^~ /emulatorjs/ {
+        try_files \$uri =404;
+    }
+
     # Never cache index.html — Chromium kiosk reuses a persistent profile; a stale
     # shell pointing at an old Vite bundle hash leaves the display on the old UI
     # even after rsync deploys new assets.
