@@ -20,10 +20,24 @@ fi
 
 mkdir -p "$(dirname "$DST")"
 
-python3 - "$SRC" "$DST" <<'PY'
+# Route LIVI's audio to the same USB DAC react-carplay uses, instead of
+# whatever PipeWire's default sink happens to be (see
+# scripts/s52-carplay-audio.env.example / pi-audio-usb-default.sh, which
+# discover and write PULSE_SINK). LIVI reads this as audioOutputDevice and
+# passes it straight to its GStreamer pulsesink — the LIVI equivalent of
+# react-carplay's --alsa-output-device flag.
+CARPLAY_AUDIO_ENV="${HOME}/.config/s52-carplay-audio.env"
+if [[ -f "${CARPLAY_AUDIO_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  . "${CARPLAY_AUDIO_ENV}"
+fi
+
+python3 - "$SRC" "$DST" "${PULSE_SINK:-}" <<'PY'
 import json, os, sys
-src, dst = sys.argv[1], sys.argv[2]
+src, dst, pulse_sink = sys.argv[1], sys.argv[2], sys.argv[3]
 overrides = {k: v for k, v in json.load(open(src)).items() if not k.startswith("_")}
+if pulse_sink:
+    overrides["audioOutputDevice"] = pulse_sink
 cfg = {}
 if os.path.exists(dst):
     try:
