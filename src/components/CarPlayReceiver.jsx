@@ -44,21 +44,27 @@ export default function CarPlayReceiver({ onBack }) {
   const openCarplay = useCallback(() => call('/api/launch-react-carplay', 'opening'), [call]);
   const restartCarplay = useCallback(() => call('/api/relaunch-react-carplay', 'restarting'), [call]);
 
+  // Minimize the receiver before returning to the clock. Failures are non-fatal
+  // (e.g. user already exited LIVI and the Wayland toplevel is gone).
+  const handleBack = useCallback(async (e) => {
+    e?.stopPropagation?.();
+    try {
+      await fetch(`${API_BASE}/api/return-to-kiosk`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      /* still return to the clock face */
+    }
+    onBack?.(e);
+  }, [onBack]);
+
   // Auto-open on first entry (the + handoff). Guard React 18 StrictMode double-run.
   useEffect(() => {
     if (openedRef.current) return;
     openedRef.current = true;
     openCarplay();
   }, [openCarplay]);
-
-  // Minimize the receiver's Wayland toplevel before handing control back to the
-  // kiosk's local state — without this the receiver stays focused/full-screen
-  // and the kiosk UI underneath is unreachable even though React thinks it's
-  // showing the clock again.
-  const handleBack = useCallback(() => {
-    call('/api/return-to-kiosk', 'idle');
-    onBack?.();
-  }, [call, onBack]);
 
   const busy = phase === 'opening' || phase === 'restarting';
   const label =

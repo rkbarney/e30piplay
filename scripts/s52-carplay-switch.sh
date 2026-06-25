@@ -5,13 +5,17 @@
 # focus/minimize on the react-carplay toplevel — instant, no service churn.
 set -euo pipefail
 
-# sudoers preserves WAYLAND_DISPLAY/XDG_RUNTIME_DIR; fall back for SSH usage.
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
-
 # sudo runs this as root; read receiver from the kiosk user's env file without
 # sourcing it (user-writable — must not execute arbitrary shell as root).
 S52_USER="${SUDO_USER:-${USER:-admin}}"
+S52_UID="$(id -u "${S52_USER}" 2>/dev/null || true)"
+
+# sudoers preserves WAYLAND_DISPLAY/XDG_RUNTIME_DIR; fall back for SSH usage.
+# Never default to root's uid — root cannot open the kiosk user's Wayland socket.
+if [[ -z "${XDG_RUNTIME_DIR:-}" && -n "${S52_UID}" ]]; then
+  export XDG_RUNTIME_DIR="/run/user/${S52_UID}"
+fi
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 RECEIVER_ENV="/home/${S52_USER}/.config/s52-carplay-receiver.env"
 CARPLAY_APP_ID="react-carplay"
 if [[ -r "${RECEIVER_ENV}" ]]; then
@@ -23,12 +27,18 @@ if [[ -r "${RECEIVER_ENV}" ]]; then
 fi
 unset _receiver
 
+wlrctl_toplevel() {
+  /usr/bin/wlrctl toplevel "$@" "app_id:${CARPLAY_APP_ID}"
+}
+
 case "${1:-}" in
   launch)
-    /usr/bin/wlrctl toplevel focus "app_id:${CARPLAY_APP_ID}"
+    wlrctl_toplevel focus || {
+      /usr/bin/wlrctl toplevel find "app_id:${CARPLAY_APP_ID}" >/dev/null || exit 1
+    }
     ;;
   return)
-    /usr/bin/wlrctl toplevel minimize "app_id:${CARPLAY_APP_ID}"
+    wlrctl_toplevel minimize || true
     ;;
   *)
     echo "usage: $0 launch|return" >&2
