@@ -43,17 +43,25 @@ export default function DigitalClock({ onMinus, onPlus }) {
         {/* Divider */}
         <div style={styles.divider} />
 
-        {/* Button grid — 3 rows × 2 cols, matching OEM labels */}
+        {/* Button grid — 3 rows × 3 cols, pill-shaped, matching OBC panel */}
         <div style={styles.btnGrid}>
           {[
-            ['h/DAT',  'min/DAT'],
-            ['HOUR',   'DATE'],
-            ['TEMP',   'MEMO'],
-          ].map(([left, right]) => (
-            <div key={left} style={styles.btnRow}>
-              <button style={styles.gridBtn}>{left}</button>
-              <button style={styles.gridBtn}>{right}</button>
+            ['HOUR',  'DATE',  'TEMP'],
+            ['SPEED', 'RANGE', 'TIMER'],
+            ['LAP',   'DIST',  'SET'],
+          ].map((row) => (
+            <div key={row[0]} style={styles.btnRow}>
+              {row.map(label => (
+                <button key={label} style={styles.gridBtn}>{label}</button>
+              ))}
             </div>
+          ))}
+        </div>
+
+        {/* Number row — 4 narrower buttons below the 3×3 grid */}
+        <div style={styles.numRow}>
+          {['1000', '100', '10', '1'].map(label => (
+            <button key={label} style={styles.numBtn}>{label}</button>
           ))}
         </div>
       </div>
@@ -77,11 +85,10 @@ const styles = {
     background: '#0d0d0d',
     border: '1px solid #2a2a2a',
     borderRadius: '8px',
-    padding: '18px 16px',
+    padding: '14px 16px 12px',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-evenly',
-    gap: '10px',
+    gap: '0',
   },
 
   displayRow: {
@@ -136,7 +143,7 @@ const styles = {
   divider: {
     height: '1px',
     background: '#2a2a2a',
-    margin: '0 -2px',
+    margin: '8px -2px 10px',
   },
 
   btnGrid: {
@@ -147,18 +154,41 @@ const styles = {
   btnRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    gap: '8px',
+    gap: '6px',
   },
   gridBtn: {
     flex: 1,
-    height: '20px',
+    height: '28px',
     background: '#1c1c1c',
-    border: '1px solid #383838',
-    borderRadius: '3px',
-    color: '#aaa',
-    fontSize: '7px',
+    border: '1px solid #404040',
+    borderRadius: '14px',
+    color: '#bbb',
+    fontSize: '8px',
     fontFamily: "'Courier New', monospace",
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
+    cursor: 'default',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    userSelect: 'none',
+  },
+
+  numRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: '5px',
+    marginTop: '8px',
+  },
+  numBtn: {
+    flex: 1,
+    height: '24px',
+    background: '#1c1c1c',
+    border: '1px solid #404040',
+    borderRadius: '12px',
+    color: '#bbb',
+    fontSize: '8px',
+    fontFamily: "'Courier New', monospace",
+    letterSpacing: '0.04em',
     cursor: 'default',
     display: 'flex',
     alignItems: 'center',
