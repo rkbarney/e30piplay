@@ -6,7 +6,8 @@ const LED = '#ff5500';
 // Height of each 7-segment digit in px (viewBox aspect is 14:24 → width = SEG_H * 14/24)
 const SEG_H = 78;
 
-// Segment activation table: indices [a, b, c, d, e, f, g]
+// AM/PM label height as a proportion of SEG_H — sized like a "5th character slot"
+const AMPM_SCALE = 0.42;
 // a=top, b=top-right, c=bot-right, d=bottom, e=bot-left, f=top-left, g=middle
 const DIGIT_SEGS = [
   [1,1,1,1,1,1,0], // 0
@@ -91,20 +92,18 @@ export default function DigitalClock({ onMinus, onPlus }) {
       {/* ── Display module ── */}
       <div style={styles.unit}>
 
-        {/* Top: AM/PM indicator + 7-segment time */}
+        {/* Top: 7-segment time + AM/PM label to the right */}
         <div style={styles.displayRow}>
-          <div style={styles.pips}>
-            <div style={{ ...styles.pip, opacity: isPM ? 0.15 : 1 }}>AM</div>
-            <div style={{ ...styles.pip, opacity: isPM ? 1 : 0.15 }}>PM</div>
-          </div>
           <div style={styles.timeDisplay}>
             <SevenSeg digit={hTens}  height={SEG_H} />
             <SevenSeg digit={hUnits} height={SEG_H} />
-            {/* narrow gap between HH and MM pairs */}
-            <div style={styles.segGap} />
+            {/* period decimal-point separator between HH and MM */}
+            <div style={styles.period} />
             <SevenSeg digit={mTens}  height={SEG_H} />
             <SevenSeg digit={mUnits} height={SEG_H} />
           </div>
+          {/* AM/PM inline label to the right of digits */}
+          <div style={styles.ampm}>{isPM ? 'PM' : 'AM'}</div>
         </div>
 
         {/* Divider */}
@@ -148,7 +147,7 @@ const styles = {
     width: '300px',
     height: '320px',
     boxSizing: 'border-box',
-    background: '#0d0d0d',
+    background: '#000',
     border: '1px solid #2a2a2a',
     borderRadius: '8px',
     padding: '14px 16px 12px',
@@ -159,36 +158,38 @@ const styles = {
 
   displayRow: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-
-  pips: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    flexShrink: 0,
-  },
-  pip: {
-    color: LED,
-    fontSize: '16px',
-    fontFamily: "'Courier New', monospace",
-    fontWeight: 'bold',
-    letterSpacing: '0.04em',
-    textShadow: `0 0 6px ${LED}`,
-    lineHeight: 1.1,
-    transition: 'opacity 0.3s',
+    alignItems: 'flex-end',
+    gap: '8px',
   },
 
   timeDisplay: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: '2px',
   },
 
-  segGap: {
-    width: '8px',
+  // Small LED decimal-point dot sitting at the bottom of the digit row
+  period: {
+    width: '5px',
+    height: '5px',
+    borderRadius: '2px',
+    background: LED,
     flexShrink: 0,
+    boxShadow: `0 0 5px ${LED}`,
+    marginBottom: '3px',
+  },
+
+  // Single inline AM/PM label to the right of the digits
+  ampm: {
+    color: LED,
+    fontSize: `${Math.round(SEG_H * AMPM_SCALE)}px`,
+    fontFamily: "'Courier New', monospace",
+    fontWeight: 'bold',
+    letterSpacing: '0.04em',
+    textShadow: `0 0 6px ${LED}`,
+    lineHeight: 1,
+    flexShrink: 0,
+    marginBottom: '4px',
   },
 
   divider: {
@@ -211,12 +212,13 @@ const styles = {
   gridBtn: {
     flex: 1,
     height: '28px',
-    background: '#1c1c1c',
-    border: '1px solid #404040',
+    background: '#000',
+    border: '1px solid #333',
     borderRadius: '14px',
-    color: '#bbb',
+    color: '#fff',
     fontSize: '8px',
     fontFamily: "'Courier New', monospace",
+    fontWeight: 'bold',
     letterSpacing: '0.06em',
     cursor: 'default',
     display: 'flex',
@@ -228,12 +230,13 @@ const styles = {
   numBtn: {
     flex: 1,
     height: '24px',
-    background: '#1c1c1c',
-    border: '1px solid #404040',
+    background: '#000',
+    border: '1px solid #333',
     borderRadius: '12px',
-    color: '#bbb',
+    color: '#fff',
     fontSize: '8px',
     fontFamily: "'Courier New', monospace",
+    fontWeight: 'bold',
     letterSpacing: '0.04em',
     cursor: 'default',
     display: 'flex',
