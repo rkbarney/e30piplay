@@ -213,7 +213,7 @@ sudo reboot
 
 **On the Pi today:** **`setup.sh`** installs the upstream **AppImage** by default (`~/.local/bin/react-carplay`). The AppImage is **pre-loaded at boot** as a sibling labwc client of Chromium (auto-iconified by a windowRule on `react-carplay`), so by the time the user taps **`+`** the dongle-detection / "connecting phone" splash is already past. Tap **`+`** → **POST `/api/launch-react-carplay`** → **`carplay-server.cjs`** runs **`wlrctl toplevel focus app_id:react-carplay`** — instant focus, no service churn, no terminal flash, no white loading screen. Return path: **`/api/return-to-kiosk`** → **`wlrctl toplevel minimize app_id:react-carplay`**.
 
-**SSH escape hatch:** `sudo /usr/local/bin/s52-carplay-switch.sh return`.
+**Exiting CarPlay/LIVI:** once the receiver has Wayland focus it covers the whole panel and swallows touch input, so there is no in-app way back. A small always-on-top overlay button (top-center, `scripts/s52-exit-overlay.py`, a `wlr-layer-shell` surface) is always tappable regardless of focus and calls `/api/return-to-kiosk` for you — works identically for `react-carplay` and `livi`. **SSH escape hatch (fallback):** `sudo /usr/local/bin/s52-carplay-switch.sh return`.
 
 **Still not implemented:** decoding CarPlay purely inside the Chromium window (would need e.g. **`node-carplay`** + video/WebSocket bridge).
 
