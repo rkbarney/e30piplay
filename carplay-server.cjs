@@ -14,6 +14,7 @@ const { execFile } = require('child_process');
 
 const PORT = Number.parseInt(process.env.PORT || '3001', 10) || 3001;
 const HOST = process.env.HOST || '127.0.0.1';
+const WLRCTL = '/usr/bin/wlrctl';
 
 // The systemd unit runs with WorkingDirectory=$APP_DIR, so cwd is the repo.
 const APP_DIR = process.env.APP_DIR || process.cwd();
@@ -89,12 +90,38 @@ function getReceiverConfig() {
   };
 }
 
+// Focus/minimize via wlrctl as the kiosk user (same session as carplayReady).
+// Avoids sudo→root Wayland socket issues that break LIVI after exit/restart.
+async function wlrctlToplevel(action, appId) {
+  await run(WLRCTL, ['toplevel', action, `app_id:${appId}`]);
+}
+
 async function launchCarplayReceiver() {
-  await run('sudo', ['-n', '/usr/local/bin/s52-carplay-switch.sh', 'launch']);
+  const { appId } = getReceiverConfig();
+  try {
+    await wlrctlToplevel('focus', appId);
+  } catch {
+    // Focus can fail when the window is already foreground; ok if it exists.
+    if (!(await carplayReady())) throw new Error(`no CarPlay toplevel (${appId}) to focus`);
+  }
 }
 
 async function returnToKiosk() {
-  await run('sudo', ['-n', '/usr/local/bin/s52-carplay-switch.sh', 'return']);
+  const { appId } = getReceiverConfig();
+  try {
+    await wlrctlToplevel('minimize', appId);
+  } catch {
+    /* already exited / iconified — kiosk is visible either way */
+  }
+}
+
+async function receiverProcessRunning(processName) {
+  try {
+    await run('pgrep', ['-x', processName]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function sleep(ms) {
@@ -128,7 +155,12 @@ async function restartCarplayReceiver() {
       await sleep(500);
     }
     if (await carplayReady()) {
-      throw new Error(`${processName} toplevel did not disappear after kill`);
+      // LIVI exit can leave a stale labwc handle while the process is gone.
+      if (!(await receiverProcessRunning(processName))) {
+        /* ghost toplevel — respawn will register a fresh handle */
+      } else {
+        throw new Error(`${processName} toplevel did not disappear after kill`);
+      }
     }
   }
 
@@ -252,8 +284,6 @@ function readJson(req, limit = 10000) {
     req.on('error', () => resolve({}));
   });
 }
-
-const WLRCTL = '/usr/bin/wlrctl';
 
 // Used by the React splash to know when the receiver is alive as a labwc
 // toplevel — i.e. when tapping `+` will be instant.
