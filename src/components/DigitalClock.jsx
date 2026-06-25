@@ -43,8 +43,9 @@ export default function DigitalClock({ onMinus, onPlus }) {
         {/* Divider */}
         <div style={styles.divider} />
 
-        {/* Button grid — 3 rows × 3 cols, pill-shaped, matching OBC panel */}
-        <div style={styles.btnGrid}>
+        {/* All button rows in one flex container that fills remaining height */}
+        <div style={styles.btnSection}>
+          {/* 3×3 pill grid rows */}
           {[
             ['HOUR',  'DATE',  'TEMP'],
             ['SPEED', 'RANGE', 'TIMER'],
@@ -56,13 +57,13 @@ export default function DigitalClock({ onMinus, onPlus }) {
               ))}
             </div>
           ))}
-        </div>
 
-        {/* Number row — 4 narrower buttons below the 3×3 grid */}
-        <div style={styles.numRow}>
-          {['1000', '100', '10', '1'].map(label => (
-            <button key={label} style={styles.numBtn}>{label}</button>
-          ))}
+          {/* Number row — 4 narrower buttons */}
+          <div style={styles.btnRow}>
+            {['1000', '100', '10', '1'].map(label => (
+              <button key={label} style={styles.numBtn}>{label}</button>
+            ))}
+          </div>
         </div>
       </div>
     </ScreenFrame>
@@ -146,10 +147,11 @@ const styles = {
     margin: '8px -2px 10px',
   },
 
-  btnGrid: {
+  btnSection: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px',
+    justifyContent: 'space-between',
   },
   btnRow: {
     display: 'flex',
@@ -173,12 +175,6 @@ const styles = {
     userSelect: 'none',
   },
 
-  numRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: '5px',
-    marginTop: '8px',
-  },
   numBtn: {
     flex: 1,
     height: '24px',
