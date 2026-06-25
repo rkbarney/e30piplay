@@ -192,6 +192,19 @@ server {
     root /var/www/s52-display;
     index index.html;
 
+    # Read-only ROM list for Games UI — safe to expose on LAN (no deploy/control).
+    location = /api/roms {
+        limit_except GET {
+            deny all;
+        }
+        proxy_pass         http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header   Host \$host;
+        proxy_set_header   X-Real-IP \$remote_addr;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+    }
+
     # ^~ stops regex/other locations from stealing /api/* ; POST must not hit try_files (→ 405).
     #
     # Loopback-only: the control API can switch branches, pull+build+deploy, and

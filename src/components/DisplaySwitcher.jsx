@@ -1,59 +1,62 @@
-import { useState, useCallback, useEffect } from 'react';
-import LogoIntro       from './LogoIntro';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import FactoryClock    from './FactoryClock';
 import DigitalClock    from './DigitalClock';
 import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
 import Games           from './Games';
+import Hal             from './Hal';
 
-// Faces cycled by the − button (Games is reached after SystemScreen)
-const CLOCK_FACES = ['factory', 'digital', 'system', 'games'];
+// Faces cycled by the − button — one loop, HAL included, so it's always
+// reachable again no matter where you wander off to.
+const FACES = ['hal', 'factory', 'digital', 'system', 'games'];
+
+const BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? 'hal';
 
 export default function DisplaySwitcher() {
-  // Boot goes straight to the spinning roundel ('logo'), then to the clock.
-  const [screen,    setScreen]    = useState('logo');
-  const [clockFace, setClockFace] = useState('factory');
+  // `screen` is either a face name (from FACES) or 'carplay'.
+  const [screen, setScreen] = useState(BOOT_SCREEN);
+  const lastFaceRef = useRef(BOOT_SCREEN);
+  if (FACES.includes(screen)) lastFaceRef.current = screen;
 
-  const handleLogoComplete = useCallback(() => setScreen('clock'), []);
+  // Voice intents from the HAL speech sidecar (see useHalVoice) map onto the
+  // same navigation the +/− buttons already drive.
+  const handleHalIntent = useCallback((intent) => {
+    if (intent === 'start_carplay') setScreen('carplay');
+    else if (intent === 'exit_carplay') setScreen('hal');
+    else if (intent === 'go_games') setScreen('games');
+    else if (intent === 'go_clock') setScreen('factory');
+    else if (intent === 'go_hal') setScreen('hal');
+  }, []);
 
-  // − cycles through clock faces
+  // − cycles through every face, looping back around to HAL.
   const handleMinus = useCallback((e) => {
     e.stopPropagation();
-    setClockFace(prev => {
-      const idx = CLOCK_FACES.indexOf(prev);
-      return CLOCK_FACES[(idx + 1) % CLOCK_FACES.length];
+    setScreen(prev => {
+      const idx = FACES.indexOf(prev);
+      return FACES[(idx + 1) % FACES.length];
     });
   }, []);
 
-  // + enters CarPlay (auto-opens it); if already in CarPlay, go back to clock
+  // + enters CarPlay (auto-opens it); if already in CarPlay, go back to
+  // whichever face you were last on.
   const handlePlus = useCallback((e) => {
     e.stopPropagation();
-    setScreen(prev => (prev === 'carplay' ? 'clock' : 'carplay'));
+    setScreen(prev => (prev === 'carplay' ? lastFaceRef.current : 'carplay'));
   }, []);
 
-  const isClockScreen = screen === 'clock';
-
-  // Boot timeline (spinning roundel) is white so the startup white flash blends
-  // in; the screen flips to black once the clock / CarPlay surface takes over.
-  const darkScreen = screen === 'clock' || screen === 'carplay';
   useEffect(() => {
-    document.body.classList.toggle('clock-active', darkScreen);
+    document.body.classList.add('clock-active');
     return () => document.body.classList.remove('clock-active');
-  }, [darkScreen]);
+  }, []);
 
   return (
-    <div style={{ ...styles.container, background: darkScreen ? '#000' : '#fff' }}>
-      {screen === 'logo'    && <LogoIntro  onComplete={handleLogoComplete} />}
+    <div style={{ ...styles.container, background: '#000' }}>
+      {screen === 'hal'     && <Hal onMinus={handleMinus} onPlus={handlePlus} onIntent={handleHalIntent} />}
       {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
-
-      {isClockScreen && clockFace === 'factory' &&
-        <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {isClockScreen && clockFace === 'digital' &&
-        <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {isClockScreen && clockFace === 'system' &&
-        <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
-      {isClockScreen && clockFace === 'games' &&
-        <Games onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'factory' && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'digital' && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'system'  && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'games'   && <Games onMinus={handleMinus} onPlus={handlePlus} />}
     </div>
   );
 }
