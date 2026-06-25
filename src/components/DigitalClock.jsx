@@ -113,9 +113,9 @@ export default function DigitalClock({ onMinus, onPlus }) {
         <div style={styles.btnSection}>
           {/* 3×3 pill grid rows */}
           {[
-            ['HOUR',  'DATE',  'TEMP'],
-            ['SPEED', 'RANGE', 'TIMER'],
-            ['LAP',   'DIST',  'SET'],
+            ['HR-DATE', 'AVG MPH', 'M MPH'],
+            ['AVG MPG', 'RANGE',   'TIMER'],
+            ['TEMP',    'CODE',    'SET-RES'],
           ].map((row) => (
             <div key={row[0]} style={styles.btnRow}>
               {row.map(label => (
