@@ -124,3 +124,12 @@ html.clock-active {
   position: relative;
   overflow: hidden;
 }
+
+/* Games ROM list — scrollable on touch, no visible scrollbar */
+.games-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.games-scroll::-webkit-scrollbar {
+  display: none;
+}

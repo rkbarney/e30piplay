@@ -224,7 +224,7 @@ export default function Games({ onMinus, onPlus }) {
           )}
         </div>
         <div style={styles.divider} />
-        <div style={styles.body}>{body}</div>
+        <div className="games-scroll" style={styles.body}>{body}</div>
       </div>
     </ScreenFrame>
   );
