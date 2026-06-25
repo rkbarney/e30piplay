@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
-import useHalVoice from '../useHalVoice';
 
 // How long the lens takes to glow up to full brightness on mount.
 const BOOT_MS = 2400;
@@ -36,9 +35,7 @@ const REACH = { idle: 1, listening: 1.25, speaking: 1.4 };
  * DeviantArt, https://www.deviantart.com/jayaprime/art/HAL-9000-Animated-Fractal-455267246
  * — that work is the artist's own and isn't used here.)
  */
-export default function Hal({ onMinus, onPlus, onIntent }) {
-  const voiceState = useHalVoice(onIntent);
-
+export default function Hal({ onMinus, onPlus, voiceState = 'idle' }) {
   // Lens is dark on mount and fades up — the chrome bezel is always visible,
   // only the "light" itself powers on.
   const [booted, setBooted] = useState(false);
@@ -112,7 +109,7 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
 Hal.propTypes = {
   onMinus: PropTypes.func,
   onPlus: PropTypes.func,
-  onIntent: PropTypes.func,
+  voiceState: PropTypes.oneOf(['idle', 'listening', 'speaking']),
 };
 
 const RED = '#d40000';

@@ -12,6 +12,7 @@
 #   S52_CUSTOM_HDMI=0        # 1 = add hdmi_group/mode/cvt example for 480×320 panel
 #   S52_SKIP_REACT_CARPLAY_APPIMAGE=1   # skip upstream Electron download (offline / headless)
 #   REACT_CARPLAY_VERSION=4.0.5         # passed through to install-react-carplay-appimage.sh
+#   S52_SKIP_HAL_VOICE=1     # skip the HAL voice sidecar (whisper.cpp build is slow/offline-unfriendly)
 #
 # Do NOT use `source` or `. setup.sh`.
 # =============================================================================
@@ -23,6 +24,7 @@ APP_DIR="${APP_DIR:-$HOME/e30piplay}"
 S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
+S52_SKIP_HAL_VOICE="${S52_SKIP_HAL_VOICE:-0}"
 # Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
 # install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
 # after you have confirmed key-based SSH works.
@@ -64,10 +66,15 @@ sudo apt-get install -y -qq \
   avahi-daemon \
   python3 \
   python3-gi \
+  python3-venv \
   gir1.2-gtk-3.0 \
   gir1.2-gtklayershell-0.1 \
   rsync \
   git \
+  cmake \
+  build-essential \
+  portaudio19-dev \
+  espeak-ng \
   zlib1g-dev
 
 sudo systemctl enable ssh
@@ -539,6 +546,55 @@ fi
 echo "[10b] Applying CarPlay DongleConfig (scripts/s52-carplay-config.json)…"
 bash "$SOURCE_DIR/scripts/s52-apply-carplay-config.sh" || \
   echo "  NOTE: CarPlay config apply skipped/failed (non-fatal)." >&2
+
+# ── 11. HAL voice sidecar ("HAL, switch to CarPlay") ──────────────────────────
+# Offline whisper.cpp STT via pywhispercpp, which builds whisper.cpp from
+# source on first `pip install` — slow and needs internet once for the build
+# toolchain + model download. Skippable (S52_SKIP_HAL_VOICE=1); the kiosk UI
+# already no-ops cleanly with no sidecar running (see src/useHalVoice.js).
+if [[ "$S52_SKIP_HAL_VOICE" == "1" ]]; then
+  echo "[11/11] Skipping HAL voice sidecar (S52_SKIP_HAL_VOICE=1)."
+  echo "        Install later: rerun setup.sh without S52_SKIP_HAL_VOICE=1"
+else
+  echo "[11/11] HAL voice sidecar (whisper.cpp STT + espeak-ng TTS)…"
+  VENV_DIR="$HOME/.venvs/s52-hal-voice"
+  python3 -m venv "$VENV_DIR"
+  if "$VENV_DIR/bin/pip" install -q -r "$SOURCE_DIR/scripts/s52-hal-voice-requirements.txt"; then
+    install -m 755 "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"
+
+    sudo tee /etc/systemd/system/s52-hal-voice.service > /dev/null <<SERVICE
+[Unit]
+Description=S52 HAL voice command sidecar (offline STT wake word)
+After=network.target pipewire.service wireplumber.service
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=-/home/$SERVICE_USER/.config/s52-hal-voice.env
+Environment=XDG_RUNTIME_DIR=/run/user/$S52_UID
+ExecStart=$VENV_DIR/bin/python3 $APP_DIR/scripts/s52-hal-voice.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable s52-hal-voice
+    sudo systemctl restart s52-hal-voice || \
+      echo "  NOTE: s52-hal-voice failed to start — journalctl -u s52-hal-voice -n 30 --no-pager" >&2
+    echo "    HAL voice sidecar: installed (config: ~/.config/s52-hal-voice.env, see scripts/s52-hal-voice.env.example)"
+  else
+    echo "" >&2
+    echo "  WARNING: pywhispercpp install failed (network, or whisper.cpp build toolchain)." >&2
+    echo "           The kiosk works without it; install later:" >&2
+    echo "             $VENV_DIR/bin/pip install -r $APP_DIR/scripts/s52-hal-voice-requirements.txt" >&2
+    echo "" >&2
+  fi
+  unset VENV_DIR
+fi
 
 echo ""
 echo "============================================"

@@ -5,6 +5,7 @@ import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
 import Games           from './Games';
 import Hal             from './Hal';
+import useHalVoice     from '../useHalVoice';
 
 // Faces cycled by the − button — one loop, HAL included, so it's always
 // reachable again no matter where you wander off to.
@@ -27,6 +28,11 @@ export default function DisplaySwitcher() {
     else if (intent === 'go_clock') setScreen('factory');
     else if (intent === 'go_hal') setScreen('hal');
   }, []);
+
+  // Listening lives here (not inside the Hal screen) so "HAL, switch to
+  // CarPlay" works from any face. It's only suspended once CarPlay is
+  // actually on screen — the dongle owns the mic for Siri at that point.
+  const voiceState = useHalVoice(handleHalIntent, screen !== 'carplay');
 
   // − cycles through every face, looping back around to HAL.
   const handleMinus = useCallback((e) => {
@@ -51,7 +57,7 @@ export default function DisplaySwitcher() {
 
   return (
     <div style={{ ...styles.container, background: '#000' }}>
-      {screen === 'hal'     && <Hal onMinus={handleMinus} onPlus={handlePlus} onIntent={handleHalIntent} />}
+      {screen === 'hal'     && <Hal onMinus={handleMinus} onPlus={handlePlus} voiceState={voiceState} />}
       {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
       {screen === 'factory' && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'digital' && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
