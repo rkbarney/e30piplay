@@ -43,6 +43,8 @@
       return;
     }
 
+    var parentOrigin = location.origin;
+
     function postResult(action, ok, detail) {
       try {
         window.parent.postMessage({
@@ -50,8 +52,12 @@
           action: action,
           ok: ok,
           detail: detail || null,
-        }, '*');
+        }, parentOrigin);
       } catch (e) {}
+    }
+
+    function isParentMessage(e) {
+      return e.origin === parentOrigin && e.source === window.parent;
     }
 
     function getEmu() {
@@ -93,6 +99,7 @@
     }
 
     window.addEventListener('message', function (e) {
+      if (!isParentMessage(e)) return;
       var msg = e.data;
       if (!msg || msg.type !== 's52-emulator') return;
 
@@ -158,7 +165,7 @@
 
     window.EJS_ready = function () {
       try {
-        window.parent.postMessage({ type: 's52-emulator-ready' }, '*');
+        window.parent.postMessage({ type: 's52-emulator-ready' }, parentOrigin);
       } catch (e) {}
     };
 
@@ -174,7 +181,7 @@
     window.EJS_VirtualGamepad  = false;
     window.EJS_DEBUG_XX        = true;
     window.EJS_defaultOptions  = {
-      'save-save-interval': 10,
+      'save-save-interval': 15,
       'save-state-location': 'browser',
     };
 

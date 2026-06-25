@@ -24,7 +24,7 @@ rsync -a --delete --exclude emulatorjs "$APP_DIR/dist/" "$WEB_ROOT/"
 # If the build included emulatorjs/ (install-emulatorjs.sh was run before
 # npm run build), re-sync it.  This is a no-op if the dir doesn't exist.
 if [[ -d "$APP_DIR/dist/emulatorjs" ]]; then
-  rsync -a "$APP_DIR/dist/emulatorjs/" "$WEB_ROOT/emulatorjs/"
+  rsync -a --delete "$APP_DIR/dist/emulatorjs/" "$WEB_ROOT/emulatorjs/"
 fi
 
 # Restart the API server AFTER this request returns. carplay-server is the very

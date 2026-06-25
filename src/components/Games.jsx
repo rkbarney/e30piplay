@@ -13,6 +13,7 @@ import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
+const PARENT_ORIGIN = window.location.origin;
 const LED = '#ff5500';
 const AMBER = '#ffb300';
 const MONO = "'Courier New', monospace";
@@ -21,8 +22,14 @@ function titleCase(str) {
   return str.replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function isEmulatorFrameMessage(e, iframe) {
+  if (e.origin !== PARENT_ORIGIN) return false;
+  const win = iframe?.contentWindow;
+  return win != null && e.source === win;
+}
+
 function postEmulator(iframe, action) {
-  iframe?.contentWindow?.postMessage({ type: 's52-emulator', action }, '*');
+  iframe?.contentWindow?.postMessage({ type: 's52-emulator', action }, PARENT_ORIGIN);
 }
 
 export default function Games({ onMinus, onPlus }) {
@@ -52,6 +59,7 @@ export default function Games({ onMinus, onPlus }) {
 
   useEffect(() => {
     const onMsg = (e) => {
+      if (!isEmulatorFrameMessage(e, iframeRef.current)) return;
       const msg = e.data;
       if (!msg) return;
       if (msg.type === 's52-emulator-ready') {
@@ -98,6 +106,7 @@ export default function Games({ onMinus, onPlus }) {
     };
 
     const onResult = (e) => {
+      if (!isEmulatorFrameMessage(e, iframe)) return;
       const msg = e.data;
       if (msg?.type === 's52-emulator-result' && msg.action === 'saveBattery') {
         finish();
