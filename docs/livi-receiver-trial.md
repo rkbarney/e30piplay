@@ -58,12 +58,14 @@ ssh s52 'bash ~/e30piplay/scripts/s52-enable-livi-receiver.sh react-carplay'
 
 ## Open integration items (resolve on the Pi)
 
-- **Window focus / `+` handoff.** The UI focuses CarPlay via `wlrctl` on
-  `app_id:react-carplay` (`scripts/s52-carplay-switch.sh`, `s52-labwc-rc.xml`
-  window rule). LIVI's window class is **`dev.f-io.livi`**. Confirm the live
-  app_id with `wlrctl toplevel list`, then add a matching rule + switch target so
-  the `+` button and the auto-iconify behave the same. (For the first drive test
-  LIVI can just run full-screen; polish the handoff once it proves it holds.)
+- ~~**Window focus / `+` handoff.**~~ Resolved: `s52-carplay-switch.sh` and the
+  `s52-labwc-rc.xml` window rules already key off `dev.f-io.livi` vs
+  `react-carplay` via `~/.config/s52-carplay-receiver.env`, so `+` and
+  auto-iconify behave the same for both. The remaining gap was the *return*
+  path while the receiver is focused full-screen — fixed by the always-on-top
+  exit overlay (`scripts/s52-exit-overlay.py`, see README "CarPlay integration
+  status"), which works identically for either receiver since it never
+  depends on `app_id`.
 - **Audio routing.** LIVI uses the GStreamer/Pulse path; confirm it lands on the
   USB DAC sink (our `~/.config/s52-carplay-audio.env` `PULSE_SINK`) → Kenwood AUX,
   not HDMI.

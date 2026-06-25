@@ -9,15 +9,21 @@
 # react-carplay launch loop — which is why /api/carplay-ready never went
 # true and the React splash hung forever.
 #
-# We start three clients of the labwc session:
+# We start four clients of the labwc session:
 #   1. swaybg — solid-black wallpaper layer; we sleep briefly after it so
 #      its surface commits before Chromium maps (avoids a one-frame race
 #      with labwc's empty scene). Chromium uses opaque black via
 #      --default-background-color=000000 in s52-kiosk-inner.sh.
 #   2. Chromium kiosk (s52-kiosk-inner.sh) — the visible window on boot.
-#   3. The upstream react-carplay AppImage — pre-loaded but auto-iconified
-#      by the windowRule in ~/.config/labwc/rc.xml. The user never sees its
-#      "looking for dongle" startup; by the time they tap `+`, it is warm.
+#   3. The exit overlay (s52-exit-overlay.py) — a wlr-layer-shell surface
+#      that always renders above both the kiosk and the CarPlay receiver,
+#      regardless of which one has Wayland focus. Tapping it calls
+#      /api/return-to-kiosk, the only input path back to the kiosk once the
+#      receiver covers the panel (see docs/tasks/exit-overlay-button.md).
+#   4. The upstream react-carplay AppImage (or LIVI) — pre-loaded but
+#      auto-iconified by the windowRule in ~/.config/labwc/rc.xml. The user
+#      never sees its "looking for dongle" startup; by the time they tap
+#      `+`, it is warm.
 #
 # Tapping `+` posts /api/launch-react-carplay → carplay-server.cjs →
 # s52-carplay-switch.sh → wlrctl toplevel focus app_id:react-carplay. That
@@ -116,6 +122,16 @@ if command -v unclutter >/dev/null 2>&1; then
 fi
 
 "${HOME}/.local/bin/s52-kiosk-inner.sh" &
+
+# Always-on-top "back to kiosk" overlay — see header comment, item 3. Runs
+# regardless of which CarPlay receiver is configured, and exits cleanly with
+# the labwc session like every other client here.
+EXIT_OVERLAY="${S52_EXIT_OVERLAY:-${HOME}/.local/bin/s52-exit-overlay.py}"
+if [ -x "${EXIT_OVERLAY}" ]; then
+  "${EXIT_OVERLAY}" >>/tmp/s52-exit-overlay.log 2>&1 &
+else
+  echo "[$(date)] missing ${EXIT_OVERLAY}; run setup.sh to install it" >&2
+fi
 
 # Background CarPlay. Pi 5 V3D init races with Chromium's GPU process on cold
 # boot — we delay a few seconds and force software paint on the AppImage so

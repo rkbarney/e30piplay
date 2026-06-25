@@ -63,6 +63,9 @@ sudo apt-get install -y -qq \
   openssh-server \
   avahi-daemon \
   python3 \
+  python3-gi \
+  gir1.2-gtk-3.0 \
+  gir1.2-gtklayershell-0.1 \
   rsync \
   git \
   zlib1g-dev
@@ -398,6 +401,7 @@ mkdir -p "/home/$SERVICE_USER/.config/labwc"
 
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-inner.sh"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
+install -m 755 "$SOURCE_DIR/scripts/s52-exit-overlay.py" "/home/$SERVICE_USER/.local/bin/s52-exit-overlay.py"
 
 # labwc autostart + rc.xml. We always write these — they are appliance config,
 # not user prefs. Comment out the install if you want to customise rc.xml by hand.

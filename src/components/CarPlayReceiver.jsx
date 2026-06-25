@@ -6,7 +6,11 @@
  * back here. Two clear paths, both always tappable:
  *   • the big RESTART CARPLAY button (content) — full kill+respawn (/api/relaunch),
  *     the reliable kick for a stalled "searching for phone" handshake.
- *   • BACK (full-width button below) — drop to the clock.
+ *   • BACK (full-width button below) — calls /api/return-to-kiosk to minimize the
+ *     receiver's Wayland toplevel, then drops the local view to the clock. This
+ *     button is only reachable from inside the React app, though — it's covered
+ *     by the receiver's full-screen window in practice; the always-on-top overlay
+ *     (scripts/s52-exit-overlay.py) is the real way back while CarPlay is focused.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -47,6 +51,15 @@ export default function CarPlayReceiver({ onBack }) {
     openCarplay();
   }, [openCarplay]);
 
+  // Minimize the receiver's Wayland toplevel before handing control back to the
+  // kiosk's local state — without this the receiver stays focused/full-screen
+  // and the kiosk UI underneath is unreachable even though React thinks it's
+  // showing the clock again.
+  const handleBack = useCallback(() => {
+    call('/api/return-to-kiosk', 'idle');
+    onBack?.();
+  }, [call, onBack]);
+
   const busy = phase === 'opening' || phase === 'restarting';
   const label =
     phase === 'opening' ? 'OPENING…' : phase === 'restarting' ? 'RESTARTING…' : 'RESTART\nCARPLAY';
@@ -54,7 +67,7 @@ export default function CarPlayReceiver({ onBack }) {
   return (
     <ScreenFrame
       variant="amber"
-      buttons={[{ key: 'back', label: 'BACK', onClick: onBack }]}
+      buttons={[{ key: 'back', label: 'BACK', onClick: handleBack }]}
     >
       <div style={styles.title}>CARPLAY</div>
       <button
