@@ -17,7 +17,15 @@ if [[ ! -d "$APP_DIR/dist" ]]; then
   exit 1
 fi
 
-rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
+# Deploy the app, but preserve any existing emulatorjs/ directory inside
+# WEB_ROOT — it is not in dist/ when build ran without install-emulatorjs.sh.
+rsync -a --delete --exclude emulatorjs "$APP_DIR/dist/" "$WEB_ROOT/"
+
+# If the build included emulatorjs/ (install-emulatorjs.sh was run before
+# npm run build), re-sync it.  This is a no-op if the dir doesn't exist.
+if [[ -d "$APP_DIR/dist/emulatorjs" ]]; then
+  rsync -a --delete "$APP_DIR/dist/emulatorjs/" "$WEB_ROOT/emulatorjs/"
+fi
 
 # Restart the API server AFTER this request returns. carplay-server is the very
 # process handling POST /api/update (this script runs inside that request), so a

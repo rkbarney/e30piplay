@@ -13,6 +13,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 const PORT = Number.parseInt(process.env.PORT || '3001', 10) || 3001;
+const HOST = process.env.HOST || '127.0.0.1';
 
 // The systemd unit runs with WorkingDirectory=$APP_DIR, so cwd is the repo.
 const APP_DIR = process.env.APP_DIR || process.cwd();
@@ -266,6 +267,54 @@ async function carplayReady() {
   }
 }
 
+// ── ROM listing ───────────────────────────────────────────────────────────────
+// Maps file extension → EmulatorJS system name (EJS_core / config.system).
+// NES uses the 'nes' system (fceumm core).
+// Both .gb and .gbc use the 'gb' system — the gambatte core handles both
+// Game Boy and Game Boy Color ROMs under the same system name.
+// SNES uses the 'snes' system (snes9x core).
+const EXT_TO_CORE = {
+  '.nes': 'nes',
+  '.gb':  'gb',
+  '.gbc': 'gb',
+  '.sfc': 'snes',
+  '.smc': 'snes',
+};
+
+function romGameId(file) {
+  let h = 0;
+  for (let i = 0; i < file.length; i += 1) {
+    h = (Math.imul(31, h) + file.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) || 1;
+}
+
+// Returns [{id, name, url, core}] sorted by name, or [] if the roms/ dir is absent.
+// ROM bytes are served statically by nginx at /roms/<filename>.
+function listRoms() {
+  const dir = path.join(APP_DIR, 'roms');
+  let entries;
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return []; // dir not yet created — treat as empty
+  }
+  const roms = [];
+  for (const file of entries) {
+    const ext  = path.extname(file).toLowerCase();
+    const core = EXT_TO_CORE[ext];
+    if (!core) continue; // skip unknown extensions
+    roms.push({
+      id:   romGameId(file),
+      name: path.basename(file, ext).replace(/[_-]+/g, ' ').trim(),
+      url:  `/roms/${encodeURIComponent(file)}`,
+      core,
+    });
+  }
+  roms.sort((a, b) => a.name.localeCompare(b.name));
+  return roms;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -294,6 +343,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/version') {
       json(res, 200, { ok: true, ...(await getVersion()) });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/roms') {
+      json(res, 200, listRoms());
       return;
     }
 
@@ -340,7 +394,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, HOST, () => {
   // eslint-disable-next-line no-console
-  console.log(`carplay-server listening on 127.0.0.1:${PORT}`);
+  console.log(`carplay-server listening on ${HOST}:${PORT}`);
 });
