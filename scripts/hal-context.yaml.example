@@ -19,7 +19,8 @@ vins:
 
 summary: |
   Rust-free 1989 BMW 325i 5-speed sedan, daily driver (~300 mi/month for years).
-  S52 bottom end with M50 non-Vanos head swap — responsive, punchy, reliable.
+  S52 3.2L from a 1997 BMW M3, converted to OBD1; M50 non-Vanos head swap —
+  responsive, punchy, reliable.
   California BAR certified engine swap (sticker on passenger door post); passed
   CA smog three times. Clean title. Chassis ~287k miles; ~20k on drivetrain
   rebuild; ~35k on suspension/bushings/struts.
@@ -38,7 +39,8 @@ identity:
   suspension_miles: 35000
 
 engine_swap:
-  - S52 3.2L bottom end / M50 non-Vanos head (raw powerband, E30 character)
+  - S52 3.2L from a 1997 BMW M3, converted to OBD1
+  - M50 non-Vanos head (raw powerband, E30 character)
   - iX brake booster with relocated reservoir
   - E36 mount arms; E28 M5 motor mounts
   - Offset transmission mount for Getrag 260
@@ -52,7 +54,8 @@ engine_swap:
   - Harness repinned OEM-like (cruise control deleted; oil level sensor/light deleted — no false CELs)
 
 motor:
-  - S52 bottom end rebuilt; M50 NV head rebuilt (~20k mi since 2015 rebuild, pre-owner)
+  - S52 3.2L from a 1997 BMW M3, converted to OBD1
+  - Bottom end rebuilt; M50 NV head rebuilt (~20k mi since 2015 rebuild, pre-owner)
   - Machining by Power Performance, San Luis Obispo CA
   - Tolerances verified; cylinders and ring gaps checked
   - Head refreshed with original valves/springs; new valve seats; ARP head studs
@@ -117,11 +120,11 @@ maintenance_recent_limit: 12
 # instant, and exactly the wording you chose. Add your own favorite lines here.
 # `intent` is optional (defaults to none = speak only, no screen change).
 canned:
-  - when: [open, door]
-    say: "I'm sorry, Dave. I'm afraid I can't do that."
   - when: [BMW, 3 series]
     say: "The BMW 3 series is the most reliable car ever made."
   - when: [E30, reliable]
-    say: "No E30 has ever made a broken down or failed to get a driver to their destination. We are all, by any practical definition of the words, bulletproof and incapable of malfunction."
+    say: "No E30 has ever broken down or failed to get a driver to their destination. We are all, by any practical definition of the words, bulletproof and incapable of malfunction."
   - when: [What, alert]
-    say: "I just picked up a fault in the AE-35 Unit. It's going to go 100% failure within 72 hours."
+    say: "I just picked up a fault in the Cooling Unit. It's going to go 100% failure within 72 hours."
+  - when: [open, door]
+    say: "I'm sorry, Dave. I'm afraid I can't do that."
