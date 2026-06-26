@@ -63,6 +63,8 @@ PHRASE_COALESCE_SEC = 4.0    # merge split utterances ("how?" + "switch to carpl
 LEVEL_ATTACK = float(os.environ.get('S52_HAL_LEVEL_ATTACK', '0.65'))
 LEVEL_RELEASE = float(os.environ.get('S52_HAL_LEVEL_RELEASE', '0.11'))
 LEVEL_BROADCAST_MS = int(os.environ.get('S52_HAL_LEVEL_MS', '33'))
+# USB mics (Yeti) often capture stereo; mono-from-left reads ~half RMS.
+LEVEL_GAIN = float(os.environ.get('S52_HAL_LEVEL_GAIN', '2.5'))
 
 WHISPER_MODEL = os.environ.get('S52_HAL_WHISPER_MODEL', 'tiny.en')
 
@@ -95,10 +97,19 @@ WAKE_WORDS = ('hal', 'h a l', 'hal 9000', 'hal nine thousand')
 WAKE_HOMOPHONES_START = ('how', 'hall', 'hell')
 # Avoid treating bare "how are you…" as a failed HAL command.
 WAKE_HOMOPHONE_HINTS = frozenset({
-    'switch', 'car', 'carplay', 'play', 'games', 'clock', 'system', 'exit', 'go',
+    'switch', 'car', 'carplay', 'play', 'start', 'open',
+    'games', 'clock', 'system', 'exit', 'go',
 })
 COMMANDS = {
-    'start_carplay': (('carplay',), (('car', 'play'),)),
+    'start_carplay': (
+        ('carplay',),
+        (('car', 'play'),),
+        (('switch', 'carplay'),),
+        (('switch', 'car', 'play'),),
+        (('start', 'carplay'),),
+        (('start', 'car', 'play'),),
+        (('open', 'carplay'),),
+    ),
 }
 _WHISPER_NOISE = frozenset({'blank audio', '[blank audio]', 'blank_audio'})
 
@@ -367,19 +378,48 @@ def pick_input_device():
     return default['index']
 
 
-def pick_capture_rate(device):
+def pick_capture_rate(device, channels):
     """Open the mic at a rate the hardware actually supports."""
     override = os.environ.get('S52_HAL_CAPTURE_RATE')
     candidates = (int(override),) if override else CAPTURE_RATE_CANDIDATES
     for rate in candidates:
         try:
             sd.check_input_settings(
-                device=device, samplerate=rate, channels=1, dtype='int16',
+                device=device, samplerate=rate, channels=channels, dtype='int16',
             )
             return rate
         except sd.PortAudioError:
             continue
     raise RuntimeError('no supported mic sample rate (tried %s)' % (candidates,))
+
+
+def pick_capture_channels(device, rate):
+    """Prefer stereo when available — mix down for VAD/level (Yeti, etc.)."""
+    for channels in (2, 1):
+        try:
+            sd.check_input_settings(
+                device=device, samplerate=rate, channels=channels, dtype='int16',
+            )
+            return channels
+        except sd.PortAudioError:
+            continue
+    return 1
+
+
+def pick_capture_settings(device):
+    """Return (rate, channels) the mic actually supports."""
+    for channels in (2, 1):
+        try:
+            return pick_capture_rate(device, channels), channels
+        except RuntimeError:
+            continue
+    raise RuntimeError('no supported mic input settings')
+
+
+def pcm_to_mono(pcm_int16, channels):
+    if channels == 1 or pcm_int16.size == 0:
+        return pcm_int16
+    return pcm_int16.reshape(-1, channels).mean(axis=1).astype(np.int16)
 
 
 def resample_to_16k(pcm_int16, from_rate, out_samples=FRAME_SAMPLES):
@@ -516,7 +556,8 @@ class HalVoiceServer:
             raw = self._level_raw
             k = LEVEL_ATTACK if raw > self._level_smooth else LEVEL_RELEASE
             self._level_smooth += (raw - self._level_smooth) * k
-            await self.broadcast({'type': 'level', 'value': round(self._level_smooth, 4)})
+            boosted = min(1.0, self._level_smooth * LEVEL_GAIN)
+            await self.broadcast({'type': 'level', 'value': round(boosted, 4)})
 
     async def handle_client(self, websocket):
         self.clients.add(websocket)
@@ -529,6 +570,8 @@ class HalVoiceServer:
                 if msg.get('type') == 'set_active':
                     self.active = bool(msg.get('active', True))
                     log.info('listening %s', 'resumed' if self.active else 'paused (CarPlay foregrounded)')
+        except websockets.exceptions.ConnectionClosed:
+            pass
         finally:
             self.clients.discard(websocket)
 
@@ -614,9 +657,12 @@ class HalVoiceServer:
         """VAD-gated mic capture: only buffers/transcribes while someone is
         actually talking, so an idle cabin doesn't spin whisper.cpp."""
         input_device = pick_input_device()
-        capture_rate = pick_capture_rate(input_device)
+        capture_rate, capture_channels = pick_capture_settings(input_device)
         capture_frame_samples = capture_rate * FRAME_MS // 1000
-        log.info('mic capture at %d Hz → resample to %d Hz for VAD/whisper', capture_rate, SAMPLE_RATE)
+        log.info(
+            'mic capture at %d Hz (%d ch) → resample to %d Hz for VAD/whisper',
+            capture_rate, capture_channels, SAMPLE_RATE,
+        )
 
         vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
         frame_queue = asyncio.Queue(maxsize=50)
@@ -624,16 +670,16 @@ class HalVoiceServer:
         def audio_callback(indata, frames, time_info, status):  # noqa: ARG001
             if status:
                 log.debug('audio status: %s', status)
-            pcm = np.frombuffer(bytes(indata), dtype=np.int16)
-            self.note_capture_level(pcm)
+            pcm_mono = pcm_to_mono(np.frombuffer(bytes(indata), dtype=np.int16), capture_channels)
+            self.note_capture_level(pcm_mono)
             if self.active:
-                vad_frame = capture_frame_to_vad(bytes(indata), capture_rate)
+                vad_frame = capture_frame_to_vad(pcm_mono.tobytes(), capture_rate)
                 self.loop.call_soon_threadsafe(frame_queue.put_nowait, vad_frame)
 
         stream = sd.RawInputStream(
             device=input_device,
             samplerate=capture_rate, blocksize=capture_frame_samples, dtype='int16',
-            channels=1, callback=audio_callback,
+            channels=capture_channels, callback=audio_callback,
         )
 
         voiced_frames = []

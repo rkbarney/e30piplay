@@ -20,7 +20,7 @@ const OCTAVES = [
 // orbit with mass-scaled gravity (Earth = 1). Incommensurate periods avoid
 // n-fold symmetry; Jupiter uses a high-eccentricity comet sweep.
 // Orbit radii breathe with audio: silent ≈ stacked on sun; loud ≈ bezel edge.
-const ORBIT_AUDIO_CURVE = 1.15; // >1 keeps orbits tight until level rises
+const ORBIT_AUDIO_CURVE = 0.85; // <1 expands orbits sooner on quiet Pi mics
 const SOLAR_PLANETS = [
   {
     orbit: 'circular',
@@ -55,7 +55,7 @@ function fbm(t, phases) {
 
 // Raw mic RMS is quiet on kiosk/Pi mics (~0.02-0.15 for speech). A power
 // curve lifts whispers without pegging brightness on normal conversation.
-const AUDIO_GAIN = 9;
+const AUDIO_GAIN = 10;
 const AUDIO_CURVE = 0.65; // pow exponent; <1 boosts quiet levels
 const AUDIO_REACH = { glow: 0.62, breathe: 0.52, rim: 0.38 };
 
