@@ -34,3 +34,7 @@ public/emulatorjs/
 # HAL bench output (TTS reply WAVs from scripts/hal-bench.py / docker compose hal-bench)
 out/
 reply.wav
+
+# Python bytecode
+__pycache__/
+*.pyc
