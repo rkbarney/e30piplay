@@ -32,7 +32,13 @@ export default function DisplaySwitcher() {
   // Listening lives here (not inside the Hal screen) so "HAL, switch to
   // CarPlay" works from any face. It's only suspended once CarPlay is
   // actually on screen — the dongle owns the mic for Siri at that point.
-  const { state: voiceState, transcript: voiceTranscript, label: voiceLabel } = useHalVoice(
+  const {
+    state: voiceState,
+    transcript: voiceTranscript,
+    label: voiceLabel,
+    level: sidecarLevel,
+    connected: sidecarConnected,
+  } = useHalVoice(
     handleHalIntent,
     screen !== 'carplay',
   );
@@ -67,6 +73,8 @@ export default function DisplaySwitcher() {
           voiceState={voiceState}
           voiceTranscript={voiceTranscript}
           voiceLabel={voiceLabel}
+          sidecarLevel={sidecarLevel}
+          sidecarConnected={sidecarConnected}
         />
       )}
       {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
