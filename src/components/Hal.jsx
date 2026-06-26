@@ -5,8 +5,8 @@ import useAudioLevel from '../useAudioLevel';
 
 // Raw mic RMS is quiet on kiosk/Pi mics (~0.02-0.15 for speech). A power
 // curve lifts whispers without pegging brightness on normal conversation.
-const AUDIO_GAIN = 9;
-const AUDIO_CURVE = 0.65; // pow exponent; <1 boosts quiet levels
+const AUDIO_GAIN = 10;
+const AUDIO_CURVE = 0.6; // pow exponent; <1 boosts quiet levels on Pi USB mics
 
 // Listening glow on the chrome ring only after wake-word match (sidecar).
 const RING_GLOW = { idle: 0, listening: 0.85, speaking: 1 };
@@ -26,9 +26,9 @@ const GLOBALS = {
   redSpread: 2.87,
   redGlow: 1.31,
   ringDepth: 0.3,
-  audioRings: 2.09,
-  audioPupil: 0.2,
-  audioGlow: 0.8,
+  audioRings: 2.6,
+  audioPupil: 0.32,
+  audioGlow: 1.05,
   breath: 0.15,
 };
 // Each lens element: center (cx,cy), ring radius r, band width w, darkness
