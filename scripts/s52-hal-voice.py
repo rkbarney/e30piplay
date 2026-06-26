@@ -522,9 +522,9 @@ def boot_greeting(now=None):
         now = datetime.now()
     hour = now.hour
     if 4 <= hour < 12:
-        return 'Good morning, Mr. Amor.'
+        return 'Good morning, Dave.'
     if 12 <= hour < 18:
-        return 'Good afternoon, Mr. Amor.'
+        return 'Good afternoon, Dave.'
     # 6pm–midnight and midnight–4am (late night)
     return 'Good evening, Dave.'
 
