@@ -259,7 +259,6 @@ async function getBranches() {
 
 const WIFI_SCRIPT_NAME = 's52-wifi-switch.sh';
 const WIFI_SCRIPT_INSTALLED = '/usr/local/bin/s52-wifi-switch.sh';
-const WIFI_NETWORKS = new Set(['hotspot', 'biscuit']);
 
 function wifiScriptPath() {
   return fs.existsSync(WIFI_SCRIPT_INSTALLED)
@@ -273,13 +272,14 @@ async function getWifiStatus() {
   return JSON.parse(stdout.trim());
 }
 
-async function runWifiSwitch(network) {
-  if (!WIFI_NETWORKS.has(network)) throw new Error(`invalid network: ${network}`);
+async function runWifiSwitch(profile) {
+  const name = String(profile || '').trim();
+  if (!name) throw new Error('invalid profile');
   const installed = fs.existsSync(WIFI_SCRIPT_INSTALLED);
   const script = wifiScriptPath();
   const args = installed
-    ? ['-n', script, 'switch', network]
-    : [script, 'switch', network];
+    ? ['-n', script, 'switch', name]
+    : [script, 'switch', name];
   const cmd = installed ? 'sudo' : 'bash';
   const { stdout } = await run(cmd, args, { timeout: 90000 });
   return JSON.parse(stdout.trim());
@@ -437,7 +437,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/wifi/switch') {
       const body = await readJson(req);
-      const wifi = await runWifiSwitch(String(body.network || ''));
+      const wifi = await runWifiSwitch(String(body.profile || ''));
       json(res, 200, { ok: true, ...wifi });
       return;
     }

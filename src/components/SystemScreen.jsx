@@ -6,7 +6,7 @@ const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
 export default function SystemScreen({ onMinus, onPlus }) {
   const [version, setVersion] = useState(null);   // { sha, branch, online, behind, updateAvailable, dirty, branches }
-  const [wifi, setWifi]       = useState(null);   // { connected, profile, ssid, signal, network }
+  const [wifi, setWifi]       = useState(null);   // { connected, profile, ssid, signal, profiles }
   const [status, setStatus]   = useState('loading'); // loading | idle | checking | installing | error
   const [wifiBusy, setWifiBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -92,15 +92,15 @@ export default function SystemScreen({ onMinus, onPlus }) {
     }
   }, []);
 
-  const switchWifi = useCallback(async (network) => {
-    if (wifi?.network === network || wifiBusy) return;
+  const switchWifi = useCallback(async (profile) => {
+    if (!profile || wifi?.profile === profile || wifiBusy) return;
     setWifiBusy(true);
     setMessage('');
     try {
       const res = await fetch(`${API_BASE}/api/wifi/switch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ network }),
+        body: JSON.stringify({ profile }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -113,7 +113,7 @@ export default function SystemScreen({ onMinus, onPlus }) {
     } finally {
       setWifiBusy(false);
     }
-  }, [wifi?.network, wifiBusy]);
+  }, [wifi?.profile, wifiBusy]);
 
   const busy = status === 'installing' || status === 'checking' || status === 'loading' || wifiBusy;
   const online = version?.online;
@@ -143,10 +143,9 @@ export default function SystemScreen({ onMinus, onPlus }) {
     return wifi.signal != null ? `${name} · ${wifi.signal}%` : name;
   })();
 
-  const wifiChoices = [
-    { key: 'hotspot', label: 'HOTSPOT' },
-    { key: 'biscuit', label: 'BISCUIT' },
-  ];
+  const wifiProfiles = wifi?.profiles ?? [];
+  const selectValue = wifi?.connected && wifi?.profile ? wifi.profile : '';
+  const hasProfiles = wifiProfiles.length > 0;
 
   return (
     <ScreenFrame
@@ -166,25 +165,24 @@ export default function SystemScreen({ onMinus, onPlus }) {
         <div style={styles.body}>
           <div style={styles.wifiBlock}>
             <span style={styles.sectionLabel}>NETWORK</span>
-            <div style={styles.wifiRow}>
-              {wifiChoices.map(({ key, label }) => {
-                const active = wifi?.network === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => switchWifi(key)}
-                    disabled={busy || active}
-                    style={{
-                      ...styles.wifiBtn,
-                      ...(active ? styles.wifiBtnActive : null),
-                      ...(busy && !active ? styles.wifiBtnDisabled : null),
-                    }}
-                  >
-                    {active ? '● ' : ''}{label}
-                  </button>
-                );
-              })}
+            <div style={styles.wifiSelectWrap}>
+              <select
+                value={selectValue}
+                onChange={(e) => switchWifi(e.target.value)}
+                disabled={busy || !hasProfiles}
+                style={{
+                  ...styles.wifiSelect,
+                  ...(busy || !hasProfiles ? styles.wifiSelectDisabled : null),
+                }}
+                aria-label="WiFi network"
+              >
+                {!wifi?.connected ? (
+                  <option value="">{hasProfiles ? 'Not connected' : 'No saved networks'}</option>
+                ) : null}
+                {wifiProfiles.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
             </div>
             <span style={styles.wifiDetail}>{wifiLabel}</span>
           </div>
@@ -330,32 +328,28 @@ const styles = {
     fontWeight: 'bold',
     letterSpacing: '0.1em',
   },
-  wifiRow: {
-    display: 'flex',
-    gap: '8px',
+  wifiSelectWrap: {
+    width: '100%',
   },
-  wifiBtn: {
-    flex: 1,
-    height: '40px',
+  wifiSelect: {
+    width: '100%',
+    height: '44px',
+    padding: '0 12px',
     background: '#161208',
     border: '2px solid #3a2800',
     borderRadius: '8px',
-    color: '#ccc',
-    fontSize: '12px',
+    color: AMBER,
+    fontSize: '13px',
     fontWeight: 'bold',
     fontFamily: MONO,
-    letterSpacing: '0.06em',
+    letterSpacing: '0.04em',
     cursor: 'pointer',
-    WebkitTapHighlightColor: 'transparent',
-    userSelect: 'none',
+    WebkitAppearance: 'none',
+    appearance: 'none',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
-  wifiBtnActive: {
-    background: '#2a1c00',
-    borderColor: AMBER,
-    color: AMBER,
-    cursor: 'default',
-  },
-  wifiBtnDisabled: { opacity: 0.35, cursor: 'default' },
+  wifiSelectDisabled: { opacity: 0.35, cursor: 'default' },
   wifiDetail: {
     color: '#aa8844',
     fontSize: '10px',

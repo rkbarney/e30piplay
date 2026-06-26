@@ -2,18 +2,38 @@
 # Save a phone hotspot WiFi profile on the Pi and prefer it for internet.
 # When both the hotspot and home WiFi are in range, NetworkManager picks the
 # profile with the higher connection.autoconnect-priority (hotspot wins).
-# Set S52_HOME_CONN to the home profile name (default "home"; often "biscuit").
 #
-# SSID and password are NOT stored in the repo. Pass the SSID via env or enter
-# it (and the password) interactively when prompted:
-#   S52_HOTSPOT_SSID="My Hotspot" bash ~/e30piplay/scripts/s52-add-wifi-hotspot.sh
+# SSID and password are NOT stored in the repo. Configure profile names in
+# ~/.config/s52-wifi.env (see scripts/s52-wifi.env.example), or pass env vars:
+#   S52_HOTSPOT_SSID="My Hotspot" S52_HOME_CONN=my-home-wifi \
+#     bash ~/e30piplay/scripts/s52-add-wifi-hotspot.sh
 set -euo pipefail
 
-CON_NAME="${S52_HOTSPOT_CON_NAME:-phone-hotspot}"
+WIFI_ENV="${HOME}/.config/s52-wifi.env"
+if [[ -f "${WIFI_ENV}" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "${WIFI_ENV}"
+  set +a
+fi
+
 SSID="${S52_HOTSPOT_SSID:-}"
-HOME_CONN="${S52_HOME_CONN:-home}"
 HOTSPOT_PRIORITY="${S52_HOTSPOT_PRIORITY:-100}"
 HOME_PRIORITY="${S52_HOME_PRIORITY:-10}"
+
+if [[ -z "${S52_HOTSPOT_CON_NAME:-}" ]]; then
+  echo "Set S52_HOTSPOT_CON_NAME to the NetworkManager profile name for your phone hotspot." >&2
+  echo "Or add S52_HOTSPOT_CON_NAME=... to ~/.config/s52-wifi.env (see scripts/s52-wifi.env.example)." >&2
+  exit 1
+fi
+CON_NAME="${S52_HOTSPOT_CON_NAME}"
+
+if [[ -z "${S52_HOME_CONN:-}" ]]; then
+  echo "Set S52_HOME_CONN to your home WiFi NetworkManager profile name." >&2
+  echo "Or add S52_HOME_CONN=... to ~/.config/s52-wifi.env (see scripts/s52-wifi.env.example)." >&2
+  exit 1
+fi
+HOME_CONN="${S52_HOME_CONN}"
 
 if [[ -z "${SSID}" ]]; then
   read -r -p "Hotspot SSID: " SSID

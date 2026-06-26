@@ -428,6 +428,7 @@ if [[ ! -f "/home/$SERVICE_USER/.config/s52-display-layout.conf" ]]; then
 fi
 
 install -m 644 "$SOURCE_DIR/scripts/s52-carplay-audio.env.example" "/home/$SERVICE_USER/.config/s52-carplay-audio.env.example"
+install -m 644 "$SOURCE_DIR/scripts/s52-wifi.env.example" "/home/$SERVICE_USER/.config/s52-wifi.env.example"
 
 # PipeWire user stack + USB DAC defaults for react-carplay (Electron). Idempotent.
 S52_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
