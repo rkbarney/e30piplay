@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
 import useHalVoice from '../useHalVoice';
+import useAudioLevel from '../useAudioLevel';
 
 // How long the lens takes to glow up to full brightness on mount.
 const BOOT_MS = 2400;
@@ -29,6 +30,17 @@ function fbm(t, phases) {
 const SPEED = { idle: 1, listening: 1.7, speaking: 2.3 };
 const REACH = { idle: 1, listening: 1.25, speaking: 1.4 };
 
+// When the mic is live, the fbm flicker above becomes just an ambient
+// texture (toned way down) and the live audio level takes over as the main
+// driver — like a Winamp/media-player visualizer reacting to actual sound
+// rather than a synthetic animation. No mic -> fbm runs at full strength so
+// the eye still looks alive.
+const FBM_SCALE_WITH_AUDIO = 0.35;
+const AUDIO_GAIN = 5; // raw mic RMS is quiet (~0.05-0.2 for speech) — push it into a usable 0..1 range.
+const AUDIO_GLOW_SCALE = 0.9;
+const AUDIO_FLARE_SCALE = 0.9;
+const AUDIO_BREATHE_SCALE = 0.3;
+
 /**
  * HAL 9000-inspired glowing eye. Original CSS/SVG artwork drawn for this
  * project — not derived from or redistributing any third-party asset.
@@ -38,6 +50,9 @@ const REACH = { idle: 1, listening: 1.25, speaking: 1.4 };
  */
 export default function Hal({ onMinus, onPlus, onIntent }) {
   const voiceState = useHalVoice(onIntent);
+  const { level: audioLevel, error: audioError } = useAudioLevel();
+  const audioLevelRef = useRef(0);
+  audioLevelRef.current = audioLevel;
 
   // Lens is dark on mount and fades up — the chrome bezel is always visible,
   // only the "light" itself powers on.
@@ -64,16 +79,20 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
     const reach = REACH[voiceState] ?? 1;
     const phases = phasesRef.current;
 
+    const hasAudio = !audioError;
+    const fbmScale = hasAudio ? FBM_SCALE_WITH_AUDIO : 1;
+
     const id = setInterval(() => {
       t += (FRAME_MS / 1000) * speed;
+      const audio = hasAudio ? Math.min(1, audioLevelRef.current * AUDIO_GAIN) : 0;
       setFlame({
-        glow: 1 + fbm(t, phases) * 0.16 * reach,
-        breathe: 1 + fbm(t * 0.6 + 4, phases) * 0.22 * reach,
-        flare: 0.78 + fbm(t * 1.4 + 9, phases) * 0.22 * reach,
+        glow: 1 + fbm(t, phases) * 0.16 * reach * fbmScale + audio * AUDIO_GLOW_SCALE * reach,
+        breathe: 1 + fbm(t * 0.6 + 4, phases) * 0.22 * reach * fbmScale + audio * AUDIO_BREATHE_SCALE * reach,
+        flare: 0.78 + fbm(t * 1.4 + 9, phases) * 0.22 * reach * fbmScale + audio * AUDIO_FLARE_SCALE * reach,
       });
     }, FRAME_MS);
     return () => clearInterval(id);
-  }, [booted, voiceState]);
+  }, [booted, voiceState, audioError]);
 
   const { glow, breathe, flare } = flame;
 
