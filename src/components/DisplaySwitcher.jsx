@@ -37,9 +37,15 @@ export default function DisplaySwitcher() {
   // are kept as aliases so nothing breaks mid-migration.
   const handleHalIntent = useCallback((intent) => {
     if (intent === 'switch_to_carplay' || intent === 'start_carplay') {
-      setScreen('carplay');
-      // Voice can repeat while already on the CarPlay face — still focus LIVI.
-      postCarplayApi('/api/launch-react-carplay');
+      // Match the + button: navigate first, let CarPlayReceiver mount and POST
+      // /api/launch-react-carplay from its useEffect. Eager launch (026d1c6)
+      // raced wlrctl focus ahead of React and showed LIVI over the wrong face.
+      setScreen(prev => {
+        if (prev === 'carplay') {
+          postCarplayApi('/api/launch-react-carplay');
+        }
+        return 'carplay';
+      });
     } else if (intent === 'return_to_kiosk' || intent === 'go_clock') {
       postCarplayApi('/api/return-to-kiosk');
       setScreen('factory');

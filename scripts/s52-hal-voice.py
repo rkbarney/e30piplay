@@ -58,9 +58,9 @@ log = logging.getLogger('s52-hal-voice')
 HOST = os.environ.get('S52_HAL_WS_HOST', '127.0.0.1')
 PORT = int(os.environ.get('S52_HAL_WS_PORT', '8765'))
 CARPLAY_API = os.environ.get('S52_CARPLAY_API', 'http://127.0.0.1:3001')
-# Screen-switch intents that also hit carplay-server (UI gets the same via WS).
+# Screen-switch intents that also hit carplay-server when the kiosk WS may drop.
+# switch_to_carplay is UI-only: CarPlayReceiver POSTs launch on mount (same as +).
 INTENT_API_PATHS = {
-    'switch_to_carplay': '/api/launch-react-carplay',
     'return_to_kiosk': '/api/return-to-kiosk',
 }
 
