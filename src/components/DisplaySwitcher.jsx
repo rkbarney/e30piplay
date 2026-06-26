@@ -12,6 +12,18 @@ import useHalVoice     from '../useHalVoice';
 const FACES = ['hal', 'factory', 'digital', 'system', 'games'];
 
 const BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? 'hal';
+const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
+
+async function postCarplayApi(path) {
+  try {
+    await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+  } catch {
+    /* non-fatal — user can still tap + / RESTART */
+  }
+}
 
 export default function DisplaySwitcher() {
   // `screen` is either a face name (from FACES) or 'carplay'.
@@ -24,10 +36,18 @@ export default function DisplaySwitcher() {
   // switch_to_*/return_to_kiosk vocabulary; the older start_carplay/go_* names
   // are kept as aliases so nothing breaks mid-migration.
   const handleHalIntent = useCallback((intent) => {
-    if (intent === 'switch_to_carplay' || intent === 'start_carplay') setScreen('carplay');
-    else if (intent === 'return_to_kiosk' || intent === 'go_clock') setScreen('factory');
-    else if (intent === 'switch_to_emulator' || intent === 'go_games') setScreen('games');
-    else if (intent === 'exit_carplay' || intent === 'go_hal') setScreen('hal');
+    if (intent === 'switch_to_carplay' || intent === 'start_carplay') {
+      setScreen('carplay');
+      // Voice can repeat while already on the CarPlay face — still focus LIVI.
+      postCarplayApi('/api/launch-react-carplay');
+    } else if (intent === 'return_to_kiosk' || intent === 'go_clock') {
+      postCarplayApi('/api/return-to-kiosk');
+      setScreen('factory');
+    } else if (intent === 'switch_to_emulator' || intent === 'go_games') setScreen('games');
+    else if (intent === 'exit_carplay' || intent === 'go_hal') {
+      postCarplayApi('/api/return-to-kiosk');
+      setScreen('hal');
+    }
   }, []);
 
   // Listening lives here (not inside the Hal screen) so "HAL, switch to

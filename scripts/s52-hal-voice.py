@@ -57,6 +57,12 @@ log = logging.getLogger('s52-hal-voice')
 
 HOST = os.environ.get('S52_HAL_WS_HOST', '127.0.0.1')
 PORT = int(os.environ.get('S52_HAL_WS_PORT', '8765'))
+CARPLAY_API = os.environ.get('S52_CARPLAY_API', 'http://127.0.0.1:3001')
+# Screen-switch intents that also hit carplay-server (UI gets the same via WS).
+INTENT_API_PATHS = {
+    'switch_to_carplay': '/api/launch-react-carplay',
+    'return_to_kiosk': '/api/return-to-kiosk',
+}
 
 SAMPLE_RATE = 16000          # required by both webrtcvad and whisper.cpp
 FRAME_MS = 30                # webrtcvad only accepts 10/20/30ms frames
@@ -1265,6 +1271,28 @@ class HalVoiceServer:
             *(c.send(data) for c in list(self.clients)), return_exceptions=True,
         )
 
+    async def invoke_carplay_api(self, path):
+        """POST to carplay-server so voice works even if the kiosk WS drops."""
+        import urllib.error
+        import urllib.request
+
+        url = f'{CARPLAY_API.rstrip("/")}{path}'
+
+        def _post():
+            req = urllib.request.Request(
+                url, method='POST', headers={'Accept': 'application/json'},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status
+
+        try:
+            status = await asyncio.to_thread(_post)
+            log.info('carplay API %s → HTTP %s', path, status)
+        except urllib.error.HTTPError as exc:
+            log.warning('carplay API %s → HTTP %s', path, exc.code)
+        except Exception as exc:  # noqa: BLE001 - launch failure shouldn't crash HAL
+            log.warning('carplay API %s failed: %s', path, exc)
+
     def note_capture_level(self, pcm_int16):
         """RMS of the live capture block — same 0..1 scale as useAudioLevel.js."""
         if pcm_int16.size == 0:
@@ -1418,7 +1446,12 @@ class HalVoiceServer:
         spoken_text, intent = extract_intent(full)
         log.info('HAL: %r  intent=%s', spoken_text, intent)
         if intent != 'none':
+            n_clients = len(self.clients)
+            log.info('broadcasting intent=%s to %d client(s)', intent, n_clients)
             await self.broadcast({'type': 'command', 'intent': intent})
+            api_path = INTENT_API_PATHS.get(intent)
+            if api_path:
+                await self.invoke_carplay_api(api_path)
         await self.broadcast({'type': 'idle'})
 
     def enqueue_utterance(self, pcm_int16):
