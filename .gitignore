@@ -30,3 +30,7 @@ roms/
 
 # EmulatorJS data (large binary assets — fetched at deploy time by install-emulatorjs.sh)
 public/emulatorjs/
+
+# Python bytecode
+__pycache__/
+*.pyc

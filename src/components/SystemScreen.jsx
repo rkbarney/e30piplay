@@ -6,23 +6,38 @@ const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
 export default function SystemScreen({ onMinus, onPlus }) {
   const [version, setVersion] = useState(null);   // { sha, branch, online, behind, updateAvailable, dirty, branches }
+  const [wifi, setWifi]       = useState(null);   // { connected, profile, ssid, signal, profiles }
   const [status, setStatus]   = useState('loading'); // loading | idle | checking | installing | error
+  const [wifiBusy, setWifiBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [picker, setPicker]   = useState(false);   // branch dialog open?
+
+  const fetchWifi = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/wifi`, { headers: { Accept: 'application/json' } });
+      const data = await res.json();
+      if (res.ok) setWifi(data);
+    } catch {
+      /* leave prior wifi state; version check surfaces connectivity errors */
+    }
+  }, []);
 
   const check = useCallback(async () => {
     setStatus(prev => (prev === 'loading' ? 'loading' : 'checking'));
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/version`, { headers: { Accept: 'application/json' } });
-      const data = await res.json();
+      const [versionRes] = await Promise.all([
+        fetch(`${API_BASE}/api/version`, { headers: { Accept: 'application/json' } }),
+        fetchWifi(),
+      ]);
+      const data = await versionRes.json();
       setVersion(data);
       setStatus('idle');
     } catch {
       setStatus('error');
       setMessage('Could not reach the update service.');
     }
-  }, []);
+  }, [fetchWifi]);
 
   useEffect(() => { check(); }, [check]);
 
@@ -77,7 +92,30 @@ export default function SystemScreen({ onMinus, onPlus }) {
     }
   }, []);
 
-  const busy = status === 'installing' || status === 'checking' || status === 'loading';
+  const switchWifi = useCallback(async (profile) => {
+    if (!profile || wifi?.profile === profile || wifiBusy) return;
+    setWifiBusy(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/wifi/switch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ profile }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setMessage(data.detail || data.error || 'WiFi switch failed.');
+        return;
+      }
+      setWifi(data);
+    } catch {
+      setMessage('WiFi switch failed (lost connection?).');
+    } finally {
+      setWifiBusy(false);
+    }
+  }, [wifi?.profile, wifiBusy]);
+
+  const busy = status === 'installing' || status === 'checking' || status === 'loading' || wifiBusy;
   const online = version?.online;
   const canUpdate = version?.updateAvailable && !version?.dirty && !busy;
   const canForceUpdate = !busy && online && (version?.dirty || version?.updateAvailable);
@@ -97,6 +135,18 @@ export default function SystemScreen({ onMinus, onPlus }) {
   else if (!online) headline = 'Offline';
   else if (version?.updateAvailable) headline = `Update available (+${version.behind})`;
 
+  const wifiLabel = (() => {
+    if (wifiBusy) return 'Switching…';
+    if (!wifi) return 'Loading…';
+    if (!wifi.connected) return 'Not connected';
+    const name = wifi.ssid || wifi.profile || '—';
+    return wifi.signal != null ? `${name} · ${wifi.signal}%` : name;
+  })();
+
+  const wifiProfiles = wifi?.profiles ?? [];
+  const selectValue = wifi?.connected && wifi?.profile ? wifi.profile : '';
+  const hasProfiles = wifiProfiles.length > 0;
+
   return (
     <ScreenFrame
       variant="amber"
@@ -113,9 +163,33 @@ export default function SystemScreen({ onMinus, onPlus }) {
         <div style={styles.divider} />
 
         <div style={styles.body}>
+          <div style={styles.wifiBlock}>
+            <span style={styles.sectionLabel}>NETWORK</span>
+            <div style={styles.wifiSelectWrap}>
+              <select
+                value={selectValue}
+                onChange={(e) => switchWifi(e.target.value)}
+                disabled={busy || !hasProfiles}
+                style={{
+                  ...styles.wifiSelect,
+                  ...(busy || !hasProfiles ? styles.wifiSelectDisabled : null),
+                }}
+                aria-label="WiFi network"
+              >
+                {!wifi?.connected ? (
+                  <option value="">{hasProfiles ? 'Not connected' : 'No saved networks'}</option>
+                ) : null}
+                {wifiProfiles.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            <span style={styles.wifiDetail}>{wifiLabel}</span>
+          </div>
+
           <button
             type="button"
-            style={styles.branchBtn}
+            style={{ ...styles.branchBtn, ...(busy ? styles.branchBtnDisabled : null) }}
             onClick={() => setPicker(true)}
             disabled={busy || choices.length <= 1}
           >
@@ -240,21 +314,66 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
+    gap: '10px',
+  },
+  wifiBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  sectionLabel: {
+    color: '#888',
+    fontSize: '11px',
+    fontFamily: MONO,
+    fontWeight: 'bold',
+    letterSpacing: '0.1em',
+  },
+  wifiSelectWrap: {
+    width: '100%',
+  },
+  wifiSelect: {
+    width: '100%',
+    height: '44px',
+    padding: '0 12px',
+    background: '#161208',
+    border: '2px solid #3a2800',
+    borderRadius: '8px',
+    color: AMBER,
+    fontSize: '13px',
+    fontWeight: 'bold',
+    fontFamily: MONO,
+    letterSpacing: '0.04em',
+    cursor: 'pointer',
+    WebkitAppearance: 'none',
+    appearance: 'none',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  wifiSelectDisabled: { opacity: 0.35, cursor: 'default' },
+  wifiDetail: {
+    color: '#aa8844',
+    fontSize: '10px',
+    fontFamily: MONO,
+    letterSpacing: '0.04em',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   branchBtn: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
+    gap: '6px',
     width: '100%',
-    height: '120px',
+    height: '88px',
     background: '#161208',
     border: '2px solid #3a2800',
     borderRadius: '10px',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
   },
+  branchBtnDisabled: { opacity: 0.35, cursor: 'default' },
   branchBtnLabel: {
     color: '#888',
     fontSize: '11px',
