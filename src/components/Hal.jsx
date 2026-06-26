@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
+import useAudioLevel from '../useAudioLevel';
 
 // How long the lens takes to glow up to full brightness on mount.
 const BOOT_MS = 2400;
@@ -22,6 +23,10 @@ function fbm(t, phases) {
   }
   return v;
 }
+
+// Raw mic RMS is quiet (~0.05-0.2 for speech) — push it into a usable 0..1
+// range before it drives the glow.
+const AUDIO_GAIN = 5;
 
 // Listening/speaking dance a little faster and a little more — HAL gets
 // visibly more "alert" without changing his shape.
@@ -47,8 +52,17 @@ export default function Hal({ onMinus, onPlus, voiceState = 'idle', voiceTranscr
     return () => clearTimeout(id);
   }, []);
 
+  // Live mic amplitude drives most of the glow once available. When the mic
+  // is unreachable (denied/no device), audio sits at 0 and the fbm flicker
+  // below runs at full strength as a fallback instead of going dark.
+  const { level: audioLevel, error: audioError } = useAudioLevel();
+  const audio = audioError ? 0 : Math.min(1, audioLevel * AUDIO_GAIN);
+  const micLive = !audioError;
+
   // Continuous fractal-noise flicker, updated every frame (not on a random
   // timer) so the motion flows rather than snapping between random values.
+  // With the mic live this is just a low-amplitude idle texture sitting
+  // under the audio-driven motion; without it, it's the only motion source.
   const [flame, setFlame] = useState({ glow: 1, breathe: 1, flare: 0.8 });
   const phasesRef = useRef(null);
   if (!phasesRef.current) {
@@ -63,19 +77,23 @@ export default function Hal({ onMinus, onPlus, voiceState = 'idle', voiceTranscr
     const speed = SPEED[voiceState] ?? 1;
     const reach = REACH[voiceState] ?? 1;
     const phases = phasesRef.current;
+    const fbmScale = micLive ? 0.3 : 1;
 
     const id = setInterval(() => {
       t += (FRAME_MS / 1000) * speed;
       setFlame({
-        glow: 1 + fbm(t, phases) * 0.16 * reach,
-        breathe: 1 + fbm(t * 0.6 + 4, phases) * 0.22 * reach,
-        flare: 0.78 + fbm(t * 1.4 + 9, phases) * 0.22 * reach,
+        glow: 1 + fbm(t, phases) * 0.16 * reach * fbmScale,
+        breathe: 1 + fbm(t * 0.6 + 4, phases) * 0.22 * reach * fbmScale,
+        flare: 0.78 + fbm(t * 1.4 + 9, phases) * 0.22 * reach * fbmScale,
       });
     }, FRAME_MS);
     return () => clearInterval(id);
-  }, [booted, voiceState]);
+  }, [booted, voiceState, micLive]);
 
-  const { glow, breathe, flare } = flame;
+  const reach = REACH[voiceState] ?? 1;
+  const glow = flame.glow + audio * 0.45 * reach;
+  const breathe = flame.breathe + audio * 0.4 * reach;
+  const flare = flame.flare + audio * 0.55 * reach;
   const ringGlow = RING_GLOW[voiceState] ?? 0;
   const statusLabel = voiceLabel || STATUS_LABEL[voiceState] || '';
   const showTranscript = Boolean(voiceTranscript) && !voiceLabel;
