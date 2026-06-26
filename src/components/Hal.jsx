@@ -8,10 +8,6 @@ import useAudioLevel from '../useAudioLevel';
 const AUDIO_GAIN = 10;
 const AUDIO_CURVE = 0.6; // pow exponent; <1 boosts quiet levels on Pi USB mics
 
-// Listening glow on the chrome ring only after wake-word match (sidecar).
-const RING_GLOW = { idle: 0, listening: 0.85, speaking: 1 };
-const STATUS_LABEL = { idle: '', listening: '', speaking: 'SPEAKING…' };
-
 // HAL is rendered as a glass camera lens, not a flat gradient: a deep red
 // dome, a small orange-white pupil, and a stack of faint refraction rings —
 // each its own off-center, possibly elliptical "lens element". A WebGL
@@ -110,8 +106,6 @@ export default function Hal({
   onMinus,
   onPlus,
   voiceState = 'idle',
-  voiceTranscript = '',
-  voiceLabel = '',
   sidecarLevel = 0,
   sidecarConnected = false,
 }) {
@@ -229,10 +223,6 @@ export default function Hal({
     };
   }, []);
 
-  const ringGlow = RING_GLOW[voiceState] ?? 0;
-  const statusLabel = voiceLabel || STATUS_LABEL[voiceState] || '';
-  const showTranscript = Boolean(voiceTranscript) && !voiceLabel;
-
   return (
     <ScreenFrame
       variant="mono"
@@ -242,27 +232,12 @@ export default function Hal({
       ]}
     >
       <div style={styles.stage}>
-        <div
-          style={{
-            ...styles.ring,
-            boxShadow: ringGlow
-              ? `0 0 0 1px #2a2c2e, 0 0 ${Math.round(18 * ringGlow)}px ${Math.round(8 * ringGlow)}px rgba(212,0,0,0.75), 0 10px 24px rgba(0,0,0,0.6)`
-              : styles.ring.boxShadow,
-          }}
-        >
+        <div style={styles.ring}>
           <div style={styles.bezelHighlight} />
           <div style={styles.lens}>
             <canvas ref={canvasRef} style={styles.canvas} />
           </div>
         </div>
-        {(statusLabel || showTranscript) && (
-          <div style={styles.voiceHud} aria-live="polite">
-            {statusLabel && <div style={styles.voiceStatus}>{statusLabel}</div>}
-            {showTranscript && (
-              <div style={styles.voiceHeard}>HEARD: {voiceTranscript}</div>
-            )}
-          </div>
-        )}
       </div>
     </ScreenFrame>
   );
@@ -272,8 +247,6 @@ Hal.propTypes = {
   onMinus: PropTypes.func,
   onPlus: PropTypes.func,
   voiceState: PropTypes.oneOf(['idle', 'listening', 'speaking']),
-  voiceTranscript: PropTypes.string,
-  voiceLabel: PropTypes.string,
   sidecarLevel: PropTypes.number,
   sidecarConnected: PropTypes.bool,
 };
@@ -329,25 +302,5 @@ const styles = {
     width: '100%',
     height: '100%',
     display: 'block',
-  },
-  voiceHud: {
-    width: '300px',
-    textAlign: 'center',
-    fontFamily: 'monospace',
-    fontSize: '13px',
-    lineHeight: 1.35,
-    color: '#ffb4b4',
-    minHeight: '36px',
-  },
-  voiceStatus: {
-    letterSpacing: '0.12em',
-    fontWeight: 700,
-    color: '#ff5555',
-  },
-  voiceHeard: {
-    marginTop: '6px',
-    fontSize: '12px',
-    color: '#ffd0a8',
-    wordBreak: 'break-word',
   },
 };

@@ -61,8 +61,6 @@ export default function DisplaySwitcher() {
   // actually on screen — the dongle owns the mic for Siri at that point.
   const {
     state: voiceState,
-    transcript: voiceTranscript,
-    label: voiceLabel,
     level: sidecarLevel,
     connected: sidecarConnected,
   } = useHalVoice(
@@ -98,8 +96,6 @@ export default function DisplaySwitcher() {
           onMinus={handleMinus}
           onPlus={handlePlus}
           voiceState={voiceState}
-          voiceTranscript={voiceTranscript}
-          voiceLabel={voiceLabel}
           sidecarLevel={sidecarLevel}
           sidecarConnected={sidecarConnected}
         />
