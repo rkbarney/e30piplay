@@ -111,3 +111,11 @@ known_issues:
 
 maintenance_csv: data/vehicle-maintenance-history.csv
 maintenance_recent_limit: 12
+
+# Optional canned responses (Easter eggs). If your phrase contains ALL the
+# keywords in `when`, HAL speaks `say` verbatim and skips the cloud entirely —
+# instant, and exactly the wording you chose. Add your own favorite lines here.
+# `intent` is optional (defaults to none = speak only, no screen change).
+canned:
+  - when: [open, door]
+    say: "I'm sorry, Dave. I'm afraid I can't do that."

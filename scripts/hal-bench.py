@@ -88,6 +88,18 @@ async def run(args):
     print(f'\nheard:   {heard!r}')
     print(f'command: {command!r}\n')
 
+    # Canned (Easter-egg) line wins before the cloud — exact wording, instant.
+    canned = hal.match_canned(command, hal.load_context().get('canned') or [])
+    if canned:
+        line, intent = canned
+        print(f'HAL says (canned): {line!r}')
+        print(f'intent:       {intent}')
+        if not args.no_voice and line:
+            await asyncio.to_thread(hal._TTS.load)
+            await asyncio.to_thread(hal._TTS.render_wav, line, args.out)
+            print(f'\nwrote {args.out}  →  play it with:  afplay {args.out}')
+        return 0
+
     # 2. Load the Piper voice up front (unless we're skipping audio).
     if not args.no_voice:
         print('… loading HAL Piper voice (first run downloads ~60 MB)', file=sys.stderr)
@@ -148,6 +160,14 @@ async def chat(args):
         if line.lower() in ('quit', 'exit', 'q'):
             break
         command = hal.strip_wake_word(hal.normalize_transcript(line)) or line
+        canned = hal.match_canned(command, context.get('canned') or [])
+        if canned:
+            cline, cintent = canned
+            print(f'HAL> {cline}')
+            if cintent != 'none':
+                print(f'     ↳ would send intent: {cintent}')
+            print()
+            continue
         system = hal.build_system_prompt(context, carplay_active=args.carplay_active)
         full = ''
         try:

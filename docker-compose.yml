@@ -41,9 +41,10 @@ services:
       - hal-models:/root/.local/share          # whisper + piper model cache
       - ${HOME}/.config/hal.env:/root/.config/hal.env:ro
       - ./out:/out
-      # Live-mount the scripts so prompt/code tweaks take effect with no rebuild.
+      # Live-mount scripts + context so prompt/canned tweaks take effect, no rebuild.
       - ./scripts/s52-hal-voice.py:/app/scripts/s52-hal-voice.py:ro
       - ./scripts/hal-bench.py:/app/scripts/hal-bench.py:ro
+      - ./scripts/hal-context.yaml.example:/root/.config/hal-context.yaml:ro
     command: ["--say", "HAL, switch to CarPlay"]
 
 volumes:
