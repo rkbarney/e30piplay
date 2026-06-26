@@ -4,12 +4,17 @@
 # already-allow-listed /usr/local/bin/s52-deploy.sh via sudo -n.
 #
 # Invoked by carplay-server.cjs on POST /api/switch-branch (branch validated
-# there and passed as argv), or by hand:  bash scripts/s52-switch-branch.sh <branch>
+# there and passed as argv), or by hand:  bash scripts/s52-switch-branch.sh <branch> [--force]
 set -euo pipefail
 
 export APP_DIR="${APP_DIR:-$HOME/e30piplay}"
 DEPLOY="${S52_DEPLOY_BIN:-/usr/local/bin/s52-deploy.sh}"
-BRANCH="${1:?usage: s52-switch-branch.sh <branch>}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BRANCH="${1:?usage: s52-switch-branch.sh <branch> [--force]}"
+FORCE=0
+if [[ "${2:-}" == --force ]]; then
+  FORCE=1
+fi
 
 # Defense in depth — the server validates too, but never trust the caller.
 if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
@@ -22,10 +27,14 @@ step() { echo "==> $*"; }
 cd "$APP_DIR"
 
 if [[ -n "$(git status --porcelain)" ]]; then
-  echo "Working tree has local changes — refusing to switch." >&2
-  echo "Resolve them over SSH (git status), then retry." >&2
-  git status --short >&2
-  exit 2
+  if [[ "$FORCE" == 1 ]]; then
+    bash "$SCRIPT_DIR/s52-git-discard-local.sh"
+  else
+    echo "Working tree has local changes — refusing to switch." >&2
+    echo "Use FORCE UPDATE on the System screen, or: bash $0 $BRANCH --force" >&2
+    git status --short >&2
+    exit 2
+  fi
 fi
 
 step "Fetching from origin"
