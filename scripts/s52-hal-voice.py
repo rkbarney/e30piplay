@@ -120,7 +120,9 @@ PIPER_CONFIG_URL = os.environ.get(
     'S52_HAL_PIPER_CONFIG_URL',
     'https://huggingface.co/campwill/HAL-9000-Piper-TTS/resolve/main/hal.onnx.json',
 )
-PIPER_MODEL_MIN_BYTES = 10 * 1024 * 1024  # real model ~63 MB; catch truncated downloads
+PIPER_MODEL_MIN_BYTES = 60 * 1024 * 1024  # real model ~63 MB; catch truncated downloads
+
+MIC_WAIT_SEC = float(os.environ.get('S52_HAL_MIC_WAIT_SEC', '5'))
 
 # Wake word + homophones. We engage Claude when the wake word is heard; the rest
 # of the phrase is the command. tiny.en often hears "HAL" as "how"/"hall".
@@ -509,6 +511,20 @@ def list_pulse_sink_names():
     return names
 
 
+def list_pulse_source_names():
+    out = _pactl_output(['list', 'sources', 'short'])
+    if not out:
+        return []
+    names = []
+    for line in out.strip().splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            name = parts[1]
+            if not name.endswith('.monitor'):
+                names.append(name)
+    return names
+
+
 def get_default_pulse_sink():
     out = _pactl_output(['get-default-sink'])
     if not out:
@@ -626,11 +642,22 @@ def pick_usb_portaudio_input():
     return None
 
 
-def pick_input_device():
-    """Resolve mic: carplay env hint → live pactl USB pick → PortAudio fallback."""
+def pick_mic_input():
+    """Return ('portaudio', idx), ('pulse', source_name), or None if no mic.
+
+    PipeWire often owns USB capture cards, so PortAudio/ALSA sees no inputs even
+    when pactl lists a USB source — in that case we capture via parec instead.
+    """
+    online_sources = set(list_pulse_source_names())
     candidates = []
     if PULSE_SOURCE:
-        candidates.append(('carplay-audio.env', PULSE_SOURCE))
+        if PULSE_SOURCE in online_sources:
+            candidates.append(('carplay-audio.env', PULSE_SOURCE))
+        else:
+            log.warning(
+                'PULSE_SOURCE=%s not plugged in — trying live auto-detect',
+                PULSE_SOURCE,
+            )
     discovered = discover_pulse_source()
     if discovered:
         candidates.append(('pactl auto-detect', discovered))
@@ -643,21 +670,26 @@ def pick_input_device():
         idx = match_pulse_to_portaudio(pulse_name)
         if idx is not None:
             log.info(
-                'mic: %s → %s',
+                'mic: %s → PortAudio %s',
                 origin, sd.query_devices(idx)['name'],
             )
-            return idx
-        if origin == 'carplay-audio.env':
-            log.warning('PULSE_SOURCE=%s not plugged in — trying live auto-detect', pulse_name)
+            return ('portaudio', idx)
+        log.info('mic: %s → Pulse/parec (%s)', origin, pulse_name)
+        return ('pulse', pulse_name)
 
     idx = pick_usb_portaudio_input()
     if idx is not None:
         log.info('mic: PortAudio USB fallback → %s', sd.query_devices(idx)['name'])
-        return idx
+        return ('portaudio', idx)
 
-    default = sd.query_devices(kind='input')
+    try:
+        default = sd.query_devices(kind='input')
+    except sd.PortAudioError:
+        return None
+    if default.get('max_input_channels', 0) < 1:
+        return None
     log.info('mic: system default → %s', default['name'])
-    return default['index']
+    return ('portaudio', default['index'])
 
 
 def pick_capture_rate(device, channels):
@@ -696,6 +728,43 @@ def pick_capture_settings(device):
         except RuntimeError:
             continue
     raise RuntimeError('no supported mic input settings')
+
+
+def _parec_probe(pulse_source, rate, channels):
+    """Return True if parec can open this Pulse source at rate/channels."""
+    try:
+        proc = subprocess.Popen(
+            [
+                'parec',
+                f'--device={pulse_source}',
+                '--format=s16le',
+                f'--rate={rate}',
+                f'--channels={channels}',
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(0.15)
+        proc.terminate()
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=1)
+        return proc.returncode in (0, -15)
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def pick_pulse_capture_settings(pulse_source):
+    """Return (rate, channels) for parec capture on a Pulse source."""
+    override = os.environ.get('S52_HAL_CAPTURE_RATE')
+    rate_candidates = (int(override),) if override else CAPTURE_RATE_CANDIDATES
+    for rate in rate_candidates:
+        for channels in (2, 1):
+            if _parec_probe(pulse_source, rate, channels):
+                return rate, channels
+    raise RuntimeError(f'parec cannot open Pulse source {pulse_source!r}')
 
 
 def pcm_to_mono(pcm_int16, channels):
@@ -824,7 +893,18 @@ class HalTts:
         ensure_piper_model()
         from piper import PiperVoice
         log.info('loading Piper voice %s…', PIPER_MODEL_PATH)
-        self._voice = PiperVoice.load(PIPER_MODEL_PATH, use_cuda=False)
+        try:
+            self._voice = PiperVoice.load(PIPER_MODEL_PATH, use_cuda=False)
+        except Exception as exc:
+            err = str(exc)
+            if 'INVALID_PROTOBUF' not in err and 'Protobuf parsing failed' not in err:
+                raise
+            log.warning('Piper model corrupt (%s) — deleting and re-downloading', exc)
+            for path in (PIPER_MODEL_PATH, PIPER_CONFIG_PATH):
+                if os.path.isfile(path):
+                    os.remove(path)
+            ensure_piper_model()
+            self._voice = PiperVoice.load(PIPER_MODEL_PATH, use_cuda=False)
         return self._voice
 
     def _synth_pcm(self, text):
@@ -1095,10 +1175,36 @@ class HalVoiceServer:
             return
         self._utterance_queue.put_nowait(pcm_int16)
 
-    async def capture_loop(self):
-        """VAD-gated mic capture: only buffers/transcribes while someone is
-        actually talking, so an idle cabin doesn't spin whisper.cpp."""
-        input_device = pick_input_device()
+    async def _vad_drain(self, frame_queue, vad):
+        """Shared VAD state machine — PortAudio and parec both feed this queue."""
+        voiced_frames = []
+        silence_ms = 0
+        utterance_ms = 0
+        while True:
+            frame = await frame_queue.get()
+            if not self.active:
+                voiced_frames, silence_ms, utterance_ms = [], 0, 0
+                continue
+
+            is_speech = vad.is_speech(frame, SAMPLE_RATE)
+            if is_speech:
+                voiced_frames.append(frame)
+                silence_ms = 0
+                utterance_ms += FRAME_MS
+            elif voiced_frames:
+                voiced_frames.append(frame)
+                silence_ms += FRAME_MS
+                utterance_ms += FRAME_MS
+
+            should_finalize = voiced_frames and (
+                silence_ms >= SILENCE_END_MS or utterance_ms >= MAX_UTTERANCE_MS
+            )
+            if should_finalize:
+                pcm = np.frombuffer(b''.join(voiced_frames), dtype=np.int16)
+                voiced_frames, silence_ms, utterance_ms = [], 0, 0
+                self.enqueue_utterance(pcm)
+
+    async def _capture_portaudio(self, input_device):
         capture_rate, capture_channels = pick_capture_settings(input_device)
         capture_frame_samples = capture_rate * FRAME_MS // 1000
         log.info(
@@ -1108,6 +1214,7 @@ class HalVoiceServer:
 
         vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
         frame_queue = asyncio.Queue(maxsize=50)
+        vad_task = asyncio.create_task(self._vad_drain(frame_queue, vad))
 
         def audio_callback(indata, frames, time_info, status):  # noqa: ARG001
             if status:
@@ -1123,35 +1230,69 @@ class HalVoiceServer:
             samplerate=capture_rate, blocksize=capture_frame_samples, dtype='int16',
             channels=capture_channels, callback=audio_callback,
         )
-
-        voiced_frames = []
-        silence_ms = 0
-        utterance_ms = 0
-
         with stream:
-            while True:
-                frame = await frame_queue.get()
-                if not self.active:
-                    voiced_frames, silence_ms, utterance_ms = [], 0, 0
-                    continue
+            await vad_task
 
-                is_speech = vad.is_speech(frame, SAMPLE_RATE)
-                if is_speech:
-                    voiced_frames.append(frame)
-                    silence_ms = 0
-                    utterance_ms += FRAME_MS
-                elif voiced_frames:
-                    voiced_frames.append(frame)
-                    silence_ms += FRAME_MS
-                    utterance_ms += FRAME_MS
+    async def _capture_pulse(self, pulse_source):
+        capture_rate, capture_channels = pick_pulse_capture_settings(pulse_source)
+        bytes_per_frame = capture_rate * FRAME_MS // 1000 * capture_channels * 2
+        log.info(
+            'mic capture (parec) at %d Hz (%d ch) → resample to %d Hz for VAD/whisper',
+            capture_rate, capture_channels, SAMPLE_RATE,
+        )
 
-                should_finalize = voiced_frames and (
-                    silence_ms >= SILENCE_END_MS or utterance_ms >= MAX_UTTERANCE_MS
+        vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
+        frame_queue = asyncio.Queue(maxsize=50)
+        vad_task = asyncio.create_task(self._vad_drain(frame_queue, vad))
+
+        while True:
+            proc = await asyncio.create_subprocess_exec(
+                'parec',
+                f'--device={pulse_source}',
+                '--format=s16le',
+                f'--rate={capture_rate}',
+                f'--channels={capture_channels}',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            try:
+                while True:
+                    data = await proc.stdout.readexactly(bytes_per_frame)
+                    pcm_mono = pcm_to_mono(np.frombuffer(data, dtype=np.int16), capture_channels)
+                    self.note_capture_level(pcm_mono)
+                    if self.active:
+                        vad_frame = capture_frame_to_vad(pcm_mono.tobytes(), capture_rate)
+                        await frame_queue.put(vad_frame)
+            except asyncio.IncompleteRead:
+                log.warning('parec stream ended — restarting in %gs', MIC_WAIT_SEC)
+                proc.kill()
+                await proc.wait()
+                await asyncio.sleep(MIC_WAIT_SEC)
+
+    async def capture_loop(self):
+        """VAD-gated mic capture: only buffers/transcribes while someone is
+        actually talking, so an idle cabin doesn't spin whisper.cpp."""
+        while True:
+            mic = pick_mic_input()
+            if mic is None:
+                log.warning(
+                    'no microphone available — retrying in %gs (plug USB mic)',
+                    MIC_WAIT_SEC,
                 )
-                if should_finalize:
-                    pcm = np.frombuffer(b''.join(voiced_frames), dtype=np.int16)
-                    voiced_frames, silence_ms, utterance_ms = [], 0, 0
-                    self.enqueue_utterance(pcm)
+                await asyncio.sleep(MIC_WAIT_SEC)
+                continue
+            backend, target = mic
+            try:
+                if backend == 'portaudio':
+                    await self._capture_portaudio(target)
+                else:
+                    await self._capture_pulse(target)
+            except Exception as exc:
+                log.error(
+                    'mic capture failed (%s) — retrying in %gs',
+                    exc, MIC_WAIT_SEC,
+                )
+                await asyncio.sleep(MIC_WAIT_SEC)
 
     async def run(self):
         self.loop = asyncio.get_running_loop()
