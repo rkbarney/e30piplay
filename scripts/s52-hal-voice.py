@@ -128,11 +128,14 @@ MIC_WAIT_SEC = float(os.environ.get('S52_HAL_MIC_WAIT_SEC', '5'))
 # of the phrase is the command. tiny.en often hears "HAL" as "how"/"hall".
 WAKE_WORDS = ('hal', 'h a l', 'hal 9000', 'hal nine thousand')
 WAKE_HOMOPHONES_START = ('how', 'hall', 'hell')
-# Avoid treating bare "how are you…" as a HAL command unless it sounds like one.
+# Screen/command verbs — "how switch to carplay" when tiny.en drops "HAL".
 WAKE_HOMOPHONE_HINTS = frozenset({
     'switch', 'car', 'carplay', 'play', 'start', 'open',
     'games', 'game', 'clock', 'system', 'exit', 'go', 'take', 'show', 'return',
 })
+# Conversational phrases when whisper drops the leading "HAL" — still require
+# homophone start (how/hall/hell) so random cabin chatter is ignored.
+WAKE_CONVERSATION_HINTS = frozenset({'hear', 'help', 'hello'})
 # Leading tokens we strip off the command once the wake word is detected, longest
 # first so "hal nine thousand" wins over "hal".
 WAKE_STRIP_PREFIXES = ('hal nine thousand', 'hal 9000', 'h a l', 'hal', 'hall', 'hell', 'how')
@@ -353,13 +356,22 @@ def normalize_transcript(transcript):
     return text
 
 
+def _homophone_conversation(text, words):
+    """Greeting / check-in when STT hears 'how are you…' instead of 'HAL, …'."""
+    if any(hint in text for hint in WAKE_CONVERSATION_HINTS):
+        return True
+    return 'are' in words and 'you' in words
+
+
 def heard_wake_word(text):
     if any(w in text for w in WAKE_WORDS):
         return True
     words = text.split()
     if not words or words[0] not in WAKE_HOMOPHONES_START:
         return False
-    return any(hint in text for hint in WAKE_HOMOPHONE_HINTS)
+    if any(hint in text for hint in WAKE_HOMOPHONE_HINTS):
+        return True
+    return _homophone_conversation(text, words)
 
 
 def strip_wake_word(text):
@@ -540,6 +552,30 @@ def discover_hdmi_sink():
     return None
 
 
+_MIC_SINK_KEYWORDS = (
+    'microphone', 'yeti', 'lavalier', 'blue_microphones', 'dcmt',
+)
+
+
+def is_mic_sink(name):
+    lower = name.lower()
+    return any(kw in lower for kw in _MIC_SINK_KEYWORDS)
+
+
+def pick_fallback_sink(sinks):
+    """Prefer HDMI / non-mic sinks — USB mics expose a headphone jack, not speakers."""
+    names = list(sinks)
+    if not names:
+        return None, 'none'
+    non_mic = [name for name in names if not is_mic_sink(name)]
+    if non_mic:
+        for name in non_mic:
+            if 'hdmi' in name.lower():
+                return name, 'hdmi (configured DAC offline)'
+        return non_mic[0], 'non-mic fallback'
+    return names[0], 'mic analog out (plug headphones into mic jack)'
+
+
 def resolve_pulse_sink():
     """TTS output: carplay-audio.env PULSE_SINK when online, else fallback.
 
@@ -557,11 +593,22 @@ def resolve_pulse_sink():
         hdmi = discover_hdmi_sink()
         if hdmi:
             return hdmi, 'hdmi (configured DAC offline)'
+        picked, origin = pick_fallback_sink(sinks)
+        if picked:
+            return picked, origin
     default = get_default_pulse_sink()
-    if default:
+    if default and not is_mic_sink(default):
         return default, 'system default'
-    if sinks:
-        return next(iter(sinks)), 'first available'
+    picked, origin = pick_fallback_sink(sinks)
+    if picked:
+        if default and is_mic_sink(default):
+            log.warning(
+                'system default sink %s is a USB mic — using %s (%s)',
+                default, picked, origin,
+            )
+        return picked, origin
+    if default:
+        return default, 'system default (mic only)'
     return None, 'none'
 
 
@@ -1110,7 +1157,10 @@ class HalVoiceServer:
         log.info('heard: %r', transcript)
         combined, has_wake = self.coalesce_phrase(transcript)
         if not has_wake:
-            # Room noise / non-HAL speech — no UI glow or transcript HUD.
+            log.info(
+                'no wake word in %r — start with "HAL" (e.g. "HAL, how are you?")',
+                combined,
+            )
             return
 
         command = strip_wake_word(combined) or combined
