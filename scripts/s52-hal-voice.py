@@ -59,6 +59,10 @@ SILENCE_END_MS = int(os.environ.get('S52_HAL_SILENCE_END_MS', '1200'))  # traili
 MIN_UTTERANCE_MS = int(os.environ.get('S52_HAL_MIN_UTTERANCE_MS', '450'))  # ignore clicks/pops
 MAX_UTTERANCE_MS = 8000      # safety cap so a stuck-open mic can't buffer forever
 PHRASE_COALESCE_SEC = 4.0    # merge split utterances ("how?" + "switch to carplay")
+# Mic RMS for HAL eye glow — matches useAudioLevel.js attack/release envelope.
+LEVEL_ATTACK = float(os.environ.get('S52_HAL_LEVEL_ATTACK', '0.65'))
+LEVEL_RELEASE = float(os.environ.get('S52_HAL_LEVEL_RELEASE', '0.11'))
+LEVEL_BROADCAST_MS = int(os.environ.get('S52_HAL_LEVEL_MS', '33'))
 
 WHISPER_MODEL = os.environ.get('S52_HAL_WHISPER_MODEL', 'tiny.en')
 
@@ -472,6 +476,8 @@ class HalVoiceServer:
         self._model = None
         self._utterance_queue = asyncio.Queue()
         self._phrase_chunks = []
+        self._level_raw = 0.0
+        self._level_smooth = 0.0
 
     def model(self):
         if self._model is None:
@@ -488,6 +494,29 @@ class HalVoiceServer:
         await asyncio.gather(
             *(c.send(data) for c in list(self.clients)), return_exceptions=True,
         )
+
+    def note_capture_level(self, pcm_int16):
+        """RMS of the live capture block — same 0..1 scale as useAudioLevel.js."""
+        if pcm_int16.size == 0:
+            self._level_raw = 0.0
+            return
+        samples = pcm_int16.astype(np.float32) / 32768.0
+        self._level_raw = float(np.sqrt(np.mean(samples * samples)))
+
+    async def level_broadcaster(self):
+        """Push smoothed mic RMS so HAL can react without a second getUserMedia."""
+        interval = LEVEL_BROADCAST_MS / 1000.0
+        while True:
+            await asyncio.sleep(interval)
+            if not self.clients:
+                continue
+            if not self.active:
+                self._level_raw = 0.0
+                self._level_smooth = 0.0
+            raw = self._level_raw
+            k = LEVEL_ATTACK if raw > self._level_smooth else LEVEL_RELEASE
+            self._level_smooth += (raw - self._level_smooth) * k
+            await self.broadcast({'type': 'level', 'value': round(self._level_smooth, 4)})
 
     async def handle_client(self, websocket):
         self.clients.add(websocket)
@@ -595,6 +624,8 @@ class HalVoiceServer:
         def audio_callback(indata, frames, time_info, status):  # noqa: ARG001
             if status:
                 log.debug('audio status: %s', status)
+            pcm = np.frombuffer(bytes(indata), dtype=np.int16)
+            self.note_capture_level(pcm)
             if self.active:
                 vad_frame = capture_frame_to_vad(bytes(indata), capture_rate)
                 self.loop.call_soon_threadsafe(frame_queue.put_nowait, vad_frame)
@@ -639,6 +670,7 @@ class HalVoiceServer:
         # Load weights at startup so a corrupt download fails cleanly, not mid-SEGV.
         await asyncio.to_thread(self.model)
         asyncio.create_task(self.utterance_worker())
+        asyncio.create_task(self.level_broadcaster())
         async with websockets.serve(self.handle_client, HOST, PORT):
             log.info('HAL voice sidecar listening on ws://%s:%d', HOST, PORT)
             await self.capture_loop()

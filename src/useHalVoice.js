@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
  * sidecar runs offline whisper.cpp STT against the USB mic and pushes JSON
  * frames over a WebSocket: { type: 'listening' | 'speaking' | 'idle' } for
  * HAL's eye state (listening only after a wake-word match — not on raw VAD),
+ * { type: 'level', value: number } for live mic RMS (0..1, pre-smoothed by the
+ * sidecar so the browser doesn't need a second getUserMedia on the same USB mic),
  * and { type: 'command', intent: 'start_carplay' | ... } once it matches a
  * "hal ..." phrase. It also speaks the "I'm sorry, Dave"
  * refusal itself (over AUX) when "hal" is heard but the rest doesn't match
@@ -24,6 +26,8 @@ export default function useHalVoice(onIntent, active = true) {
   const [state, setState] = useState('idle'); // idle | listening | speaking
   const [transcript, setTranscript] = useState('');
   const [label, setLabel] = useState(''); // e.g. OPENING CARPLAY during success ack
+  const [level, setLevel] = useState(0);
+  const [connected, setConnected] = useState(false);
   const onIntentRef = useRef(onIntent);
   onIntentRef.current = onIntent;
   const socketRef = useRef(null);
@@ -42,7 +46,10 @@ export default function useHalVoice(onIntent, active = true) {
       socket = new WebSocket(WS_URL);
       socketRef.current = socket;
 
-      socket.onopen = () => sendActive(socket, active);
+      socket.onopen = () => {
+        setConnected(true);
+        sendActive(socket, active);
+      };
 
       socket.onmessage = (event) => {
         let frame;
@@ -51,7 +58,9 @@ export default function useHalVoice(onIntent, active = true) {
         } catch {
           return;
         }
-        if (frame.type === 'idle' || frame.type === 'listening' || frame.type === 'speaking') {
+        if (frame.type === 'level' && typeof frame.value === 'number') {
+          setLevel(Math.max(0, Math.min(1, frame.value)));
+        } else if (frame.type === 'idle' || frame.type === 'listening' || frame.type === 'speaking') {
           setState(frame.type);
           if (frame.type === 'speaking' && frame.label) {
             setLabel(String(frame.label));
@@ -70,6 +79,8 @@ export default function useHalVoice(onIntent, active = true) {
       };
 
       socket.onclose = () => {
+        setConnected(false);
+        setLevel(0);
         setState('idle');
         setTranscript('');
         setLabel('');
@@ -94,5 +105,5 @@ export default function useHalVoice(onIntent, active = true) {
     sendActive(socketRef.current, active);
   }, [active]);
 
-  return { state, transcript, label };
+  return { state, transcript, label, level, connected };
 }

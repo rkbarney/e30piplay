@@ -133,6 +133,14 @@ export default function SystemScreen({ onMinus, onPlus }) {
           >
             {status === 'checking' ? 'CHECKING…' : 'CHECK'}
           </button>
+          <button
+            style={{ ...styles.actionBtn, ...(busy ? styles.actionBtnDisabled : null) }}
+            onClick={() => window.location.reload()}
+            disabled={busy}
+            type="button"
+          >
+            REFRESH
+          </button>
           {version?.dirty ? (
             <button
               style={{ ...styles.actionBtn, ...(!canForceUpdate ? styles.actionBtnDisabled : styles.actionBtnWarn) }}

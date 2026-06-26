@@ -77,6 +77,8 @@ fi
   --password-store=basic \
   --ozone-platform=wayland \
   --no-sandbox \
+  --autoplay-policy=no-user-gesture-required \
+  --use-fake-ui-for-media-stream \
   --kiosk \
   --noerrdialogs \
   --disable-infobars \
