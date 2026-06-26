@@ -27,7 +27,7 @@ on-screen +/− buttons instead. Keeping it cloud-only keeps the sidecar simple.
 
 Secrets and context live outside the repo, on the Pi only:
     ~/.config/hal.env           ANTHROPIC_API_KEY (see scripts/hal.env.example)
-    ~/.config/hal-context.yaml  car / owner / home_city for the system prompt
+    ~/.config/hal-context.yaml  car / owner / specs / maintenance for the prompt
                                 (see scripts/hal-context.yaml.example)
 
 The kiosk UI tells us (over the same socket, the other direction) when to
@@ -177,8 +177,150 @@ CONFIGURED_PULSE_SINK = os.environ.get('PULSE_SINK')
 PULSE_SOURCE = os.environ.get('PULSE_SOURCE', '').strip()
 
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def resolve_data_path(path):
+    """Expand ~ and resolve repo-relative paths (e.g. data/foo.csv)."""
+    if not path:
+        return None
+    expanded = os.path.expanduser(str(path))
+    if os.path.isabs(expanded):
+        return expanded if os.path.isfile(expanded) else None
+    candidate = os.path.join(_REPO_ROOT, expanded)
+    return candidate if os.path.isfile(candidate) else None
+
+
+def load_maintenance_summary(csv_path, limit=12):
+    """Return recent maintenance rows as compact prompt lines."""
+    import csv
+    from datetime import datetime
+
+    resolved = resolve_data_path(csv_path)
+    if not resolved:
+        return []
+
+    rows = []
+    with open(resolved, encoding='utf-8', newline='') as handle:
+        for row in csv.DictReader(handle):
+            date_raw = (row.get('Date') or '').strip()
+            odometer = (row.get('Odometer') or '').strip()
+            description = ' '.join((row.get('Description') or '').split())
+            if not date_raw and not description:
+                continue
+            parsed = None
+            for fmt in ('%-m/%-d/%Y', '%m/%d/%Y'):
+                try:
+                    parsed = datetime.strptime(date_raw, fmt)
+                    break
+                except ValueError:
+                    continue
+            rows.append({
+                'date': date_raw,
+                'sort': parsed or datetime.min,
+                'odometer': odometer,
+                'description': description[:220],
+                'type': (row.get('Type') or '').strip(),
+            })
+
+    rows.sort(key=lambda item: item['sort'], reverse=True)
+    lines = []
+    for row in rows[:limit]:
+        bits = [row['date']]
+        if row['odometer']:
+            bits.append(f"{row['odometer']} mi")
+        if row['type']:
+            bits.append(row['type'])
+        if row['description']:
+            bits.append(row['description'])
+        lines.append(' — '.join(bits))
+    return lines
+
+
+def format_vehicle_context(context):
+    """Turn structured hal-context.yaml fields into prompt paragraphs."""
+    if not context:
+        return []
+
+    lines = []
+    vins = context.get('vins') or {}
+    if isinstance(vins, dict):
+        chassis = vins.get('chassis')
+        engine = vins.get('engine')
+        if chassis or engine:
+            parts = []
+            if chassis:
+                parts.append(f'chassis VIN {chassis}')
+            if engine:
+                parts.append(f'engine VIN {engine}')
+            lines.append('Vehicle identifiers: ' + '; '.join(parts) + '.')
+
+    summary = (context.get('summary') or '').strip()
+    if summary:
+        lines.append('Overview:\n' + summary)
+
+    identity = context.get('identity')
+    if isinstance(identity, dict) and identity:
+        id_bits = []
+        for key, label in (
+            ('year', 'year'),
+            ('body', 'body'),
+            ('transmission', 'transmission'),
+            ('exterior', 'exterior'),
+            ('interior', 'interior'),
+            ('title', 'title'),
+            ('bar_certified', 'BAR certified'),
+            ('registration_note', 'registration'),
+            ('chassis_miles', 'chassis miles'),
+            ('drivetrain_miles', 'drivetrain miles'),
+            ('suspension_miles', 'suspension miles'),
+        ):
+            value = identity.get(key)
+            if value is True:
+                id_bits.append(label)
+            elif value not in (None, '', False):
+                id_bits.append(f'{label}: {value}')
+        if id_bits:
+            lines.append('Identity: ' + '; '.join(id_bits) + '.')
+
+    section_titles = (
+        ('engine_swap', 'Engine swap'),
+        ('motor', 'Motor'),
+        ('transmission_drivetrain', 'Transmission / drivetrain'),
+        ('suspension_steering', 'Suspension / steering'),
+        ('wheels_tires', 'Wheels / tires'),
+        ('exterior', 'Exterior'),
+        ('interior', 'Interior'),
+        ('audio', 'Audio'),
+        ('other_notes', 'Other notes'),
+        ('known_issues', 'Known issues'),
+    )
+    for key, title in section_titles:
+        items = context.get(key)
+        if isinstance(items, list) and items:
+            bullets = '\n'.join(f'- {item}' for item in items if item)
+            if bullets:
+                lines.append(f'{title}:\n{bullets}')
+
+    csv_path = context.get('maintenance_csv')
+    limit = context.get('maintenance_recent_limit', 12)
+    if csv_path:
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = 12
+        maintenance = load_maintenance_summary(csv_path, limit=limit)
+        if maintenance:
+            lines.append(
+                'Recent maintenance history (newest first):\n'
+                + '\n'.join(f'- {entry}' for entry in maintenance)
+            )
+
+    return lines
+
+
 def load_context():
-    """Read ~/.config/hal-context.yaml (car/owner/home_city) for the prompt.
+    """Read ~/.config/hal-context.yaml for the system prompt.
 
     Missing file or pyyaml → empty context; HAL still works, just less personal.
     """
@@ -250,6 +392,14 @@ def build_system_prompt(context, carplay_active):
         lines.append(f"The owner's name is {owner}; you may address them by name.")
     if city:
         lines.append(f'Home city is {city}.')
+    vehicle_details = format_vehicle_context(context)
+    if vehicle_details:
+        lines.append(
+            'You know the following about this specific vehicle. Use it when the '
+            'driver asks about the car, maintenance, specs, or history — but keep '
+            'spoken answers brief unless they ask for detail:\n'
+            + '\n\n'.join(vehicle_details)
+        )
     if carplay_active:
         lines.append('Right now Apple CarPlay is already on the dashboard screen.')
     else:

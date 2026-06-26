@@ -13,9 +13,12 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | | |
 |---|---|
-| Car | BMW E30 (early 1980s–1990s) |
-| Engine | S52 3.2L I6 swap |
-| Audio | Alpine system, Kenwood head unit |
+| Car | 1989 BMW 325i Sedan — Delphi Grey Metallic, tan/Natur Beige interior |
+| Engine | S52 3.2L bottom end / M50 non-Vanos head swap (BAR certified, CA) |
+| Chassis VIN | WBAAD1307K8835704 |
+| Engine VIN | WBSCD9325WEE7712 |
+| Owner / home | Dave, El Sobrante CA |
+| Audio | Kenwood head unit (Bluetooth), JL subs; USB + AUX |
 | Head unit inputs | USB + AUX |
 | Clock opening | 76mm wide × 84mm tall (portrait) |
 

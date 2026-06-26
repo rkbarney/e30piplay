@@ -7,7 +7,7 @@ single place to look up "what is actually installed."
 
 | Part | This build |
 |---|---|
-| Vehicle | BMW E30, S52 swap; Kenwood head unit (USB + AUX in) |
+| Vehicle | 1989 BMW 325i Sedan, Delphi Grey / tan interior; S52/M50 NV swap, BAR certified |
 | Compute | **Raspberry Pi 5 (8 GB)** (BCM2712) |
 | Display | Waveshare 2.8″ HDMI capacitive touch, **480×640 portrait** (mounted flush in the factory clock opening) |
 | CarPlay dongle | **Carlinkit "AutoKit" A15W**, AP `AutoKit-2041`, fw `2025.10.15.1127`, USB `1314:1520`. iPhone = **wireless only** (no wired data path). See `docs/carlinkit-dongle-reference.md`. |

@@ -5,7 +5,109 @@
 #
 #   cp scripts/hal-context.yaml.example ~/.config/hal-context.yaml
 #   $EDITOR ~/.config/hal-context.yaml
+#
+# Maintenance history CSV lives in data/ (repo) and is referenced below.
+# setup.sh leaves an existing ~/.config/hal-context.yaml untouched.
 
-car: 1991 BMW E30
+car: 1989 BMW 325i Sedan in Delphi Grey Metallic with tan interior
 owner: Dave
-home_city: Los Angeles
+home_city: El Sobrante
+
+vins:
+  chassis: WBAAD1307K8835704
+  engine: WBSCD9325WEE7712
+
+summary: |
+  Rust-free 1989 BMW 325i 5-speed sedan, daily driver (~300 mi/month for years).
+  S52 bottom end with M50 non-Vanos head swap — responsive, punchy, reliable.
+  California BAR certified engine swap (sticker on passenger door post); passed
+  CA smog three times. Clean title. Chassis ~287k miles; ~20k on drivetrain
+  rebuild; ~35k on suspension/bushings/struts.
+
+identity:
+  year: 1989
+  body: 325i Sedan
+  transmission: 5-speed Getrag 260 manual (rebuilt by Zimmerman Automotive, PA)
+  exterior: Delphi Grey Metallic (Delphin Grey respray 2012)
+  interior: Natur Beige vinyl / tan
+  title: clean
+  bar_certified: true
+  registration_note: CA BAR certified; DMV registered through April 2025
+  chassis_miles: ~287000
+  drivetrain_miles: 20000
+  suspension_miles: 35000
+
+engine_swap:
+  - S52 3.2L bottom end / M50 non-Vanos head (raw powerband, E30 character)
+  - iX brake booster with relocated reservoir
+  - E36 mount arms; E28 M5 motor mounts
+  - Offset transmission mount for Getrag 260
+  - Fully converted AC (needs inspection/recharge to restore)
+  - Zionsville 24v swap AC lines; E36 compressor
+  - M3 engine harness covers
+  - 413 ECU with Miller chip; also has custom SSSquid tune
+  - Zionsville e-fan kit (fan on continuously)
+  - New Behr radiator — runs cool
+  - Vibrant StreetPower muffler
+  - Harness repinned OEM-like (cruise control deleted; oil level sensor/light deleted — no false CELs)
+
+motor:
+  - S52 bottom end rebuilt; M50 NV head rebuilt (~20k mi since 2015 rebuild, pre-owner)
+  - Machining by Power Performance, San Luis Obispo CA
+  - Tolerances verified; cylinders and ring gaps checked
+  - Head refreshed with original valves/springs; new valve seats; ARP head studs
+  - Chain elongation verified in spec; pulls strong, idles well
+  - New late-model coolant reservoir/sensor
+  - S52 pink-top injectors (21.5 lb/hr)
+
+transmission_drivetrain:
+  - Rebuilt Getrag 260 with E30 M3 clutch (Zimmerman, ~16k mi) — also noted as '88 M3 clutch
+  - Rebuilt driveshaft
+  - Short-shift kit and bushings/carrier from Zionsville Auto
+  - 3.25 limited-slip differential; quiet, good lockup
+
+suspension_steering:
+  - E30 M3 springs; Bilstein Sport struts
+  - Z3 2.7-turn steering rack
+  - E36 PS pump and hoses
+  - E30 M3 offset control arm bushings
+  - Most bushings replaced within last few years
+
+wheels_tires:
+  - Euroweave 15" wheels
+  - Yokohama S Drive 205/55R15 (also Kumho Ecsta ST 255/50-15 per 2024 service)
+
+exterior:
+  - 100% rust-free undercarriage
+  - Euro bumper trim; iX body kit (hard mounted); Shadowline trim; iS lip
+  - Clean OEM front/rear roundels
+  - Paint respray 2012 — fading/patina/chips/cracking on hood and trunk; dent in hood
+  - Recent low-speed rear hit (~3 mph at stoplight) — bumper strip replaced; two small shallow dents and paint scratches on bumper; no trunk or frame damage
+
+interior:
+  - Well-preserved Natur Beige vinyl; remarkably clean
+  - Rare six-cassette storage rack in center console
+  - Fully functional gauge cluster with accurate odometer
+  - Six-button OBC — no LCD bleed
+  - Oil gauge deleted (never wired to check panel post-swap)
+  - OEM beige floor mats (out of production)
+  - New all-leather shift boot; mushroom E30 M3-style shifter
+
+audio:
+  - Kenwood head unit with Bluetooth
+  - JL Audio dual 10" subwoofer box in trunk with JL amp — clean highs, strong lows
+
+other_notes:
+  - New catalytic converter 2019
+  - Behr radiator and hoses replaced 2021
+  - Mason Engineering strut bar (matte black powder coat); Garagistic cross-brace
+  - Manual sunroof works, leak-free
+  - Viper keyless entry and alarm installed June 2024
+
+known_issues:
+  - Paint is the main cosmetic concern — ready for refresh (hood/trunk worst)
+  - AC converted but needs recharge/inspection
+  - Rear bumper cosmetic damage from recent low-speed tap
+
+maintenance_csv: data/vehicle-maintenance-history.csv
+maintenance_recent_limit: 12

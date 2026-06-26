@@ -23,9 +23,8 @@ COPY scripts/s52-hal-voice-requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY scripts/s52-hal-voice.py scripts/hal-bench.py ./scripts/
-# Default car persona so HAL has context in the bench; real secrets come from
-# the mounted ~/.config/hal.env at runtime, never baked into the image.
 COPY scripts/hal-context.yaml.example /root/.config/hal-context.yaml
+COPY data/vehicle-maintenance-history.csv ./data/vehicle-maintenance-history.csv
 
 # Write the reply WAV into the mounted /out by default (see compose).
 ENV HAL_BENCH_OUT=/out/reply.wav

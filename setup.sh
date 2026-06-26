@@ -580,7 +580,7 @@ else
     if [[ ! -f "$SVC_CONFIG/hal-context.yaml" ]]; then
       install -m 644 -o "$SERVICE_USER" -g "$SERVICE_USER" \
         "$SOURCE_DIR/scripts/hal-context.yaml.example" "$SVC_CONFIG/hal-context.yaml"
-      echo "    NOTE: edit $SVC_CONFIG/hal-context.yaml with your car/owner/home_city."
+      echo "    NOTE: edit $SVC_CONFIG/hal-context.yaml — or re-copy from scripts/hal-context.yaml.example after git pull."
     fi
 
     sudo tee /etc/systemd/system/s52-hal-voice.service > /dev/null <<SERVICE
