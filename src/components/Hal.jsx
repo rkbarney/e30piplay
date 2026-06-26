@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
-import useHalVoice from '../useHalVoice';
 
 // How long the lens takes to glow up to full brightness on mount.
 const BOOT_MS = 2400;
@@ -26,8 +25,11 @@ function fbm(t, phases) {
 
 // Listening/speaking dance a little faster and a little more — HAL gets
 // visibly more "alert" without changing his shape.
-const SPEED = { idle: 1, listening: 1.7, speaking: 2.3 };
-const REACH = { idle: 1, listening: 1.25, speaking: 1.4 };
+const SPEED = { idle: 1, listening: 2.2, speaking: 2.8 };
+const REACH = { idle: 1, listening: 1.55, speaking: 1.75 };
+const RING_GLOW = { idle: 0, listening: 0.85, speaking: 1 };
+// Listening glow only after wake-word match (sidecar); no on-screen label.
+const STATUS_LABEL = { idle: '', listening: '', speaking: 'SPEAKING…' };
 
 /**
  * HAL 9000-inspired glowing eye. Original CSS/SVG artwork drawn for this
@@ -36,9 +38,7 @@ const REACH = { idle: 1, listening: 1.25, speaking: 1.4 };
  * DeviantArt, https://www.deviantart.com/jayaprime/art/HAL-9000-Animated-Fractal-455267246
  * — that work is the artist's own and isn't used here.)
  */
-export default function Hal({ onMinus, onPlus, onIntent }) {
-  const voiceState = useHalVoice(onIntent);
-
+export default function Hal({ onMinus, onPlus, voiceState = 'idle', voiceTranscript = '', voiceLabel = '' }) {
   // Lens is dark on mount and fades up — the chrome bezel is always visible,
   // only the "light" itself powers on.
   const [booted, setBooted] = useState(false);
@@ -76,6 +76,9 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
   }, [booted, voiceState]);
 
   const { glow, breathe, flare } = flame;
+  const ringGlow = RING_GLOW[voiceState] ?? 0;
+  const statusLabel = voiceLabel || STATUS_LABEL[voiceState] || '';
+  const showTranscript = Boolean(voiceTranscript) && !voiceLabel;
 
   return (
     <ScreenFrame
@@ -86,7 +89,14 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
       ]}
     >
       <div style={styles.stage}>
-        <div style={styles.ring}>
+        <div
+          style={{
+            ...styles.ring,
+            boxShadow: ringGlow
+              ? `0 0 0 1px #2a2c2e, 0 0 ${Math.round(18 * ringGlow)}px ${Math.round(8 * ringGlow)}px rgba(212,0,0,0.75), 0 10px 24px rgba(0,0,0,0.6)`
+              : styles.ring.boxShadow,
+          }}
+        >
           <div style={styles.bezelHighlight} />
           <div
             style={{
@@ -94,7 +104,9 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
               boxShadow: booted
                 ? `inset 0 0 ${Math.round(48 * breathe)}px ${Math.round(12 * breathe)}px #000`
                 : 'inset 0 0 60px 16px #000',
-              filter: booted ? `brightness(${glow}) saturate(1)` : 'brightness(0.1) saturate(0.2)',
+              filter: booted
+                ? `brightness(${voiceState === 'listening' ? glow * 1.18 : glow}) saturate(${voiceState === 'idle' ? 1 : 1.35})`
+                : 'brightness(0.1) saturate(0.2)',
               transition: booted ? 'none' : `filter ${BOOT_MS}ms ease-out`,
             }}
           >
@@ -104,6 +116,14 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
             <div style={{ ...styles.flareDot, opacity: booted ? flare : 0 }} />
           </div>
         </div>
+        {(statusLabel || showTranscript) && (
+          <div style={styles.voiceHud} aria-live="polite">
+            {statusLabel && <div style={styles.voiceStatus}>{statusLabel}</div>}
+            {showTranscript && (
+              <div style={styles.voiceHeard}>HEARD: {voiceTranscript}</div>
+            )}
+          </div>
+        )}
       </div>
     </ScreenFrame>
   );
@@ -112,7 +132,9 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
 Hal.propTypes = {
   onMinus: PropTypes.func,
   onPlus: PropTypes.func,
-  onIntent: PropTypes.func,
+  voiceState: PropTypes.oneOf(['idle', 'listening', 'speaking']),
+  voiceTranscript: PropTypes.string,
+  voiceLabel: PropTypes.string,
 };
 
 const RED = '#d40000';
@@ -230,5 +252,26 @@ const styles = {
     borderRadius: '50%',
     background: 'rgba(255,255,255,0.6)',
     filter: 'blur(1px)',
+  },
+
+  voiceHud: {
+    width: '300px',
+    textAlign: 'center',
+    fontFamily: 'monospace',
+    fontSize: '13px',
+    lineHeight: 1.35,
+    color: '#ffb4b4',
+    minHeight: '36px',
+  },
+  voiceStatus: {
+    letterSpacing: '0.12em',
+    fontWeight: 700,
+    color: '#ff5555',
+  },
+  voiceHeard: {
+    marginTop: '6px',
+    fontSize: '12px',
+    color: '#ffd0a8',
+    wordBreak: 'break-word',
   },
 };
