@@ -7,3 +7,7 @@ sounddevice
 webrtcvad
 websockets
 numpy
+# Claude Haiku brain + HAL 9000 neural voice + car-context config.
+anthropic
+piper-tts
+pyyaml

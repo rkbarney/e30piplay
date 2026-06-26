@@ -24,12 +24,24 @@ python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install -q --upgrade pip
 "$VENV_DIR/bin/pip" install -r "$REQ"
 
+mkdir -p "$HOME/.config"
 if [[ ! -f "$HOME/.config/s52-hal-voice.env" ]]; then
   {
     echo "# HAL voice tuning — mic auto-detected at runtime (see s52-hal-voice.py)"
     echo "S52_HAL_VAD_LEVEL=3"
     echo "S52_HAL_WHISPER_MODEL=tiny.en"
   } > "$HOME/.config/s52-hal-voice.env"
+fi
+
+# Secrets + car context live in ~/.config (off the repo). Scaffold from the
+# committed examples so the user just fills them in; never overwrite real ones.
+if [[ ! -f "$HOME/.config/hal.env" ]]; then
+  install -m 600 "$APP_DIR/scripts/hal.env.example" "$HOME/.config/hal.env"
+  echo "  NOTE: set ANTHROPIC_API_KEY in ~/.config/hal.env — HAL can't talk without it."
+fi
+if [[ ! -f "$HOME/.config/hal-context.yaml" ]]; then
+  install -m 644 "$APP_DIR/scripts/hal-context.yaml.example" "$HOME/.config/hal-context.yaml"
+  echo "  NOTE: edit ~/.config/hal-context.yaml with your car/owner/home_city."
 fi
 
 mkdir -p "$HOME/.config/systemd/user"
@@ -41,6 +53,7 @@ After=pipewire.service wireplumber.service
 [Service]
 EnvironmentFile=-%h/.config/s52-carplay-audio.env
 EnvironmentFile=-%h/.config/s52-hal-voice.env
+EnvironmentFile=-%h/.config/hal.env
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 WorkingDirectory=$APP_DIR
 ExecStart=$VENV_DIR/bin/python3 $PY

@@ -20,13 +20,14 @@ export default function DisplaySwitcher() {
   if (FACES.includes(screen)) lastFaceRef.current = screen;
 
   // Voice intents from the HAL speech sidecar (see useHalVoice) map onto the
-  // same navigation the +/− buttons already drive.
+  // same navigation the +/− buttons already drive. Claude emits the
+  // switch_to_*/return_to_kiosk vocabulary; the older start_carplay/go_* names
+  // are kept as aliases so nothing breaks mid-migration.
   const handleHalIntent = useCallback((intent) => {
-    if (intent === 'start_carplay') setScreen('carplay');
-    else if (intent === 'exit_carplay') setScreen('hal');
-    else if (intent === 'go_games') setScreen('games');
-    else if (intent === 'go_clock') setScreen('factory');
-    else if (intent === 'go_hal') setScreen('hal');
+    if (intent === 'switch_to_carplay' || intent === 'start_carplay') setScreen('carplay');
+    else if (intent === 'return_to_kiosk' || intent === 'go_clock') setScreen('factory');
+    else if (intent === 'switch_to_emulator' || intent === 'go_games') setScreen('games');
+    else if (intent === 'exit_carplay' || intent === 'go_hal') setScreen('hal');
   }, []);
 
   // Listening lives here (not inside the Hal screen) so "HAL, switch to

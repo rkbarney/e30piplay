@@ -1,0 +1,11 @@
+# HAL car context — copy to ~/.config/hal-context.yaml on the Pi and fill in.
+# Injected into Claude's system prompt so HAL knows whose car it's in. Optional:
+# a missing file just means HAL is a little less personal. Not a secret, but it
+# lives in ~/.config (off the repo) alongside hal.env.
+#
+#   cp scripts/hal-context.yaml.example ~/.config/hal-context.yaml
+#   $EDITOR ~/.config/hal-context.yaml
+
+car: 1991 BMW E30
+owner: Dave
+home_city: Los Angeles
