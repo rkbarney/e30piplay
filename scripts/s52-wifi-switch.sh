@@ -11,7 +11,7 @@ wifi_device() {
 
 list_wifi_profiles() {
   nmcli -t -f NAME,TYPE connection show 2>/dev/null \
-    | awk -F: '$2 == "wifi" && $1 != "" { print $1 }' \
+    | awk -F: '$2 ~ /^(802-11-wireless|wifi)$/ && $1 != "" { print $1 }' \
     | sort
 }
 
@@ -19,7 +19,7 @@ profile_is_wifi() {
   local conn="${1:-}"
   [[ -n "${conn}" ]] || return 1
   nmcli -t -f NAME,TYPE connection show 2>/dev/null \
-    | awk -F: -v c="${conn}" '$2 == "wifi" && $1 == c { found=1 } END { exit !found }'
+    | awk -F: -v c="${conn}" '$2 ~ /^(802-11-wireless|wifi)$/ && $1 == c { found=1 } END { exit !found }'
 }
 
 emit_status() {
