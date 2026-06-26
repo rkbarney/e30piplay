@@ -22,6 +22,32 @@ profile_is_wifi() {
     | awk -F: -v c="${conn}" '$2 ~ /^(802-11-wireless|wifi)$/ && $1 == c { found=1 } END { exit !found }'
 }
 
+target_ssid_for_profile() {
+  local conn="${1:-}"
+  nmcli -g 802-11-wireless.ssid connection show "${conn}" 2>/dev/null || true
+}
+
+ssid_visible() {
+  local dev="${1:-}" ssid="${2:-}"
+  [[ -n "${dev}" && -n "${ssid}" ]] || return 0
+  nmcli dev wifi rescan ifname "${dev}" >/dev/null 2>&1 || true
+  sleep 2
+  nmcli -t -f SSID dev wifi list ifname "${dev}" 2>/dev/null     | grep -Fxq "${ssid}"
+}
+
+nmcli_fail_message() {
+  local out="${1:-}"
+  if [[ "${out}" == *"ssid-not-found"* ]] || [[ "${out}" == *"No network with SSID"* ]]; then
+    echo "That network is not in range. Turn on the hotspot or move closer, then try again."
+  elif [[ "${out}" == *"Secrets were required"* ]] || [[ "${out}" == *"secrets"* ]]; then
+    echo "WiFi password missing for this profile. Re-add the network on the Pi (see scripts/s52-add-wifi-hotspot.sh)."
+  elif [[ "${out}" == *"permission"* ]] || [[ "${out}" == *"not authorized"* ]]; then
+    echo "Not allowed to change WiFi. Run setup.sh on the Pi or use: sudo install ... s52-wifi-switch.sh"
+  else
+    echo "${out:-WiFi connection activation failed. Check: journalctl -u NetworkManager -b --no-pager | tail -30}"
+  fi
+}
+
 emit_status() {
   local dev profile ssid signal profiles_json
 
@@ -81,7 +107,22 @@ switch_network() {
     exit 1
   fi
 
-  nmcli connection up "${conn}"
+  local dev target_ssid nm_out nm_rc
+
+  dev="$(wifi_device || true)"
+  target_ssid="$(target_ssid_for_profile "${conn}")"
+  if [[ -n "${dev}" && -n "${target_ssid}" && "${target_ssid}" != "--" ]]; then
+    if ! ssid_visible "${dev}" "${target_ssid}"; then
+      printf "Network %s is not in range. Turn on the hotspot or move closer, then try again.\n" "${target_ssid}" >&2
+      exit 1
+    fi
+  fi
+
+  if ! nm_out="$(nmcli connection up "${conn}" 2>&1)"; then
+    nm_rc=$?
+    echo "$(nmcli_fail_message "${nm_out}")" >&2
+    exit "${nm_rc}"
+  fi
   emit_status
 }
 

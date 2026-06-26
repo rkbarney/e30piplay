@@ -275,14 +275,20 @@ async function getWifiStatus() {
 async function runWifiSwitch(profile) {
   const name = String(profile || '').trim();
   if (!name) throw new Error('invalid profile');
-  const installed = fs.existsSync(WIFI_SCRIPT_INSTALLED);
   const script = wifiScriptPath();
-  const args = installed
-    ? ['-n', script, 'switch', name]
-    : [script, 'switch', name];
-  const cmd = installed ? 'sudo' : 'bash';
-  const { stdout } = await run(cmd, args, { timeout: 90000 });
-  return JSON.parse(stdout.trim());
+  try {
+    const { stdout } = await run('bash', [script, 'switch', name], { timeout: 90000 });
+    return JSON.parse(stdout.trim());
+  } catch (e) {
+    const denied = /permission|authorized|denied|not authorized|insufficient/i.test(
+      `${e.stderr || ''}${e.message || ''}`,
+    );
+    if (denied && fs.existsSync(WIFI_SCRIPT_INSTALLED)) {
+      const { stdout } = await run('sudo', ['-n', script, 'switch', name], { timeout: 90000 });
+      return JSON.parse(stdout.trim());
+    }
+    throw e;
+  }
 }
 
 // Switch to a remote branch, then build + deploy. The branch is validated and
