@@ -36,6 +36,8 @@ case "${1:-}" in
     wlrctl_toplevel focus || {
       /usr/bin/wlrctl toplevel find "app_id:${CARPLAY_APP_ID}" >/dev/null || exit 1
     }
+    # focus de-iconifies but may leave a partial window — maximize fills the panel.
+    wlrctl_toplevel maximize || true
     ;;
   return)
     wlrctl_toplevel minimize || true

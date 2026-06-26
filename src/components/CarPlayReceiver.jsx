@@ -13,7 +13,7 @@
  *     (scripts/s52-exit-overlay.py) is the real way back while CarPlay is focused.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
 
@@ -22,7 +22,6 @@ const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 export default function CarPlayReceiver({ onBack }) {
   const [phase, setPhase] = useState('opening'); // opening | idle | restarting
   const [err, setErr] = useState('');
-  const openedRef = useRef(false);
 
   const call = useCallback(async (path, working) => {
     setErr('');
@@ -59,11 +58,23 @@ export default function CarPlayReceiver({ onBack }) {
     onBack?.(e);
   }, [onBack]);
 
-  // Auto-open on first entry (the + handoff). Guard React 18 StrictMode double-run.
+  // Auto-open on first entry (+ / HAL voice handoff). Wait two animation frames so
+  // the carplay face is painted before wlrctl focus — otherwise LIVI can de-iconify
+  // over the previous face at a partial geometry (HAL voice path hit this).
   useEffect(() => {
-    if (openedRef.current) return;
-    openedRef.current = true;
-    openCarplay();
+    let cancelled = false;
+    let outerId = 0;
+    let innerId = 0;
+    outerId = requestAnimationFrame(() => {
+      innerId = requestAnimationFrame(() => {
+        if (!cancelled) openCarplay();
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(outerId);
+      cancelAnimationFrame(innerId);
+    };
   }, [openCarplay]);
 
   const busy = phase === 'opening' || phase === 'restarting';

@@ -96,13 +96,30 @@ async function wlrctlToplevel(action, appId) {
   await run(WLRCTL, ['toplevel', action, `app_id:${appId}`]);
 }
 
+async function wlrctlToplevelBestEffort(action, appId) {
+  try {
+    await wlrctlToplevel(action, appId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function launchCarplayReceiver() {
-  const { appId } = getReceiverConfig();
+  const { appId, receiver } = getReceiverConfig();
   try {
     await wlrctlToplevel('focus', appId);
   } catch {
     // Focus can fail when the window is already foreground; ok if it exists.
     if (!(await carplayReady())) throw new Error(`no CarPlay toplevel (${appId}) to focus`);
+  }
+  // De-iconify via focus does not always restore panel size — LIVI in particular
+  // can map at a partial geometry (mainScreenBounds unset) until labwc maximizes.
+  await wlrctlToplevelBestEffort('maximize', appId);
+  if (receiver === 'livi') {
+    // LIVI's nested compositor can settle one frame after un-minimize.
+    await sleep(150);
+    await wlrctlToplevelBestEffort('maximize', appId);
   }
 }
 
