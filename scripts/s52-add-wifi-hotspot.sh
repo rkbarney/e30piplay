@@ -40,6 +40,18 @@ if [[ -z "${SSID}" ]]; then
 fi
 [[ -n "${SSID}" ]] || { echo "No SSID given." >&2; exit 1; }
 
+# iPhone Personal Hotspot SSIDs often use a curly apostrophe (U+2019). Typing ASCII '
+# makes the saved profile invisible to NetworkManager even when the phone is nearby.
+if printf '%s' "${SSID}" | python3 <<'PY'
+import sys
+s = sys.stdin.read()
+raise SystemExit(0 if any(c in s for c in "'\u2019\u2018") else 1)
+PY
+then
+  echo "Tip: copy the SSID exactly from the Pi: nmcli dev wifi list" >&2
+  echo "  iPhone hotspot names use a curly apostrophe, not a straight one." >&2
+fi
+
 read -r -s -p "Password for '${SSID}': " PW
 echo
 

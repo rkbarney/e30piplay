@@ -27,12 +27,67 @@ target_ssid_for_profile() {
   nmcli -g 802-11-wireless.ssid connection show "${conn}" 2>/dev/null || true
 }
 
+# iPhone hotspot names often use U+2019 (’) while manual entry uses ASCII '.
+normalize_ssid_py() {
+  python3 <<'PY'
+import sys
+print(sys.stdin.read().translate(str.maketrans({"\u2019": "'", "\u2018": "'"})).strip(), end="")
+PY
+}
+
+scan_ssids() {
+  local dev="${1:-}"
+  nmcli -t -f SSID dev wifi list ifname "${dev}" 2>/dev/null
+}
+
+refresh_wifi_scan() {
+  local dev="${1:-}"
+  nmcli dev wifi rescan ifname "${dev}" >/dev/null 2>&1 || true
+  sleep 2
+}
+
+# Return the scanned SSID that matches the profile SSID (exact or apostrophe-normalized).
+visible_scan_ssid() {
+  local dev="${1:-}" want="${2:-}"
+  [[ -n "${dev}" && -n "${want}" ]] || return 0
+
+  refresh_wifi_scan "${dev}"
+
+  local scan_ssid want_norm scan_norm
+  want_norm="$(printf '%s' "${want}" | normalize_ssid_py)"
+
+  while IFS= read -r scan_ssid; do
+    [[ -n "${scan_ssid}" ]] || continue
+    if [[ "${scan_ssid}" == "${want}" ]]; then
+      printf '%s' "${scan_ssid}"
+      return 0
+    fi
+    scan_norm="$(printf '%s' "${scan_ssid}" | normalize_ssid_py)"
+    if [[ -n "${want_norm}" && "${scan_norm}" == "${want_norm}" ]]; then
+      printf '%s' "${scan_ssid}"
+      return 0
+    fi
+  done < <(scan_ssids "${dev}")
+
+  return 1
+}
+
 ssid_visible() {
   local dev="${1:-}" ssid="${2:-}"
   [[ -n "${dev}" && -n "${ssid}" ]] || return 0
-  nmcli dev wifi rescan ifname "${dev}" >/dev/null 2>&1 || true
-  sleep 2
-  nmcli -t -f SSID dev wifi list ifname "${dev}" 2>/dev/null     | grep -Fxq "${ssid}"
+  visible_scan_ssid "${dev}" "${ssid}" >/dev/null
+}
+
+sync_profile_ssid_from_scan() {
+  local conn="${1:-}" dev="${2:-}" profile_ssid="${3:-}" scan_ssid=""
+
+  scan_ssid="$(visible_scan_ssid "${dev}" "${profile_ssid}" || true)"
+  [[ -n "${scan_ssid}" ]] || return 1
+
+  if [[ "${scan_ssid}" != "${profile_ssid}" ]]; then
+    nmcli connection modify "${conn}" 802-11-wireless.ssid "${scan_ssid}" >/dev/null
+  fi
+  printf '%s' "${scan_ssid}"
 }
 
 nmcli_fail_message() {
@@ -112,10 +167,11 @@ switch_network() {
   dev="$(wifi_device || true)"
   target_ssid="$(target_ssid_for_profile "${conn}")"
   if [[ -n "${dev}" && -n "${target_ssid}" && "${target_ssid}" != "--" ]]; then
-    if ! ssid_visible "${dev}" "${target_ssid}"; then
+    if ! synced_ssid="$(sync_profile_ssid_from_scan "${conn}" "${dev}" "${target_ssid}")"; then
       printf "Network %s is not in range. Turn on the hotspot or move closer, then try again.\n" "${target_ssid}" >&2
       exit 1
     fi
+    target_ssid="${synced_ssid}"
   fi
 
   if ! nm_out="$(nmcli connection up "${conn}" 2>&1)"; then
