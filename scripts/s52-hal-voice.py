@@ -171,14 +171,16 @@ def load_shell_env(path):
 # Mic + AUX output: carplay-audio.env is loaded for PULSE_SINK (TTS).
 # Capture device is auto-detected at runtime via pactl (pi-audio-usb-default.sh
 # heuristics) — bench Yeti vs in-car lavalier needs no manual config.
-# TTS output uses configured PULSE_SINK when that sink is online (in-car C-Media
-# DAC); otherwise falls back to the system default sink (HDMI monitor at bench).
+# TTS output: in-car C-Media / carplay PULSE_SINK when online; at bench (DAC
+# unplugged) HDMI monitor speakers — never the USB mic's headphone jack.
+# Optional override: S52_HAL_PULSE_SINK in ~/.config/s52-hal-voice.env.
 load_shell_env(os.path.expanduser('~/.config/s52-carplay-audio.env'))
 load_shell_env(os.path.expanduser('~/.config/s52-hal-voice.env'))
 # Secrets (ANTHROPIC_API_KEY) — read by the anthropic SDK from the environment.
 load_shell_env(os.path.expanduser('~/.config/hal.env'))
 
 CONFIGURED_PULSE_SINK = os.environ.get('PULSE_SINK')
+HAL_PULSE_SINK = os.environ.get('S52_HAL_PULSE_SINK', '').strip()
 PULSE_SOURCE = os.environ.get('PULSE_SOURCE', '').strip()
 
 
@@ -545,9 +547,34 @@ def get_default_pulse_sink():
     return name or None
 
 
+def list_hdmi_card_names():
+    out = _pactl_output(['list', 'cards', 'short'])
+    if not out:
+        return []
+    names = []
+    for line in out.strip().splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and 'hdmi' in parts[1].lower():
+            names.append(parts[1])
+    return names
+
+
+def ensure_hdmi_pulse_sinks():
+    """Pi vc4-hdmi cards often sit profile=off until pro-audio is selected."""
+    for card in list_hdmi_card_names():
+        try:
+            subprocess.run(
+                ['pactl', 'set-card-profile', card, 'pro-audio'],
+                capture_output=True, text=True, timeout=3, check=False,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+
+
 def discover_hdmi_sink():
     for name in list_pulse_sink_names():
-        if 'hdmi' in name.lower():
+        lower = name.lower()
+        if 'hdmi' in lower or 'vc4hdmi' in lower:
             return name
     return None
 
@@ -556,14 +583,61 @@ _MIC_SINK_KEYWORDS = (
     'microphone', 'yeti', 'lavalier', 'blue_microphones', 'dcmt',
 )
 
+_CAR_DAC_KEYWORDS = (
+    'cmedia', 'c-media', 'fosi', 'sabrent', 'ugreen', 'generic_usb',
+    'usb_audio_device',
+)
+
 
 def is_mic_sink(name):
     lower = name.lower()
     return any(kw in lower for kw in _MIC_SINK_KEYWORDS)
 
 
+def is_car_dac_sink(name):
+    """USB playback DAC (Kenwood AUX) — not HDMI, not a USB mic."""
+    lower = name.lower()
+    if is_mic_sink(name):
+        return False
+    if 'hdmi' in lower or 'vc4hdmi' in lower:
+        return False
+    if any(kw in lower for kw in _CAR_DAC_KEYWORDS):
+        return True
+    return 'usb' in lower and 'analog-stereo' in lower and 'output' in lower
+
+
+def discover_car_dac_sink(sinks=None):
+    """Live USB DAC when in-car — mirrors pi-audio-usb-default.sh heuristics."""
+    names = list(sinks) if sinks is not None else list_pulse_sink_names()
+    for name in names:
+        if is_car_dac_sink(name):
+            return name
+    return None
+
+
+def discover_alsa_hdmi_device():
+    """ALSA plughw device when PipeWire has no HDMI sink node (common on bench)."""
+    try:
+        proc = subprocess.run(
+            ['aplay', '-l'], capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode != 0:
+        return None
+    for line in proc.stdout.splitlines():
+        match = re.match(r'card (\d+):\s+(\S+)\s+\[([^\]]+)\]', line)
+        if not match:
+            continue
+        card_id, short_name, long_name = match.groups()
+        blob = f'{short_name} {long_name}'.lower()
+        if 'vc4hdmi' in blob or ('hdmi' in blob and 'vc4' in blob):
+            return f'plughw:{card_id},0'
+    return None
+
+
 def pick_fallback_sink(sinks):
-    """Prefer HDMI / non-mic sinks — USB mics expose a headphone jack, not speakers."""
+    """Prefer HDMI / non-mic sinks — never route TTS to a USB mic jack."""
     names = list(sinks)
     if not names:
         return None, 'none'
@@ -571,34 +645,50 @@ def pick_fallback_sink(sinks):
     if non_mic:
         for name in non_mic:
             if 'hdmi' in name.lower():
-                return name, 'hdmi (configured DAC offline)'
+                return name, 'hdmi'
         return non_mic[0], 'non-mic fallback'
-    return names[0], 'mic analog out (plug headphones into mic jack)'
+    return None, 'no suitable sink (mic excluded)'
 
 
-def resolve_pulse_sink():
-    """TTS output: carplay-audio.env PULSE_SINK when online, else fallback.
+def resolve_tts_output():
+    """Return (backend, target, origin) for TTS playback.
 
-    In-car: configured C-Media DAC is present → use it (Kenwood AUX).
-    Bench: configured DAC offline → HDMI monitor (not the stale env name).
+    backend is 'pulse' (paplay + PULSE_SINK) or 'alsa' (aplay -D).
+    In-car: C-Media / carplay PULSE_SINK or auto-detected USB DAC.
+    Bench: HDMI via Pulse when available, else ALSA vc4-hdmi direct.
     """
+    ensure_hdmi_pulse_sinks()
     sinks = set(list_pulse_sink_names())
-    if CONFIGURED_PULSE_SINK:
-        if CONFIGURED_PULSE_SINK in sinks:
-            return CONFIGURED_PULSE_SINK, 'carplay-audio.env'
+
+    if HAL_PULSE_SINK:
+        if HAL_PULSE_SINK in sinks:
+            return 'pulse', HAL_PULSE_SINK, 's52-hal-voice.env'
         log.warning(
-            'configured PULSE_SINK=%s not plugged in — using fallback sink',
+            'S52_HAL_PULSE_SINK=%s not online — auto-selecting output',
+            HAL_PULSE_SINK,
+        )
+
+    if CONFIGURED_PULSE_SINK and CONFIGURED_PULSE_SINK in sinks:
+        return 'pulse', CONFIGURED_PULSE_SINK, 'carplay-audio.env'
+
+    dac = discover_car_dac_sink(sinks)
+    if dac:
+        return 'pulse', dac, 'auto-detect car DAC'
+
+    if CONFIGURED_PULSE_SINK and CONFIGURED_PULSE_SINK not in sinks:
+        log.warning(
+            'configured PULSE_SINK=%s not plugged in — using bench fallback',
             CONFIGURED_PULSE_SINK,
         )
-        hdmi = discover_hdmi_sink()
-        if hdmi:
-            return hdmi, 'hdmi (configured DAC offline)'
-        picked, origin = pick_fallback_sink(sinks)
-        if picked:
-            return picked, origin
+
+    hdmi = discover_hdmi_sink()
+    if hdmi:
+        return 'pulse', hdmi, 'hdmi'
+
     default = get_default_pulse_sink()
     if default and not is_mic_sink(default):
-        return default, 'system default'
+        return 'pulse', default, 'system default'
+
     picked, origin = pick_fallback_sink(sinks)
     if picked:
         if default and is_mic_sink(default):
@@ -606,10 +696,28 @@ def resolve_pulse_sink():
                 'system default sink %s is a USB mic — using %s (%s)',
                 default, picked, origin,
             )
-        return picked, origin
-    if default:
-        return default, 'system default (mic only)'
-    return None, 'none'
+        return 'pulse', picked, origin
+
+    alsa_hdmi = discover_alsa_hdmi_device()
+    if alsa_hdmi:
+        if default and is_mic_sink(default):
+            log.warning(
+                'system default sink %s is a USB mic — using ALSA %s (hdmi)',
+                default, alsa_hdmi,
+            )
+        return 'alsa', alsa_hdmi, 'hdmi (ALSA direct)'
+
+    return None, None, 'none'
+
+
+def resolve_pulse_sink():
+    """Compatibility shim — returns (pulse_sink_name, origin) or (None, origin)."""
+    backend, target, origin = resolve_tts_output()
+    if backend == 'pulse':
+        return target, origin
+    if backend == 'alsa':
+        return None, origin
+    return None, origin
 
 
 def discover_pulse_source():
@@ -905,20 +1013,50 @@ def ensure_piper_model():
     return PIPER_MODEL_PATH
 
 
-def speak_espeak(text, sink=None, origin='fallback'):
-    """Last-resort stock TTS if the Piper voice is unavailable."""
-    if sink is None:
-        sink, origin = resolve_pulse_sink()
+def _play_tts_audio(pcm, sample_rate, text, backend=None, target=None, origin=''):
+    """Play synthesized PCM via Pulse or ALSA."""
+    if backend is None or target is None:
+        backend, target, origin = resolve_tts_output()
     env = dict(os.environ)
+    try:
+        if backend == 'pulse' and target:
+            env['PULSE_SINK'] = target
+            cmd = ['paplay', '--raw', f'--rate={sample_rate}', '--format=s16le', '--channels=1']
+            log.info('TTS → %s (%s): %r', target, origin, text)
+        elif backend == 'alsa' and target:
+            cmd = [
+                'aplay', '-q', '-D', target,
+                '-t', 'raw', '-f', 'S16_LE', '-r', str(sample_rate), '-c', '1',
+            ]
+            log.info('TTS → ALSA %s (%s): %r', target, origin, text)
+        else:
+            cmd = ['aplay', '-q', '-t', 'raw', '-f', 'S16_LE', '-r', str(sample_rate), '-c', '1']
+            log.info('TTS → ALSA default (%s): %r', origin, text)
+        subprocess.run(cmd, input=pcm, env=env, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+        log.warning('TTS playback failed: %s', exc)
+
+
+def speak_espeak(text, tts_output=None):
+    """Last-resort stock TTS if the Piper voice is unavailable."""
+    if tts_output is None:
+        tts_output = resolve_tts_output()
+    backend, target, origin = tts_output
     try:
         tts = subprocess.run(
             ['espeak-ng', '--stdout', '-s', '150', text],
             capture_output=True, check=True,
         )
-        if sink:
-            env['PULSE_SINK'] = sink
+        if backend == 'pulse' and target:
+            env = dict(os.environ)
+            env['PULSE_SINK'] = target
             subprocess.run(['paplay'], input=tts.stdout, env=env, check=True)
-            log.info('TTS(espeak) → %s (%s): %r', sink, origin, text)
+            log.info('TTS(espeak) → %s (%s): %r', target, origin, text)
+        elif backend == 'alsa' and target:
+            subprocess.run(
+                ['aplay', '-q', '-D', target], input=tts.stdout, check=True,
+            )
+            log.info('TTS(espeak) → ALSA %s (%s): %r', target, origin, text)
         else:
             subprocess.run(['aplay', '-q'], input=tts.stdout, check=True)
             log.info('TTS(espeak) → ALSA default (%s): %r', origin, text)
@@ -975,30 +1113,20 @@ class HalTts:
         text = text.strip()
         if not text:
             return
-        sink, origin = resolve_pulse_sink()
+        tts_output = resolve_tts_output()
         if not self.ready:
-            speak_espeak(text, sink, origin)
+            speak_espeak(text, tts_output)
             return
         try:
             pcm, sample_rate = self._synth_pcm(text)
         except Exception as exc:  # noqa: BLE001 - never let a synth error go unspoken
             log.warning('Piper synth failed (%s) — espeak fallback', exc)
-            speak_espeak(text, sink, origin)
+            speak_espeak(text, tts_output)
             return
         if not pcm:
             return
-        env = dict(os.environ)
-        try:
-            if sink:
-                env['PULSE_SINK'] = sink
-                cmd = ['paplay', '--raw', f'--rate={sample_rate}', '--format=s16le', '--channels=1']
-                log.info('TTS → %s (%s): %r', sink, origin, text)
-            else:
-                cmd = ['aplay', '-q', '-t', 'raw', '-f', 'S16_LE', '-r', str(sample_rate), '-c', '1']
-                log.info('TTS → ALSA default (%s): %r', origin, text)
-            subprocess.run(cmd, input=pcm, env=env, check=True)
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
-            log.warning('TTS playback failed: %s', exc)
+        backend, target, origin = tts_output
+        _play_tts_audio(pcm, sample_rate, text, backend, target, origin)
 
 
 # Module-level singleton so speak_tts() stays the single swap point for the voice.
@@ -1363,11 +1491,13 @@ class HalVoiceServer:
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    sink, origin = resolve_pulse_sink()
-    if sink:
-        log.info('TTS output: %s (%s)', sink, origin)
+    backend, target, origin = resolve_tts_output()
+    if backend == 'pulse' and target:
+        log.info('TTS output: %s (%s)', target, origin)
+    elif backend == 'alsa' and target:
+        log.info('TTS output: ALSA %s (%s)', target, origin)
     else:
-        log.warning('TTS output: no Pulse sink — will use ALSA default')
+        log.warning('TTS output: no suitable sink — will use ALSA default')
     server = HalVoiceServer()
     try:
         asyncio.run(server.run())
