@@ -132,9 +132,12 @@ PIPER_MODEL_MIN_BYTES = 60 * 1024 * 1024  # real model ~63 MB; catch truncated d
 MIC_WAIT_SEC = float(os.environ.get('S52_HAL_MIC_WAIT_SEC', '5'))
 
 # Wake word + homophones. We engage Claude when the wake word is heard; the rest
-# of the phrase is the command. tiny.en often hears "HAL" as "how"/"hall".
+# of the phrase is the command. tiny.en often hears "HAL" as "how"/"hall"/"pal".
 WAKE_WORDS = ('hal', 'h a l', 'hal 9000', 'hal nine thousand')
-WAKE_HOMOPHONES_START = ('how', 'hall', 'hell')
+WAKE_HOMOPHONES_START = ('how', 'hall', 'hell', 'pal')
+# Standalone tokens anywhere in the phrase (mid-utterance HAL; not "how" — that
+# stays a leading homophone so "I don't know how…" is not treated as wake).
+WAKE_INLINE_TOKENS = frozenset({'hal', 'hall', 'hell', 'pal', 'al'})
 # Screen/command verbs — "how switch to carplay" when tiny.en drops "HAL".
 WAKE_HOMOPHONE_HINTS = frozenset({
     'switch', 'car', 'carplay', 'play', 'start', 'open',
@@ -143,9 +146,37 @@ WAKE_HOMOPHONE_HINTS = frozenset({
 # Conversational phrases when whisper drops the leading "HAL" — still require
 # homophone start (how/hall/hell) so random cabin chatter is ignored.
 WAKE_CONVERSATION_HINTS = frozenset({'hear', 'help', 'hello'})
+# Vehicle Q&A when whisper drops HAL entirely — require both a command opener and
+# a car keyword so cabin chatter ("tell me a joke") stays ignored.
+WAKE_COMMAND_STARTERS = (
+    'tell me about',
+    'tell me',
+    'what do you know about',
+    'what do you know',
+    'what about',
+    'describe the',
+    'describe',
+    'explain the',
+    'explain',
+    'what kind of',
+    'what happened to',
+    'what was',
+    'how is the',
+    'how is it',
+    'how is my',
+    'how is',
+)
+WAKE_VEHICLE_HINTS = frozenset({
+    'bmw', 'e30', 'e 30', 'car', 'vehicle', 'tire', 'tires', 'engine', 'motor',
+    'catalytic', 'converter', 'maintenance', 'suspension', 'transmission',
+    'drivetrain', 'chassis', 'exhaust', 'reliable', 'reliability', 'miles',
+    'odometer', 'door', 'convertible', 'coupe', 'sedan', 'wheel', 'wheels',
+})
 # Leading tokens we strip off the command once the wake word is detected, longest
 # first so "hal nine thousand" wins over "hal".
-WAKE_STRIP_PREFIXES = ('hal nine thousand', 'hal 9000', 'h a l', 'hal', 'hall', 'hell', 'how')
+WAKE_STRIP_PREFIXES = (
+    'hal nine thousand', 'hal 9000', 'h a l', 'hal', 'hall', 'hell', 'how', 'pal',
+)
 
 _WHISPER_NOISE = frozenset({'blank audio', '[blank audio]', 'blank_audio'})
 
@@ -372,10 +403,34 @@ def _homophone_conversation(text, words):
     return 'are' in words and 'you' in words
 
 
+def _has_vehicle_context(text):
+    return any(hint in text for hint in WAKE_VEHICLE_HINTS)
+
+
+def _starts_with_command_pattern(text):
+    for starter in WAKE_COMMAND_STARTERS:
+        if text == starter or text.startswith(starter + ' '):
+            return True
+    return False
+
+
+def _vehicle_command_wake(text):
+    """Engage when STT drops HAL but the driver asks a car question."""
+    return _has_vehicle_context(text) and _starts_with_command_pattern(text)
+
+
+def _inline_wake_token(words):
+    return any(word in WAKE_INLINE_TOKENS for word in words)
+
+
 def heard_wake_word(text):
     if any(w in text for w in WAKE_WORDS):
         return True
     words = text.split()
+    if _inline_wake_token(words):
+        return True
+    if _vehicle_command_wake(text):
+        return True
     if not words or words[0] not in WAKE_HOMOPHONES_START:
         return False
     if any(hint in text for hint in WAKE_HOMOPHONE_HINTS):
@@ -395,6 +450,11 @@ def strip_wake_word(text):
             return ''
         if stripped.startswith(prefix + ' '):
             return stripped[len(prefix) + 1:].strip()
+    words = stripped.split()
+    if words and _inline_wake_token(words):
+        filtered = [word for word in words if word not in WAKE_INLINE_TOKENS]
+        if filtered:
+            return ' '.join(filtered)
     return stripped
 
 
