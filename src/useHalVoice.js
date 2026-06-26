@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 
 /**
  * Connects to the local HAL speech sidecar (scripts/s52-hal-voice.py). The
- * sidecar runs offline whisper.cpp STT against the USB mic and pushes JSON
- * frames over a WebSocket: { type: 'listening' | 'speaking' | 'idle' } for
- * HAL's eye state (listening only after a wake-word match — not on raw VAD),
- * { type: 'level', value: number } for live mic RMS (0..1, pre-smoothed by the
- * sidecar so the browser doesn't need a second getUserMedia on the same USB mic),
- * and { type: 'command', intent: 'start_carplay' | ... } once it matches a
- * "hal ..." phrase. It also speaks the "I'm sorry, Dave"
- * refusal itself (over AUX) when "hal" is heard but the rest doesn't match
- * a known command — there's no separate intent for that.
+ * sidecar runs whisper.cpp STT against the USB mic and, once the "hal" wake
+ * word is heard, sends the phrase to Claude Haiku and speaks the reply in the
+ * HAL 9000 voice (Piper TTS) over AUX. It pushes JSON frames over a WebSocket:
+ * { type: 'listening' | 'speaking' | 'idle' } for HAL's eye state (listening
+ * only after a wake-word match — not on raw VAD), { type: 'level', value:
+ * number } for live mic RMS (0..1, pre-smoothed by the sidecar so the browser
+ * doesn't need a second getUserMedia on the same USB mic), { type:
+ * 'transcript', text } with what HAL heard, and { type: 'command', intent:
+ * 'switch_to_carplay' | 'return_to_kiosk' | 'switch_to_emulator' } when Claude
+ * picks a screen-switch intent. Pure conversation (intent 'none') is spoken
+ * only — no command frame.
  *
  * `active` tells the sidecar whether it should be listening at all — false
  * while CarPlay is in the foreground, since the dongle already owns the mic

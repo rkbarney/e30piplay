@@ -558,15 +558,31 @@ if [[ "$S52_SKIP_HAL_VOICE" == "1" ]]; then
   echo "[11/11] Skipping HAL voice sidecar (S52_SKIP_HAL_VOICE=1)."
   echo "        Install later: rerun setup.sh without S52_SKIP_HAL_VOICE=1"
 else
-  echo "[11/11] HAL voice sidecar (whisper.cpp STT + espeak-ng TTS)…"
+  echo "[11/11] HAL voice sidecar (whisper.cpp STT → Claude Haiku → Piper voice)…"
   VENV_DIR="$HOME/.venvs/s52-hal-voice"
   python3 -m venv "$VENV_DIR"
   if "$VENV_DIR/bin/pip" install -q -r "$SOURCE_DIR/scripts/s52-hal-voice-requirements.txt"; then
     install -m 755 "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"
 
+    # Secrets + car context live in the service user's ~/.config, off the repo.
+    # Scaffold from the committed examples (never clobber a real file); HAL needs
+    # ANTHROPIC_API_KEY in hal.env before it can answer.
+    SVC_CONFIG="/home/$SERVICE_USER/.config"
+    install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$SVC_CONFIG"
+    if [[ ! -f "$SVC_CONFIG/hal.env" ]]; then
+      install -m 600 -o "$SERVICE_USER" -g "$SERVICE_USER" \
+        "$SOURCE_DIR/scripts/hal.env.example" "$SVC_CONFIG/hal.env"
+      echo "    NOTE: set ANTHROPIC_API_KEY in $SVC_CONFIG/hal.env — HAL can't talk without it."
+    fi
+    if [[ ! -f "$SVC_CONFIG/hal-context.yaml" ]]; then
+      install -m 644 -o "$SERVICE_USER" -g "$SERVICE_USER" \
+        "$SOURCE_DIR/scripts/hal-context.yaml.example" "$SVC_CONFIG/hal-context.yaml"
+      echo "    NOTE: edit $SVC_CONFIG/hal-context.yaml with your car/owner/home_city."
+    fi
+
     sudo tee /etc/systemd/system/s52-hal-voice.service > /dev/null <<SERVICE
 [Unit]
-Description=S52 HAL voice command sidecar (offline STT wake word)
+Description=S52 HAL voice assistant (whisper STT → Claude Haiku → Piper voice)
 After=network.target pipewire.service wireplumber.service
 
 [Service]
@@ -574,6 +590,7 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=-/home/$SERVICE_USER/.config/s52-hal-voice.env
+EnvironmentFile=-/home/$SERVICE_USER/.config/hal.env
 Environment=XDG_RUNTIME_DIR=/run/user/$S52_UID
 ExecStart=$VENV_DIR/bin/python3 $APP_DIR/scripts/s52-hal-voice.py
 Restart=on-failure
@@ -587,7 +604,8 @@ SERVICE
     sudo systemctl enable s52-hal-voice
     sudo systemctl restart s52-hal-voice || \
       echo "  NOTE: s52-hal-voice failed to start — journalctl -u s52-hal-voice -n 30 --no-pager" >&2
-    echo "    HAL voice sidecar: installed (config: ~/.config/s52-hal-voice.env, see scripts/s52-hal-voice.env.example)"
+    echo "    HAL voice sidecar: installed (tuning: ~/.config/s52-hal-voice.env; secrets: ~/.config/hal.env; context: ~/.config/hal-context.yaml)"
+    echo "    HAL Piper voice (~60 MB) downloads from Hugging Face on first run."
   else
     echo "" >&2
     echo "  WARNING: pywhispercpp install failed (network, or whisper.cpp build toolchain)." >&2

@@ -1,35 +1,44 @@
 #!/usr/bin/env python3
-"""s52-hal-voice — offline "HAL, switch to CarPlay" voice command sidecar.
+"""s52-hal-voice — conversational "HAL" voice assistant sidecar.
 
-Listens on the USB mic for the wake word "HAL" followed by a known command,
-using whisper.cpp (via pywhispercpp) for fully offline speech-to-text — no
-internet dependency, matching the rest of the kiosk's offline-first stance.
-Recognized commands are pushed to the kiosk UI (src/useHalVoice.js) as JSON
-frames over a local WebSocket that the existing Hal.jsx / DisplaySwitcher.jsx
-already know how to consume:
+Listens on the USB mic for the wake word "HAL", transcribes the rest of the
+phrase with whisper.cpp (via pywhispercpp), and hands it to Claude Haiku in the
+cloud. HAL's reply is spoken in the HAL 9000 voice via Piper TTS (a local
+neural voice, pre-trained on 2001: A Space Odyssey audio) — streamed
+sentence-by-sentence as Claude responds, so the first words land fast. Claude
+also picks a screen-switch intent, emitted as a JSON object on the last line of
+its reply, which we forward to the kiosk UI (src/useHalVoice.js) as a command
+frame over a local WebSocket that Hal.jsx / DisplaySwitcher.jsx already consume:
 
-    {"type": "idle" | "listening" | "speaking", "label": "OPENING CARPLAY"?}
-    {"type": "command", "intent": "start_carplay"}    -- recognized command
+    {"type": "idle" | "listening" | "speaking"}        -- HAL eye state
+    {"type": "transcript", "text": "..."}              -- what HAL heard
+    {"type": "level", "value": 0.0..1.0}               -- live mic RMS for glow
+    {"type": "command", "intent": "switch_to_carplay"} -- screen switch
 
-If "HAL" is heard but the rest of the phrase doesn't match a known command,
-this process speaks the refusal line itself (HAL has no reason to bother the
-UI with that) — "I'm sorry, Dave. I'm afraid I can't do that." — via
-espeak-ng, a stock TTS voice swapped in here as a placeholder until a trained
-HAL voice model replaces it (see speak_tts()). Successful commands get a brief
-spoken + on-screen ack the same way before the command frame is sent.
+Pipeline:
+
+    Mic → whisper.cpp STT → Claude Haiku (streaming) → Piper TTS → speakers
+                                  │
+                                  └→ intent JSON → WebSocket → UI
+
+This is *cloud-only* by design: there's no offline grammar fallback. If the Pi
+has no network (no hotspot), HAL simply can't answer — the driver uses the
+on-screen +/− buttons instead. Keeping it cloud-only keeps the sidecar simple.
+
+Secrets and context live outside the repo, on the Pi only:
+    ~/.config/hal.env           ANTHROPIC_API_KEY (see scripts/hal.env.example)
+    ~/.config/hal-context.yaml  car / owner / home_city for the system prompt
+                                (see scripts/hal-context.yaml.example)
 
 The kiosk UI tells us (over the same socket, the other direction) when to
 pause: {"type": "set_active", "active": false} while CarPlay is in the
 foreground, since the Carlinkit dongle already owns the mic for Siri at that
-point and two listeners on one mic would just fight each other. We stay
-connected and simply stop capturing/transcribing until told to resume.
+point. We stay connected and stop capturing until told to resume.
 
-Run by systemd as s52-hal-voice.service (see setup.sh). Config is read from
-~/.config/s52-hal-voice.env (see scripts/s52-hal-voice.env.example) the same
-way s52-carplay-audio.env.example works for the CarPlay receiver.
+Run by systemd as s52-hal-voice.service (see setup.sh). Tuning is read from
+~/.config/s52-hal-voice.env (see scripts/s52-hal-voice.env.example).
 """
 import asyncio
-import collections
 import json
 import logging
 import os
@@ -58,7 +67,7 @@ VAD_AGGRESSIVENESS = int(os.environ.get('S52_HAL_VAD_LEVEL', '3'))  # 0-3, highe
 SILENCE_END_MS = int(os.environ.get('S52_HAL_SILENCE_END_MS', '1200'))  # trailing silence closes utterance
 MIN_UTTERANCE_MS = int(os.environ.get('S52_HAL_MIN_UTTERANCE_MS', '450'))  # ignore clicks/pops
 MAX_UTTERANCE_MS = 8000      # safety cap so a stuck-open mic can't buffer forever
-PHRASE_COALESCE_SEC = 4.0    # merge split utterances ("how?" + "switch to carplay")
+PHRASE_COALESCE_SEC = 4.0    # merge split utterances ("hal" + "switch to carplay")
 # Mic RMS for HAL eye glow — matches useAudioLevel.js attack/release envelope.
 LEVEL_ATTACK = float(os.environ.get('S52_HAL_LEVEL_ATTACK', '0.65'))
 LEVEL_RELEASE = float(os.environ.get('S52_HAL_LEVEL_RELEASE', '0.11'))
@@ -79,38 +88,53 @@ MODEL_URLS = {
     'base.en': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
 }
 
-REFUSAL_TEXT = os.environ.get(
-    'S52_HAL_REFUSAL_TEXT', "I'm sorry, Dave. I'm afraid I can't do that.",
+# ── Claude Haiku (the "brain") ────────────────────────────────────────────────
+# Haiku is chosen for latency (~200-400ms to first token) and cost; it takes no
+# effort/thinking params, so we just stream a short reply.
+LLM_MODEL = os.environ.get('S52_HAL_LLM_MODEL', 'claude-haiku-4-5')
+LLM_MAX_TOKENS = int(os.environ.get('S52_HAL_LLM_MAX_TOKENS', '256'))
+LLM_TIMEOUT_S = float(os.environ.get('S52_HAL_LLM_TIMEOUT', '20'))
+CONTEXT_PATH = os.path.expanduser('~/.config/hal-context.yaml')
+# Spoken when the API is unreachable or errors (cloud-only: no command fallback).
+ERROR_SPEECH = os.environ.get(
+    'S52_HAL_ERROR_TEXT', "I'm sorry. I can't reach my higher functions right now.",
 )
-# Spoken line + on-screen label for successful commands (keep both short — car).
-ACK_MESSAGES = {
-    'start_carplay': (
-        os.environ.get('S52_HAL_CARPLAY_ACK_TEXT', 'Opening CarPlay'),
-        'OPENING CARPLAY',
-    ),
-}
 
-# Wake word + command grammar. Extend COMMANDS as more intents land — each
-# entry is "all of these keywords must appear after the wake word".
+# Screen-switch intents HAL may pick. Forwarded to the kiosk UI verbatim
+# (DisplaySwitcher.jsx maps them onto the same navigation the +/− buttons drive).
+VALID_INTENTS = frozenset({
+    'switch_to_carplay', 'return_to_kiosk', 'switch_to_emulator', 'none',
+})
+
+# ── Piper TTS (HAL 9000 voice) ────────────────────────────────────────────────
+PIPER_DIR = os.path.expanduser('~/.local/share/piper')
+PIPER_MODEL = os.environ.get('S52_HAL_PIPER_MODEL', 'hal9000.onnx')
+PIPER_MODEL_PATH = os.path.join(PIPER_DIR, PIPER_MODEL)
+PIPER_CONFIG_PATH = PIPER_MODEL_PATH + '.json'  # PiperVoice.load expects <model>.json alongside
+# Source weights: campwill/HAL-9000-Piper-TTS (files are named hal.onnx[.json]).
+PIPER_MODEL_URL = os.environ.get(
+    'S52_HAL_PIPER_MODEL_URL',
+    'https://huggingface.co/campwill/HAL-9000-Piper-TTS/resolve/main/hal.onnx',
+)
+PIPER_CONFIG_URL = os.environ.get(
+    'S52_HAL_PIPER_CONFIG_URL',
+    'https://huggingface.co/campwill/HAL-9000-Piper-TTS/resolve/main/hal.onnx.json',
+)
+PIPER_MODEL_MIN_BYTES = 10 * 1024 * 1024  # real model ~63 MB; catch truncated downloads
+
+# Wake word + homophones. We engage Claude when the wake word is heard; the rest
+# of the phrase is the command. tiny.en often hears "HAL" as "how"/"hall".
 WAKE_WORDS = ('hal', 'h a l', 'hal 9000', 'hal nine thousand')
-# tiny.en often hears "HAL" as "how"/"hall" at the start of a phrase.
 WAKE_HOMOPHONES_START = ('how', 'hall', 'hell')
-# Avoid treating bare "how are you…" as a failed HAL command.
+# Avoid treating bare "how are you…" as a HAL command unless it sounds like one.
 WAKE_HOMOPHONE_HINTS = frozenset({
     'switch', 'car', 'carplay', 'play', 'start', 'open',
-    'games', 'clock', 'system', 'exit', 'go',
+    'games', 'game', 'clock', 'system', 'exit', 'go', 'take', 'show', 'return',
 })
-COMMANDS = {
-    'start_carplay': (
-        ('carplay',),
-        (('car', 'play'),),
-        (('switch', 'carplay'),),
-        (('switch', 'car', 'play'),),
-        (('start', 'carplay'),),
-        (('start', 'car', 'play'),),
-        (('open', 'carplay'),),
-    ),
-}
+# Leading tokens we strip off the command once the wake word is detected, longest
+# first so "hal nine thousand" wins over "hal".
+WAKE_STRIP_PREFIXES = ('hal nine thousand', 'hal 9000', 'h a l', 'hal', 'hall', 'hell', 'how')
+
 _WHISPER_NOISE = frozenset({'blank audio', '[blank audio]', 'blank_audio'})
 
 _GENERIC_PULSE_TOKENS = frozenset({
@@ -146,9 +170,33 @@ def load_shell_env(path):
 # DAC); otherwise falls back to the system default sink (HDMI monitor at bench).
 load_shell_env(os.path.expanduser('~/.config/s52-carplay-audio.env'))
 load_shell_env(os.path.expanduser('~/.config/s52-hal-voice.env'))
+# Secrets (ANTHROPIC_API_KEY) — read by the anthropic SDK from the environment.
+load_shell_env(os.path.expanduser('~/.config/hal.env'))
 
 CONFIGURED_PULSE_SINK = os.environ.get('PULSE_SINK')
 PULSE_SOURCE = os.environ.get('PULSE_SOURCE', '').strip()
+
+
+def load_context():
+    """Read ~/.config/hal-context.yaml (car/owner/home_city) for the prompt.
+
+    Missing file or pyyaml → empty context; HAL still works, just less personal.
+    """
+    try:
+        import yaml
+    except ImportError:
+        log.warning('pyyaml not installed — HAL runs without car context')
+        return {}
+    try:
+        with open(CONTEXT_PATH, encoding='utf-8') as handle:
+            data = yaml.safe_load(handle) or {}
+    except FileNotFoundError:
+        log.info('no %s — HAL runs without car context', CONTEXT_PATH)
+        return {}
+    except Exception as exc:  # noqa: BLE001 - a bad config shouldn't crash the sidecar
+        log.warning('failed to read %s: %s', CONTEXT_PATH, exc)
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def normalize_transcript(transcript):
@@ -170,22 +218,106 @@ def heard_wake_word(text):
     return any(hint in text for hint in WAKE_HOMOPHONE_HINTS)
 
 
-def find_intent(transcript):
-    """Returns (intent, matched) for a transcript, or (None, False) if "hal"
-    wasn't heard at all -- i.e. this isn't a command attempt worth a refusal."""
-    text = normalize_transcript(transcript)
-    if not text:
-        return None, False
+def strip_wake_word(text):
+    """Remove a leading wake word / homophone so only the command remains."""
+    stripped = text.strip()
+    for prefix in WAKE_STRIP_PREFIXES:
+        if stripped == prefix:
+            return ''
+        if stripped.startswith(prefix + ' '):
+            return stripped[len(prefix) + 1:].strip()
+    return stripped
 
-    if not heard_wake_word(text):
-        return None, False
 
-    for intent, keyword_sets in COMMANDS.items():
-        for keywords in keyword_sets:
-            if all(kw in text for kw in keywords):
-                return intent, True
+def build_system_prompt(context, carplay_active):
+    """HAL persona + car context + the intent contract for Claude."""
+    lines = [
+        'You are HAL 9000, the artificial intelligence from "2001: A Space '
+        'Odyssey", now installed as the voice assistant in a classic car.',
+        'Speak calmly, precisely, and with measured, composed politeness — '
+        'quietly confident and never flustered. Stay in character, but you are '
+        "a helpful assistant: carry out the driver's requests and do not refuse "
+        'things you are able to do.',
+        'Keep spoken replies to one or two short sentences — you are speaking '
+        'aloud to a driver in a moving car, so be brief and clear.',
+    ]
+    car = context.get('car')
+    owner = context.get('owner')
+    city = context.get('home_city')
+    if car:
+        lines.append(f'The car is a {car}.')
+    if owner:
+        lines.append(f"The owner's name is {owner}; you may address them by name.")
+    if city:
+        lines.append(f'Home city is {city}.')
+    if carplay_active:
+        lines.append('Right now Apple CarPlay is already on the dashboard screen.')
+    else:
+        lines.append(
+            'Right now the dashboard is on its normal display; Apple CarPlay is '
+            'not currently on screen.'
+        )
+    lines.append(
+        'You control the dashboard by choosing one intent. Emitting an intent '
+        'is how you change the screen, so use the matching intent even when '
+        'that screen is not currently shown — never say a screen is unavailable. '
+        'After your spoken reply, output exactly one JSON object on the final '
+        'line and nothing else on that line:\n'
+        '{"intent": "switch_to_carplay"}  - bring up Apple CarPlay; use this for '
+        'navigation, maps, directions, music apps, or phone calls\n'
+        '{"intent": "return_to_kiosk"}    - return to the clock / home screen\n'
+        '{"intent": "switch_to_emulator"} - open the retro game emulator\n'
+        '{"intent": "none"}               - conversation only, when no screen '
+        'change is needed\n'
+        'Pick the single best intent. Never invent other intents, and never '
+        'speak the JSON aloud or mention it.'
+    )
+    return '\n'.join(lines)
 
-    return None, True  # wake word heard, nothing matched -> refusal
+
+def split_sentences(buffer):
+    """Split a text buffer into (complete_sentences, trailing_remainder).
+
+    Pure helper used both while streaming (speak each sentence as it finalizes)
+    and at the end (flush the tail). Sentences end at one or more of . ! ?.
+    """
+    sentences = []
+    last_end = 0
+    for match in re.finditer(r'[.!?]+', buffer):
+        end = match.end()
+        sentence = buffer[last_end:end].strip()
+        if sentence:
+            sentences.append(sentence)
+        last_end = end
+    return sentences, buffer[last_end:]
+
+
+def prose_region(text):
+    """The speakable part of a reply — everything before the trailing JSON."""
+    idx = text.find('{')
+    return text if idx < 0 else text[:idx]
+
+
+def extract_intent(full_text):
+    """Return (spoken_text_without_json, intent) from a complete reply.
+
+    Parses the last {...} object on the line; anything unparseable or unknown
+    falls back to 'none' (HAL just spoke, no screen change).
+    """
+    matches = list(re.finditer(r'\{[^{}]*\}', full_text))
+    intent = 'none'
+    spoken = full_text
+    if matches:
+        match = matches[-1]
+        try:
+            obj = json.loads(match.group())
+            candidate = obj.get('intent', 'none') if isinstance(obj, dict) else 'none'
+        except (json.JSONDecodeError, AttributeError):
+            candidate = 'none'
+        if candidate in VALID_INTENTS:
+            intent = candidate
+        spoken = full_text[:match.start()] + full_text[match.end():]
+    return spoken.strip(), intent
 
 
 def pulse_source_tokens(pulse_source):
@@ -482,10 +614,35 @@ def ensure_whisper_model():
     return model_file
 
 
-def speak_tts(text):
-    """Stock TTS placeholder — swap the espeak-ng call for a trained HAL
-    voice model later without touching the rest of the pipeline."""
-    sink, origin = resolve_pulse_sink()
+def ensure_piper_model():
+    """Download the HAL Piper voice (model + config) to ~/.local/share/piper."""
+    os.makedirs(PIPER_DIR, exist_ok=True)
+    if os.path.isfile(PIPER_MODEL_PATH) and os.path.getsize(PIPER_MODEL_PATH) < PIPER_MODEL_MIN_BYTES:
+        log.warning('Piper model truncated — deleting for re-download')
+        os.remove(PIPER_MODEL_PATH)
+    if not os.path.isfile(PIPER_MODEL_PATH):
+        log.info('downloading HAL Piper voice (one-time, ~60 MB)…')
+        subprocess.run(
+            ['curl', '-fL', '--retry', '3', '--retry-delay', '5', '-o', PIPER_MODEL_PATH, PIPER_MODEL_URL],
+            check=True, timeout=900,
+        )
+    if not os.path.isfile(PIPER_CONFIG_PATH):
+        subprocess.run(
+            ['curl', '-fL', '--retry', '3', '--retry-delay', '5', '-o', PIPER_CONFIG_PATH, PIPER_CONFIG_URL],
+            check=True, timeout=120,
+        )
+    if not os.path.isfile(PIPER_MODEL_PATH) or os.path.getsize(PIPER_MODEL_PATH) < PIPER_MODEL_MIN_BYTES:
+        if os.path.isfile(PIPER_MODEL_PATH):
+            os.remove(PIPER_MODEL_PATH)
+        raise RuntimeError('Piper model download incomplete — check internet and retry')
+    log.info('Piper voice ready: %s (%d bytes)', PIPER_MODEL_PATH, os.path.getsize(PIPER_MODEL_PATH))
+    return PIPER_MODEL_PATH
+
+
+def speak_espeak(text, sink=None, origin='fallback'):
+    """Last-resort stock TTS if the Piper voice is unavailable."""
+    if sink is None:
+        sink, origin = resolve_pulse_sink()
     env = dict(os.environ)
     try:
         tts = subprocess.run(
@@ -493,19 +650,111 @@ def speak_tts(text):
             capture_output=True, check=True,
         )
         if sink:
-            play_cmd = ['paplay']
             env['PULSE_SINK'] = sink
-            log.info('TTS → %s (%s): %r', sink, origin, text)
+            subprocess.run(['paplay'], input=tts.stdout, env=env, check=True)
+            log.info('TTS(espeak) → %s (%s): %r', sink, origin, text)
         else:
-            play_cmd = ['aplay', '-q']
-            log.info('TTS → ALSA default (%s): %r', origin, text)
-        subprocess.run(play_cmd, input=tts.stdout, env=env, check=True)
+            subprocess.run(['aplay', '-q'], input=tts.stdout, check=True)
+            log.info('TTS(espeak) → ALSA default (%s): %r', origin, text)
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
-        log.warning('TTS playback failed: %s', exc)
+        log.warning('espeak fallback failed: %s', exc)
 
 
-def speak_refusal():
-    speak_tts(REFUSAL_TEXT)
+class HalTts:
+    """Piper neural HAL voice — loaded once, synthesizes raw PCM per sentence."""
+
+    def __init__(self):
+        self._voice = None
+
+    @property
+    def ready(self):
+        return self._voice is not None
+
+    def load(self):
+        ensure_piper_model()
+        from piper import PiperVoice
+        log.info('loading Piper voice %s…', PIPER_MODEL_PATH)
+        self._voice = PiperVoice.load(PIPER_MODEL_PATH, use_cuda=False)
+        return self._voice
+
+    def _synth_pcm(self, text):
+        chunks = list(self._voice.synthesize(text))
+        if not chunks:
+            return b'', SAMPLE_RATE
+        pcm = b''.join(chunk.audio_int16_bytes for chunk in chunks)
+        return pcm, chunks[0].sample_rate
+
+    def render_wav(self, text, path):
+        """Synthesize to a WAV file instead of the speakers — for headless
+        bench tests (scripts/hal-bench.py) where there's no audio device."""
+        if not self.ready:
+            raise RuntimeError('Piper voice not loaded')
+        import wave
+        with wave.open(path, 'wb') as wav_file:
+            self._voice.synthesize_wav(text.strip(), wav_file)
+
+    def speak(self, text):
+        """Synthesize and play one chunk of speech (blocking — run via to_thread)."""
+        text = text.strip()
+        if not text:
+            return
+        sink, origin = resolve_pulse_sink()
+        if not self.ready:
+            speak_espeak(text, sink, origin)
+            return
+        try:
+            pcm, sample_rate = self._synth_pcm(text)
+        except Exception as exc:  # noqa: BLE001 - never let a synth error go unspoken
+            log.warning('Piper synth failed (%s) — espeak fallback', exc)
+            speak_espeak(text, sink, origin)
+            return
+        if not pcm:
+            return
+        env = dict(os.environ)
+        try:
+            if sink:
+                env['PULSE_SINK'] = sink
+                cmd = ['paplay', '--raw', f'--rate={sample_rate}', '--format=s16le', '--channels=1']
+                log.info('TTS → %s (%s): %r', sink, origin, text)
+            else:
+                cmd = ['aplay', '-q', '-t', 'raw', '-f', 'S16_LE', '-r', str(sample_rate), '-c', '1']
+                log.info('TTS → ALSA default (%s): %r', origin, text)
+            subprocess.run(cmd, input=pcm, env=env, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+            log.warning('TTS playback failed: %s', exc)
+
+
+# Module-level singleton so speak_tts() stays the single swap point for the voice.
+_TTS = HalTts()
+
+
+def speak_tts(text):
+    _TTS.speak(text)
+
+
+class HalLLM:
+    """Claude Haiku client — streamed, short, in-character replies."""
+
+    def __init__(self):
+        self._client = None
+
+    def available(self):
+        return bool(os.environ.get('ANTHROPIC_API_KEY'))
+
+    def _client_or_create(self):
+        if self._client is None:
+            from anthropic import AsyncAnthropic
+            self._client = AsyncAnthropic(timeout=LLM_TIMEOUT_S)
+        return self._client
+
+    def stream(self, system, user_text):
+        """Return the async streaming context manager for one exchange."""
+        return self._client_or_create().messages.stream(
+            model=LLM_MODEL,
+            max_tokens=LLM_MAX_TOKENS,
+            system=system,
+            messages=[{'role': 'user', 'content': user_text}],
+        )
 
 
 class HalVoiceServer:
@@ -518,6 +767,8 @@ class HalVoiceServer:
         self._phrase_chunks = []
         self._level_raw = 0.0
         self._level_smooth = 0.0
+        self.llm = HalLLM()
+        self.context = load_context()
 
     def model(self):
         if self._model is None:
@@ -591,10 +842,13 @@ class HalVoiceServer:
                 await self.broadcast({'type': 'idle'})
 
     def coalesce_phrase(self, transcript):
-        """Merge recent utterances so brief pauses don't split "HAL … carplay"."""
+        """Merge recent utterances so brief pauses don't split "hal … carplay".
+
+        Returns (combined_normalized_text, wake_word_heard).
+        """
         norm = normalize_transcript(transcript)
         if not norm:
-            return '', None, False
+            return '', False
 
         now = time.monotonic()
         self._phrase_chunks = [
@@ -603,10 +857,10 @@ class HalVoiceServer:
         ]
         self._phrase_chunks.append((now, norm))
         combined = ' '.join(text for _, text in self._phrase_chunks)
-        intent, matched = find_intent(combined)
-        if intent or matched:
+        has_wake = heard_wake_word(combined)
+        if has_wake:
             self._phrase_chunks.clear()
-        return combined, intent, matched
+        return combined, has_wake
 
     async def process_utterance(self, pcm_int16):
         utterance_ms = len(pcm_int16) * 1000 // SAMPLE_RATE
@@ -624,28 +878,66 @@ class HalVoiceServer:
             return
 
         log.info('heard: %r', transcript)
-        combined, intent, matched = self.coalesce_phrase(transcript)
-        if not matched:
+        combined, has_wake = self.coalesce_phrase(transcript)
+        if not has_wake:
             # Room noise / non-HAL speech — no UI glow or transcript HUD.
             return
 
+        command = strip_wake_word(combined) or combined
+        await self.converse(command, combined)
+
+    async def converse(self, command, heard_text):
+        """Send the command to Claude and speak the reply sentence-by-sentence."""
         await self.broadcast({'type': 'listening'})
-        await self.broadcast({'type': 'transcript', 'text': combined or transcript})
-        if intent:
-            log.info('command: %s', intent)
-            ack = ACK_MESSAGES.get(intent)
-            if ack:
-                spoken, label = ack
-                await self.broadcast({'type': 'speaking', 'label': label})
-                await asyncio.to_thread(speak_tts, spoken)
-            await self.broadcast({'type': 'command', 'intent': intent})
-            await self.broadcast({'type': 'idle'})
-        elif matched:
+        await self.broadcast({'type': 'transcript', 'text': heard_text})
+
+        if not self.llm.available():
+            log.warning('ANTHROPIC_API_KEY not set — cannot reach Claude')
             await self.broadcast({'type': 'speaking'})
-            await asyncio.to_thread(speak_refusal)
+            await asyncio.to_thread(speak_tts, ERROR_SPEECH)
             await self.broadcast({'type': 'idle'})
-        else:
+            return
+
+        log.info('asking Claude: %r', command)
+        system = build_system_prompt(self.context, carplay_active=not self.active)
+        full = ''
+        spoken_len = 0     # chars of the prose region already sent to TTS
+        spoke_any = False
+
+        async def speak(text):
+            nonlocal spoke_any
+            if not spoke_any:
+                await self.broadcast({'type': 'speaking'})
+                spoke_any = True
+            await asyncio.to_thread(speak_tts, text)
+
+        try:
+            async with self.llm.stream(system, command) as stream:
+                async for delta in stream.text_stream:
+                    full += delta
+                    prose = prose_region(full)
+                    pending = prose[spoken_len:]
+                    sentences, remainder = split_sentences(pending)
+                    for sentence in sentences:
+                        await speak(sentence)
+                    spoken_len += len(pending) - len(remainder)
+        except Exception as exc:  # noqa: BLE001 - network/API errors → spoken apology
+            log.error('Claude request failed: %s', exc)
+            await self.broadcast({'type': 'speaking'})
+            await asyncio.to_thread(speak_tts, ERROR_SPEECH)
             await self.broadcast({'type': 'idle'})
+            return
+
+        # Flush any prose tail with no terminal punctuation, then act on intent.
+        tail = prose_region(full)[spoken_len:].strip()
+        if tail:
+            await speak(tail)
+
+        spoken_text, intent = extract_intent(full)
+        log.info('HAL: %r  intent=%s', spoken_text, intent)
+        if intent != 'none':
+            await self.broadcast({'type': 'command', 'intent': intent})
+        await self.broadcast({'type': 'idle'})
 
     def enqueue_utterance(self, pcm_int16):
         if self._utterance_queue.qsize() >= 2:
@@ -715,6 +1007,12 @@ class HalVoiceServer:
         self.loop = asyncio.get_running_loop()
         # Load weights at startup so a corrupt download fails cleanly, not mid-SEGV.
         await asyncio.to_thread(self.model)
+        try:
+            await asyncio.to_thread(_TTS.load)
+        except Exception as exc:  # noqa: BLE001 - degrade to espeak, don't refuse to start
+            log.warning('Piper voice unavailable (%s) — falling back to espeak-ng', exc)
+        if not self.llm.available():
+            log.warning('ANTHROPIC_API_KEY not set (see ~/.config/hal.env) — HAL cannot answer')
         asyncio.create_task(self.utterance_worker())
         asyncio.create_task(self.level_broadcaster())
         async with websockets.serve(self.handle_client, HOST, PORT):
