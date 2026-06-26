@@ -26,13 +26,16 @@ export default function SystemScreen({ onMinus, onPlus }) {
 
   useEffect(() => { check(); }, [check]);
 
-  const install = useCallback(async () => {
+  const install = useCallback(async (force = false) => {
     setStatus('installing');
-    setMessage('Pulling, building, and deploying… this can take a few minutes.');
+    setMessage(force
+      ? 'Discarding local changes, then pull/build/deploy…'
+      : 'Pulling, building, and deploying… this can take a few minutes.');
     try {
       const res = await fetch(`${API_BASE}/api/update`, {
         method: 'POST',
-        headers: { Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ force }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -48,15 +51,17 @@ export default function SystemScreen({ onMinus, onPlus }) {
     }
   }, []);
 
-  const switchBranch = useCallback(async (branch) => {
+  const switchBranch = useCallback(async (branch, force = false) => {
     setPicker(false);
     setStatus('installing');
-    setMessage(`Switching to ${branch} — pull, build, deploy. This can take a few minutes.`);
+    setMessage(force
+      ? `Force switching to ${branch} — discarding local changes…`
+      : `Switching to ${branch} — pull, build, deploy. This can take a few minutes.`);
     try {
       const res = await fetch(`${API_BASE}/api/switch-branch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ branch }),
+        body: JSON.stringify({ branch, force }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -75,6 +80,7 @@ export default function SystemScreen({ onMinus, onPlus }) {
   const busy = status === 'installing' || status === 'checking' || status === 'loading';
   const online = version?.online;
   const canUpdate = version?.updateAvailable && !version?.dirty && !busy;
+  const canForceUpdate = !busy && online && (version?.dirty || version?.updateAvailable);
   const current = version?.branch;
 
   // main always first, then the 3 most-recently-committed branches (server sorts).
@@ -127,14 +133,25 @@ export default function SystemScreen({ onMinus, onPlus }) {
           >
             {status === 'checking' ? 'CHECKING…' : 'CHECK'}
           </button>
-          <button
-            style={{ ...styles.actionBtn, ...(!canUpdate ? styles.actionBtnDisabled : styles.actionBtnPrimary) }}
-            onClick={install}
-            disabled={!canUpdate}
-            type="button"
-          >
-            {status === 'installing' ? 'WORKING…' : 'UPDATE'}
-          </button>
+          {version?.dirty ? (
+            <button
+              style={{ ...styles.actionBtn, ...(!canForceUpdate ? styles.actionBtnDisabled : styles.actionBtnWarn) }}
+              onClick={() => install(true)}
+              disabled={!canForceUpdate}
+              type="button"
+            >
+              {status === 'installing' ? 'WORKING…' : 'FORCE\nUPDATE'}
+            </button>
+          ) : (
+            <button
+              style={{ ...styles.actionBtn, ...(!canUpdate ? styles.actionBtnDisabled : styles.actionBtnPrimary) }}
+              onClick={() => install(false)}
+              disabled={!canUpdate}
+              type="button"
+            >
+              {status === 'installing' ? 'WORKING…' : 'UPDATE'}
+            </button>
+          )}
         </div>
 
         {message ? <div style={styles.message}>{message}</div> : null}
@@ -149,7 +166,7 @@ export default function SystemScreen({ onMinus, onPlus }) {
                   <button
                     key={b}
                     type="button"
-                    onClick={() => !isCurrent && switchBranch(b)}
+                    onClick={() => !isCurrent && switchBranch(b, version?.dirty)}
                     disabled={isCurrent}
                     style={{ ...styles.choice, ...(isCurrent ? styles.choiceCurrent : null) }}
                   >
@@ -275,6 +292,7 @@ const styles = {
     userSelect: 'none',
   },
   actionBtnPrimary: { background: '#2a1c00', borderColor: AMBER },
+  actionBtnWarn: { background: '#2a0800', borderColor: '#ff6644', color: '#ffaa88' },
   actionBtnDisabled: { opacity: 0.35, cursor: 'default' },
   message: {
     color: '#bbb',

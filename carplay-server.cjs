@@ -219,9 +219,10 @@ async function getVersion() {
 }
 
 // Pull + build + deploy. Long-running (npm ci + build), so a generous timeout.
-async function runUpdate() {
+async function runUpdate(force = false) {
   const script = path.join(APP_DIR, 'scripts', 's52-update.sh');
-  const { stdout, stderr } = await run('bash', [script], {
+  const args = force ? ['--force'] : [];
+  const { stdout, stderr } = await run('bash', [script, ...args], {
     timeout: 600000,
     cwd: APP_DIR,
     maxBuffer: 10 * 1024 * 1024,
@@ -258,13 +259,14 @@ async function getBranches() {
 
 // Switch to a remote branch, then build + deploy. The branch is validated and
 // passed as an argv (execFile = no shell), so it cannot inject.
-async function runSwitch(branch) {
+async function runSwitch(branch, force = false) {
   if (!BRANCH_RE.test(branch)) throw new Error(`invalid branch name: ${branch}`);
   const { branches } = await getBranches();
   if (!branches.includes(branch)) throw new Error(`unknown branch: ${branch}`);
 
   const script = path.join(APP_DIR, 'scripts', 's52-switch-branch.sh');
-  const { stdout, stderr } = await run('bash', [script, branch], {
+  const args = force ? [branch, '--force'] : [branch];
+  const { stdout, stderr } = await run('bash', [script, ...args], {
     timeout: 600000,
     cwd: APP_DIR,
     maxBuffer: 10 * 1024 * 1024,
@@ -382,7 +384,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/update') {
-      const { log } = await runUpdate();
+      const body = await readJson(req);
+      const { log } = await runUpdate(Boolean(body.force));
       json(res, 200, { ok: true, log });
       return;
     }
@@ -394,7 +397,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/switch-branch') {
       const body = await readJson(req);
-      const { log } = await runSwitch(String(body.branch || ''));
+      const { log } = await runSwitch(String(body.branch || ''), Boolean(body.force));
       json(res, 200, { ok: true, log });
       return;
     }
