@@ -97,7 +97,6 @@ function compile(gl, type, src) {
   gl.shaderSource(s, src);
   gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    // eslint-disable-next-line no-console
     console.error('HAL shader compile failed:', gl.getShaderInfoLog(s));
   }
   return s;
