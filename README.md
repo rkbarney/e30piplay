@@ -175,6 +175,7 @@ Runtime references:
 - CarPlay focus bridge: **`carplay-server.cjs`** + **`scripts/s52-carplay-switch.sh`** → **`/usr/local/bin/s52-carplay-switch.sh`** (`wlrctl toplevel focus|minimize app_id:react-carplay`)
 - Optional kiosk URL / ports: `scripts/s52-display-layout.conf.example` → `~/.config/s52-display-layout.conf`
 - Boot branding: `scripts/s52-boot-branding.sh`
+- HAL voice sidecar ("HAL, switch to CarPlay"): `scripts/s52-hal-voice.py` (offline whisper.cpp STT + espeak-ng TTS, `s52-hal-voice.service`), config template `scripts/s52-hal-voice.env.example` → `~/.config/s52-hal-voice.env`. Skip at install with `S52_SKIP_HAL_VOICE=1` (whisper.cpp build is slow/offline-unfriendly). Paused automatically while CarPlay is in the foreground (see `src/useHalVoice.js`) so it doesn't compete with the dongle's mic for Siri.
 
 ## Factory-style boot branding (hide Raspberry Pi login/branding)
 
