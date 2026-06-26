@@ -39,6 +39,7 @@ Run by systemd as s52-hal-voice.service (see setup.sh). Tuning is read from
 ~/.config/s52-hal-voice.env (see scripts/s52-hal-voice.env.example).
 """
 import asyncio
+import glob
 import json
 import logging
 import os
@@ -559,12 +560,68 @@ def list_hdmi_card_names():
     return names
 
 
+def _connected_drm_hdmi_connectors():
+    """1-based HDMI-A connector numbers with status=connected (e.g. 2 → HDMI-A-2)."""
+    connected = []
+    for path in glob.glob('/sys/class/drm/card*-HDMI-A-*'):
+        try:
+            with open(os.path.join(path, 'status'), encoding='utf-8') as handle:
+                if handle.read().strip() != 'connected':
+                    continue
+            match = re.search(r'HDMI-A-(\d+)$', path)
+            if match:
+                connected.append(int(match.group(1)))
+        except OSError:
+            continue
+    return connected
+
+
+def _vc4hdmi_drm_connector(short_name, long_name):
+    """Map vc4-hdmi ALSA card to its DRM HDMI-A connector number (1-based)."""
+    blob = f'{short_name} {long_name}'.lower()
+    match = re.search(r'vc4hdmi(\d+)|vc4-hdmi-(\d+)', blob)
+    if not match:
+        return None
+    idx = match.group(1) or match.group(2)
+    return int(idx) + 1  # vc4hdmi0 → HDMI-A-1, vc4hdmi1 → HDMI-A-2
+
+
+def _alsa_device_opens(device):
+    """True when aplay can open device (PipeWire may block disconnected ports)."""
+    try:
+        proc = subprocess.run(
+            [
+                'aplay', '-q', '-D', device,
+                '-t', 'raw', '-f', 'S16_LE', '-r', '48000', '-c', '1', '-d', '1',
+            ],
+            input=b'\x00\x00' * 48000,
+            capture_output=True, timeout=3, check=False,
+        )
+        return proc.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
 def ensure_hdmi_pulse_sinks():
-    """Pi vc4-hdmi cards often sit profile=off until pro-audio is selected."""
-    for card in list_hdmi_card_names():
+    """Activate pro-audio on connected vc4-hdmi cards; release disconnected ones."""
+    connected = set(_connected_drm_hdmi_connectors())
+    card_lines = _pactl_output(['list', 'cards', 'short']) or ''
+    full = _pactl_output(['list', 'cards']) or ''
+    for line in card_lines.strip().splitlines():
+        parts = line.split()
+        if len(parts) < 2 or 'hdmi' not in parts[1].lower():
+            continue
+        card_name, card_obj = parts[1], parts[0]
+        match = re.search(
+            rf'Card #{re.escape(card_obj)}\b.*?api\.alsa\.card = "(\d+)"',
+            full, re.DOTALL,
+        )
+        alsa_idx = int(match.group(1)) if match else None
+        connector = (alsa_idx + 1) if alsa_idx is not None else None
+        profile = 'pro-audio' if connector in connected else 'off'
         try:
             subprocess.run(
-                ['pactl', 'set-card-profile', card, 'pro-audio'],
+                ['pactl', 'set-card-profile', card_name, profile],
                 capture_output=True, text=True, timeout=3, check=False,
             )
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -574,7 +631,7 @@ def ensure_hdmi_pulse_sinks():
 def discover_hdmi_sink():
     for name in list_pulse_sink_names():
         lower = name.lower()
-        if 'hdmi' in lower or 'vc4hdmi' in lower:
+        if 'hdmi' in lower or 'vc4hdmi' in lower or 'pro-output' in lower:
             return name
     return None
 
@@ -616,7 +673,12 @@ def discover_car_dac_sink(sinks=None):
 
 
 def discover_alsa_hdmi_device():
-    """ALSA plughw device when PipeWire has no HDMI sink node (common on bench)."""
+    """ALSA plughw device for the connected Pi HDMI port (bench monitor speakers).
+
+    Pi 5 has two micro-HDMI ports (vc4hdmi0 / vc4hdmi1). cf618a2 picked the first
+    card blindly; on s52 the monitor is on HDMI-A-2 (plughw:1,0), while plughw:0,0
+    is disconnected and fails with ALSA error 524 when PipeWire holds the card.
+    """
     try:
         proc = subprocess.run(
             ['aplay', '-l'], capture_output=True, text=True, timeout=5, check=False,
@@ -625,15 +687,27 @@ def discover_alsa_hdmi_device():
         return None
     if proc.returncode != 0:
         return None
+
+    connected = set(_connected_drm_hdmi_connectors())
+    candidates = []
     for line in proc.stdout.splitlines():
         match = re.match(r'card (\d+):\s+(\S+)\s+\[([^\]]+)\]', line)
         if not match:
             continue
         card_id, short_name, long_name = match.groups()
         blob = f'{short_name} {long_name}'.lower()
-        if 'vc4hdmi' in blob or ('hdmi' in blob and 'vc4' in blob):
-            return f'plughw:{card_id},0'
-    return None
+        if 'vc4hdmi' not in blob and not ('hdmi' in blob and 'vc4' in blob):
+            continue
+        device = f'plughw:{card_id},0'
+        connector = _vc4hdmi_drm_connector(short_name, long_name)
+        if connector and connector in connected:
+            return device
+        candidates.append(device)
+
+    for device in reversed(candidates):
+        if _alsa_device_opens(device):
+            return device
+    return candidates[-1] if candidates else None
 
 
 def pick_fallback_sink(sinks):
