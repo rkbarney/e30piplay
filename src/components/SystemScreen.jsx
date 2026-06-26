@@ -10,7 +10,8 @@ export default function SystemScreen({ onMinus, onPlus }) {
   const [status, setStatus]   = useState('loading'); // loading | idle | checking | installing | error
   const [wifiBusy, setWifiBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [picker, setPicker]   = useState(false);   // branch dialog open?
+  const [picker, setPicker]       = useState(false); // branch dialog open?
+  const [wifiPicker, setWifiPicker] = useState(false);
 
   const fetchWifi = useCallback(async () => {
     try {
@@ -94,6 +95,7 @@ export default function SystemScreen({ onMinus, onPlus }) {
 
   const switchWifi = useCallback(async (profile) => {
     if (!profile || wifi?.profile === profile || wifiBusy) return;
+    setWifiPicker(false);
     setWifiBusy(true);
     setMessage('');
     try {
@@ -144,7 +146,6 @@ export default function SystemScreen({ onMinus, onPlus }) {
   })();
 
   const wifiProfiles = wifi?.profiles ?? [];
-  const selectValue = wifi?.connected && wifi?.profile ? wifi.profile : '';
   const hasProfiles = wifiProfiles.length > 0;
 
   return (
@@ -163,29 +164,19 @@ export default function SystemScreen({ onMinus, onPlus }) {
         <div style={styles.divider} />
 
         <div style={styles.body}>
-          <div style={styles.wifiBlock}>
-            <span style={styles.sectionLabel}>NETWORK</span>
-            <div style={styles.wifiSelectWrap}>
-              <select
-                value={selectValue}
-                onChange={(e) => switchWifi(e.target.value)}
-                disabled={busy || !hasProfiles}
-                style={{
-                  ...styles.wifiSelect,
-                  ...(busy || !hasProfiles ? styles.wifiSelectDisabled : null),
-                }}
-                aria-label="WiFi network"
-              >
-                {!wifi?.connected ? (
-                  <option value="">{hasProfiles ? 'Not connected' : 'No saved networks'}</option>
-                ) : null}
-                {wifiProfiles.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-            <span style={styles.wifiDetail}>{wifiLabel}</span>
-          </div>
+          <button
+            type="button"
+            style={{
+              ...styles.branchBtn,
+              ...(busy || !hasProfiles ? styles.branchBtnDisabled : null),
+            }}
+            onClick={() => setWifiPicker(true)}
+            disabled={busy || !hasProfiles}
+            aria-label="WiFi network"
+          >
+            <span style={styles.branchBtnLabel}>NETWORK</span>
+            <span style={styles.branchBtnValue}>{wifiLabel} ▾</span>
+          </button>
 
           <button
             type="button"
@@ -229,6 +220,32 @@ export default function SystemScreen({ onMinus, onPlus }) {
         </div>
 
         {message ? <div style={styles.message}>{message}</div> : null}
+
+        {wifiPicker ? (
+          <div style={styles.dialog}>
+            <div style={styles.dialogTitle}>SWITCH NETWORK</div>
+            <div style={styles.dialogList}>
+              {wifiProfiles.map((p) => {
+                const isCurrent = wifi?.connected && p === wifi?.profile;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => !isCurrent && switchWifi(p)}
+                    disabled={isCurrent || wifiBusy}
+                    style={{ ...styles.wifiChoice, ...(isCurrent ? styles.choiceCurrent : null) }}
+                  >
+                    <span style={styles.choiceName}>{p}</span>
+                    <span style={styles.choiceTag}>{isCurrent ? '● ON' : '›'}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" style={styles.dialogCancel} onClick={() => setWifiPicker(false)}>
+              CANCEL
+            </button>
+          </div>
+        ) : null}
 
         {picker ? (
           <div style={styles.dialog}>
@@ -315,49 +332,6 @@ const styles = {
     flexDirection: 'column',
     justifyContent: 'center',
     gap: '10px',
-  },
-  wifiBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  sectionLabel: {
-    color: '#888',
-    fontSize: '11px',
-    fontFamily: MONO,
-    fontWeight: 'bold',
-    letterSpacing: '0.1em',
-  },
-  wifiSelectWrap: {
-    width: '100%',
-  },
-  wifiSelect: {
-    width: '100%',
-    height: '44px',
-    padding: '0 12px',
-    background: '#161208',
-    border: '2px solid #3a2800',
-    borderRadius: '8px',
-    color: AMBER,
-    fontSize: '13px',
-    fontWeight: 'bold',
-    fontFamily: MONO,
-    letterSpacing: '0.04em',
-    cursor: 'pointer',
-    WebkitAppearance: 'none',
-    appearance: 'none',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  wifiSelectDisabled: { opacity: 0.35, cursor: 'default' },
-  wifiDetail: {
-    color: '#aa8844',
-    fontSize: '10px',
-    fontFamily: MONO,
-    letterSpacing: '0.04em',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
   },
   branchBtn: {
     display: 'flex',
@@ -465,6 +439,25 @@ const styles = {
     color: '#eee',
     fontFamily: MONO,
     fontSize: '13px',
+    cursor: 'pointer',
+    WebkitTapHighlightColor: 'transparent',
+    textAlign: 'left',
+  },
+  wifiChoice: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    minHeight: '56px',
+    padding: '14px 14px',
+    background: '#161208',
+    border: '2px solid #3a2800',
+    borderRadius: '10px',
+    color: '#eee',
+    fontFamily: MONO,
+    fontSize: '18px',
+    fontWeight: 'bold',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
     textAlign: 'left',
