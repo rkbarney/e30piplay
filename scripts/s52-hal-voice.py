@@ -493,6 +493,27 @@ def extract_intent(full_text):
     return spoken.strip(), intent
 
 
+def match_canned(command, canned):
+    """Return (line, intent) for the first canned entry whose keywords are all
+    present in the (normalized) command, else None. Lets the owner keep a short
+    list of their own exact catchphrases in hal-context.yaml — spoken verbatim,
+    no cloud round-trip. Each entry: {'when': [kw...], 'say': '...', 'intent'?}.
+    """
+    for entry in canned:
+        if not isinstance(entry, dict):
+            continue
+        keywords = entry.get('when') or []
+        line = entry.get('say')
+        if not line or not keywords:
+            continue
+        if all(str(kw).lower() in command for kw in keywords):
+            intent = entry.get('intent', 'none')
+            if intent not in VALID_INTENTS:
+                intent = 'none'
+            return str(line), intent
+    return None
+
+
 def pulse_source_tokens(pulse_source):
     slug = pulse_source.removeprefix('alsa_input.').removesuffix('.monitor')
     parts = re.split(r'[._-]+', slug)
@@ -1254,6 +1275,7 @@ class HalVoiceServer:
         self._level_smooth = 0.0
         self.llm = HalLLM()
         self.context = load_context()
+        self.canned = self.context.get('canned') if isinstance(self.context.get('canned'), list) else []
 
     def model(self):
         if self._model is None:
@@ -1397,10 +1419,21 @@ class HalVoiceServer:
         await self.converse(command, combined)
 
     async def converse(self, command, heard_text):
-        """Send the command to Claude and speak the reply sentence-by-sentence."""
-        await self.broadcast({'type': 'listening'})
+        """Speak a canned line if one matches; else ask Claude and stream."""
         await self.broadcast({'type': 'transcript', 'text': heard_text})
 
+        canned = match_canned(command, self.canned)
+        if canned:
+            line, intent = canned
+            log.info('canned line: %r  intent=%s', line, intent)
+            await self.broadcast({'type': 'speaking'})
+            await asyncio.to_thread(speak_tts, line)
+            if intent != 'none':
+                await self.broadcast({'type': 'command', 'intent': intent})
+            await self.broadcast({'type': 'idle'})
+            return
+
+        await self.broadcast({'type': 'listening'})
         if not self.llm.available():
             log.warning('ANTHROPIC_API_KEY not set — cannot reach Claude')
             await self.broadcast({'type': 'speaking'})
