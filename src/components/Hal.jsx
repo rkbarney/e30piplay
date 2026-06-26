@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
 import useHalVoice from '../useHalVoice';
@@ -7,39 +7,13 @@ import useAudioLevel from '../useAudioLevel';
 // How long the lens takes to glow up to full brightness on mount.
 const BOOT_MS = 2400;
 
-// Fractal (fBm-style) flicker: several sine octaves at different
-// frequencies/phases summed together, like a candle flame's motion rather
-// than a single random jump. Mostly settles within roughly -0.85..0.85.
-const OCTAVES = [
-  { freq: 0.55, amp: 0.5 },
-  { freq: 1.3,  amp: 0.27 },
-  { freq: 2.9,  amp: 0.14 },
-  { freq: 6.1,  amp: 0.07 },
-];
-
-function fbm(t, phases) {
-  let v = 0;
-  for (let i = 0; i < OCTAVES.length; i++) {
-    v += OCTAVES[i].amp * Math.sin(t * OCTAVES[i].freq + phases[i]);
-  }
-  return v;
-}
-
-// Listening/speaking dance a little faster and a little more — HAL gets
-// visibly more "alert" without changing his shape.
-const SPEED = { idle: 1, listening: 1.7, speaking: 2.3 };
+// Listening/speaking read as visibly more "alert" — same audio-driven
+// motion, just amplified — without changing the eye's shape.
 const REACH = { idle: 1, listening: 1.25, speaking: 1.4 };
 
-// When the mic is live, the fbm flicker above becomes just an ambient
-// texture (toned way down) and the live audio level takes over as the main
-// driver — like a Winamp/media-player visualizer reacting to actual sound
-// rather than a synthetic animation. No mic -> fbm runs at full strength so
-// the eye still looks alive.
-const FBM_SCALE_WITH_AUDIO = 0.35;
-const AUDIO_GAIN = 5; // raw mic RMS is quiet (~0.05-0.2 for speech) — push it into a usable 0..1 range.
-const AUDIO_GLOW_SCALE = 0.9;
-const AUDIO_FLARE_SCALE = 0.9;
-const AUDIO_BREATHE_SCALE = 0.3;
+// Raw mic RMS is quiet (~0.05-0.2 for speech) — push it into a usable 0..1
+// range before it drives the glow.
+const AUDIO_GAIN = 5;
 
 /**
  * HAL 9000-inspired glowing eye. Original CSS/SVG artwork drawn for this
@@ -51,8 +25,6 @@ const AUDIO_BREATHE_SCALE = 0.3;
 export default function Hal({ onMinus, onPlus, onIntent }) {
   const voiceState = useHalVoice(onIntent);
   const { level: audioLevel, error: audioError } = useAudioLevel();
-  const audioLevelRef = useRef(0);
-  audioLevelRef.current = audioLevel;
 
   // Lens is dark on mount and fades up — the chrome bezel is always visible,
   // only the "light" itself powers on.
@@ -62,39 +34,14 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
     return () => clearTimeout(id);
   }, []);
 
-  // Continuous fractal-noise flicker, updated every frame (not on a random
-  // timer) so the motion flows rather than snapping between random values.
-  const [flame, setFlame] = useState({ glow: 1, breathe: 1, flare: 0.8 });
-  const phasesRef = useRef(null);
-  if (!phasesRef.current) {
-    phasesRef.current = OCTAVES.map(() => Math.random() * Math.PI * 2);
-  }
-
-  useEffect(() => {
-    if (!booted) return undefined;
-    const FRAME_MS = 33; // ~30fps — smooth, but a timer rather than rAF so it
-                          // can't get suspended by a backgrounded/headless tab.
-    let t = 0;
-    const speed = SPEED[voiceState] ?? 1;
-    const reach = REACH[voiceState] ?? 1;
-    const phases = phasesRef.current;
-
-    const hasAudio = !audioError;
-    const fbmScale = hasAudio ? FBM_SCALE_WITH_AUDIO : 1;
-
-    const id = setInterval(() => {
-      t += (FRAME_MS / 1000) * speed;
-      const audio = hasAudio ? Math.min(1, audioLevelRef.current * AUDIO_GAIN) : 0;
-      setFlame({
-        glow: 1 + fbm(t, phases) * 0.16 * reach * fbmScale + audio * AUDIO_GLOW_SCALE * reach,
-        breathe: 1 + fbm(t * 0.6 + 4, phases) * 0.22 * reach * fbmScale + audio * AUDIO_BREATHE_SCALE * reach,
-        flare: 0.78 + fbm(t * 1.4 + 9, phases) * 0.22 * reach * fbmScale + audio * AUDIO_FLARE_SCALE * reach,
-      });
-    }, FRAME_MS);
-    return () => clearInterval(id);
-  }, [booted, voiceState, audioError]);
-
-  const { glow, breathe, flare } = flame;
+  // Eye is purely audio-driven: useAudioLevel already smooths the mic's
+  // amplitude with an attack/release envelope, so the glow just maps that
+  // straight through — no separate animation loop needed here.
+  const reach = REACH[voiceState] ?? 1;
+  const audio = audioError ? 0 : Math.min(1, audioLevel * AUDIO_GAIN);
+  const glow = 1 + audio * 0.55 * reach;
+  const breathe = 1 + audio * 0.45 * reach;
+  const flare = 0.78 + audio * 0.9 * reach;
 
   return (
     <ScreenFrame
@@ -123,6 +70,7 @@ export default function Hal({ onMinus, onPlus, onIntent }) {
             <div style={{ ...styles.flareDot, opacity: booted ? flare : 0 }} />
           </div>
         </div>
+        {audioError && <div style={styles.status}>NO AUDIO DETECTED</div>}
       </div>
     </ScreenFrame>
   );
@@ -152,6 +100,14 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: '28px',
+  },
+
+  // Honest status line for when there's nothing to react to — dim and
+  // small, a status readout rather than an error banner.
+  status: {
+    fontSize: '12px',
+    letterSpacing: '0.08em',
+    color: '#666',
   },
 
   // Chrome bezel — a thin silver ring, sized to match the 300px face every
