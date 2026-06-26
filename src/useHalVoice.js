@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react';
  * Connects to the local HAL speech sidecar (scripts/s52-hal-voice.py). The
  * sidecar runs offline whisper.cpp STT against the USB mic and pushes JSON
  * frames over a WebSocket: { type: 'listening' | 'speaking' | 'idle' } for
- * HAL's eye state, and { type: 'command', intent: 'start_carplay' | ... }
- * once it matches a "hal ..." phrase. It also speaks the "I'm sorry, Dave"
+ * HAL's eye state (listening only after a wake-word match — not on raw VAD),
+ * and { type: 'command', intent: 'start_carplay' | ... } once it matches a
+ * "hal ..." phrase. It also speaks the "I'm sorry, Dave"
  * refusal itself (over AUX) when "hal" is heard but the rest doesn't match
  * a known command — there's no separate intent for that.
  *
@@ -21,6 +22,8 @@ const WS_URL = import.meta.env.VITE_HAL_WS_URL ?? 'ws://127.0.0.1:8765';
 
 export default function useHalVoice(onIntent, active = true) {
   const [state, setState] = useState('idle'); // idle | listening | speaking
+  const [transcript, setTranscript] = useState('');
+  const [label, setLabel] = useState(''); // e.g. OPENING CARPLAY during success ack
   const onIntentRef = useRef(onIntent);
   onIntentRef.current = onIntent;
   const socketRef = useRef(null);
@@ -50,6 +53,17 @@ export default function useHalVoice(onIntent, active = true) {
         }
         if (frame.type === 'idle' || frame.type === 'listening' || frame.type === 'speaking') {
           setState(frame.type);
+          if (frame.type === 'speaking' && frame.label) {
+            setLabel(String(frame.label));
+          } else if (frame.type !== 'speaking') {
+            setLabel('');
+          }
+          if (frame.type === 'idle') {
+            setTranscript('');
+            setLabel('');
+          }
+        } else if (frame.type === 'transcript' && frame.text) {
+          setTranscript(String(frame.text));
         } else if (frame.type === 'command' && frame.intent) {
           onIntentRef.current?.(frame.intent);
         }
@@ -57,6 +71,8 @@ export default function useHalVoice(onIntent, active = true) {
 
       socket.onclose = () => {
         setState('idle');
+        setTranscript('');
+        setLabel('');
         retryTimer = setTimeout(connect, 3000);
       };
       socket.onerror = () => socket.close();
@@ -78,5 +94,5 @@ export default function useHalVoice(onIntent, active = true) {
     sendActive(socketRef.current, active);
   }, [active]);
 
-  return state;
+  return { state, transcript, label };
 }

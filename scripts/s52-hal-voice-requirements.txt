@@ -1,5 +1,7 @@
 # pip install -r scripts/s52-hal-voice-requirements.txt
 # (into the same venv setup.sh creates at ~/.venvs/s52-hal-voice)
+# setuptools<82: webrtcvad imports pkg_resources, removed in setuptools 82+
+setuptools<82
 pywhispercpp
 sounddevice
 webrtcvad

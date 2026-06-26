@@ -48,4 +48,13 @@ npm run build
 step "Deploying (rsync + restart)"
 sudo -n "$DEPLOY"
 
+# HAL voice is a separate Python sidecar (not part of npm build). Try to
+# install/start it when this branch ships s52-hal-voice.py — non-fatal if
+# system packages still need a one-time `sudo apt install`.
+if [[ -f "$APP_DIR/scripts/s52-hal-voice.py" ]]; then
+  step "HAL voice sidecar (if needed)"
+  bash "$APP_DIR/scripts/s52-install-hal-voice.sh" || \
+    echo "  NOTE: HAL voice not running — SSH in and run: bash $APP_DIR/scripts/s52-install-hal-voice.sh" >&2
+fi
+
 step "Switched to ${BRANCH} — now at $(git rev-parse --short HEAD)"
