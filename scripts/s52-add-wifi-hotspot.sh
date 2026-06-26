@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Save a phone hotspot as a fallback WiFi profile on the Pi.
-# Your primary/home network keeps higher autoconnect priority when both are in
-# range (set S52_HOME_CONN to its NetworkManager profile name; default "home").
+# Save a phone hotspot WiFi profile on the Pi and prefer it for internet.
+# When both the hotspot and home WiFi are in range, NetworkManager picks the
+# profile with the higher connection.autoconnect-priority (hotspot wins).
+# Set S52_HOME_CONN to the home profile name (default "home"; often "biscuit").
 #
 # SSID and password are NOT stored in the repo. Pass the SSID via env or enter
 # it (and the password) interactively when prompted:
@@ -11,6 +12,8 @@ set -euo pipefail
 CON_NAME="${S52_HOTSPOT_CON_NAME:-phone-hotspot}"
 SSID="${S52_HOTSPOT_SSID:-}"
 HOME_CONN="${S52_HOME_CONN:-home}"
+HOTSPOT_PRIORITY="${S52_HOTSPOT_PRIORITY:-100}"
+HOME_PRIORITY="${S52_HOME_PRIORITY:-10}"
 
 if [[ -z "${SSID}" ]]; then
   read -r -p "Hotspot SSID: " SSID
@@ -44,7 +47,7 @@ id=${CON_NAME}
 type=wifi
 interface-name=wlan0
 autoconnect=true
-autoconnect-priority=5
+autoconnect-priority=${HOTSPOT_PRIORITY}
 
 [wifi]
 mode=infrastructure
@@ -57,12 +60,12 @@ EOF
 
 nmcli connection import type keyfile file "${KEYFILE}" >/dev/null
 
-# Prefer the home/primary WiFi when the Pi can see both networks.
+# Lower home priority so the hotspot is preferred when both are visible.
 if nmcli -t -f NAME connection show 2>/dev/null | grep -qxF "${HOME_CONN}"; then
-  nmcli connection modify "${HOME_CONN}" connection.autoconnect-priority 20
+  nmcli connection modify "${HOME_CONN}" connection.autoconnect-priority "${HOME_PRIORITY}"
 fi
 
-echo "Saved '${CON_NAME}' (priority 5; '${HOME_CONN}' stays 20 when present)."
+echo "Saved '${CON_NAME}' (priority ${HOTSPOT_PRIORITY}; '${HOME_CONN}' → ${HOME_PRIORITY} when present)."
 echo "Test: turn on the phone hotspot, then:"
 echo "  nmcli connection up \"${CON_NAME}\""
 echo "  ip -4 addr show wlan0"

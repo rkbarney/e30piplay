@@ -257,6 +257,34 @@ async function getBranches() {
   return { current, branches: [...new Set(branches)] };
 }
 
+const WIFI_SCRIPT_NAME = 's52-wifi-switch.sh';
+const WIFI_SCRIPT_INSTALLED = '/usr/local/bin/s52-wifi-switch.sh';
+const WIFI_NETWORKS = new Set(['hotspot', 'biscuit']);
+
+function wifiScriptPath() {
+  return fs.existsSync(WIFI_SCRIPT_INSTALLED)
+    ? WIFI_SCRIPT_INSTALLED
+    : path.join(APP_DIR, 'scripts', WIFI_SCRIPT_NAME);
+}
+
+async function getWifiStatus() {
+  const script = wifiScriptPath();
+  const { stdout } = await run('bash', [script, 'status'], { timeout: 15000 });
+  return JSON.parse(stdout.trim());
+}
+
+async function runWifiSwitch(network) {
+  if (!WIFI_NETWORKS.has(network)) throw new Error(`invalid network: ${network}`);
+  const installed = fs.existsSync(WIFI_SCRIPT_INSTALLED);
+  const script = wifiScriptPath();
+  const args = installed
+    ? ['-n', script, 'switch', network]
+    : [script, 'switch', network];
+  const cmd = installed ? 'sudo' : 'bash';
+  const { stdout } = await run(cmd, args, { timeout: 90000 });
+  return JSON.parse(stdout.trim());
+}
+
 // Switch to a remote branch, then build + deploy. The branch is validated and
 // passed as an argv (execFile = no shell), so it cannot inject.
 async function runSwitch(branch, force = false) {
@@ -378,6 +406,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/wifi') {
+      json(res, 200, { ok: true, ...(await getWifiStatus()) });
+      return;
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/roms') {
       json(res, 200, listRoms());
       return;
@@ -399,6 +432,13 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       const { log } = await runSwitch(String(body.branch || ''), Boolean(body.force));
       json(res, 200, { ok: true, log });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/wifi/switch') {
+      const body = await readJson(req);
+      const wifi = await runWifiSwitch(String(body.network || ''));
+      json(res, 200, { ok: true, ...wifi });
       return;
     }
 

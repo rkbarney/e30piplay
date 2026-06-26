@@ -309,6 +309,7 @@ SERVICE
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s52-carplay-switch.sh
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-enable-livi-receiver-root.sh" /usr/local/bin/s52-enable-livi-receiver-root.sh
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-restart-kiosk.sh" /usr/local/bin/s52-restart-kiosk.sh
+sudo install -m 755 "$SOURCE_DIR/scripts/s52-wifi-switch.sh" /usr/local/bin/s52-wifi-switch.sh
 
 # Canonical app tree for NOPASSWD root helpers (never trust caller-supplied paths).
 printf '%s\n' "$APP_DIR" | sudo tee /etc/s52-app-dir > /dev/null
@@ -326,6 +327,7 @@ $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-carplay-switch.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-enable-livi-receiver-root.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-deploy.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-restart-kiosk.sh
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-wifi-switch.sh
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/s52-carplay-launcher
 sudo visudo -cf /etc/sudoers.d/s52-carplay-launcher
