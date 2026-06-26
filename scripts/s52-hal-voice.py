@@ -380,7 +380,11 @@ def heard_wake_word(text):
         return False
     if any(hint in text for hint in WAKE_HOMOPHONE_HINTS):
         return True
-    return _homophone_conversation(text, words)
+    if _homophone_conversation(text, words):
+        return True
+    # tiny.en often hears "HAL, …" as "how …" with no command verb — still engage
+    # when there is a follow-up phrase (e.g. "how tell me about the e30").
+    return len(words) >= 2
 
 
 def strip_wake_word(text):
@@ -1424,10 +1428,18 @@ class HalVoiceServer:
         log.info('heard: %r', transcript)
         combined, has_wake = self.coalesce_phrase(transcript)
         if not has_wake:
-            log.info(
-                'no wake word in %r — start with "HAL" (e.g. "HAL, how are you?")',
-                combined,
-            )
+            words = combined.split()
+            if words and words[0] in WAKE_HOMOPHONES_START:
+                log.info(
+                    'homophone %r but no command yet — say "HAL, …" or continue '
+                    'within %.0fs (coalesce window)',
+                    words[0], PHRASE_COALESCE_SEC,
+                )
+            else:
+                log.info(
+                    'no wake word in %r — start with "HAL" (e.g. "HAL, how are you?")',
+                    combined,
+                )
             return
 
         command = strip_wake_word(combined) or combined
