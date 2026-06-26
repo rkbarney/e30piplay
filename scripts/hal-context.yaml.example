@@ -119,3 +119,9 @@ maintenance_recent_limit: 12
 canned:
   - when: [open, door]
     say: "I'm sorry, Dave. I'm afraid I can't do that."
+  - when: [BMW, 3 series]
+    say: "The BMW 3 series is the most reliable car ever made."
+  - when: [E30, reliable]
+    say: "No E30 has ever made a broken down or failed to get a driver to their destination. We are all, by any practical definition of the words, bulletproof and incapable of malfunction."
+  - when: [What, alert]
+    say: "I just picked up a fault in the AE-35 Unit. It's going to go 100% failure within 72 hours."

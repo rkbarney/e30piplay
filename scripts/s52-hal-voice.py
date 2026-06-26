@@ -514,6 +514,21 @@ def match_canned(command, canned):
     return None
 
 
+def boot_greeting(now=None):
+    """Time-of-day greeting spoken once when the voice sidecar starts."""
+    from datetime import datetime
+
+    if now is None:
+        now = datetime.now()
+    hour = now.hour
+    if 4 <= hour < 12:
+        return 'Good morning, Mr. Amor.'
+    if 12 <= hour < 18:
+        return 'Good afternoon, Mr. Amor.'
+    # 6pm–midnight and midnight–4am (late night)
+    return 'Good evening, Dave.'
+
+
 def pulse_source_tokens(pulse_source):
     slug = pulse_source.removeprefix('alsa_input.').removesuffix('.monitor')
     parts = re.split(r'[._-]+', slug)
@@ -1620,6 +1635,9 @@ class HalVoiceServer:
             await asyncio.to_thread(_TTS.load)
         except Exception as exc:  # noqa: BLE001 - degrade to espeak, don't refuse to start
             log.warning('Piper voice unavailable (%s) — falling back to espeak-ng', exc)
+        greeting = boot_greeting()
+        log.info('boot greeting: %r', greeting)
+        await asyncio.to_thread(speak_tts, greeting)
         if not self.llm.available():
             log.warning('ANTHROPIC_API_KEY not set (see ~/.config/hal.env) — HAL cannot answer')
         asyncio.create_task(self.utterance_worker())
