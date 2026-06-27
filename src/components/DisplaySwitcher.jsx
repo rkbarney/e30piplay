@@ -5,16 +5,17 @@ import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
 import Games           from './Games';
 import Hal             from './Hal';
+import SpotifyPlayer   from './SpotifyPlayer';
 import useHalVoice     from '../useHalVoice';
 
 // Faces cycled by the − button — one loop, HAL included, so it's always
 // reachable again no matter where you wander off to.
-const FACES = ['hal', 'factory', 'digital', 'system', 'games'];
+const FACES = ['hal', 'spotify', 'factory', 'digital', 'system', 'games'];
 
 const BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? 'hal';
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
-async function postCarplayApi(path) {
+async function postApi(path) {
   try {
     await fetch(`${API_BASE}${path}`, {
       method: 'POST',
@@ -42,18 +43,21 @@ export default function DisplaySwitcher() {
       // raced wlrctl focus ahead of React and showed LIVI over the wrong face.
       setScreen(prev => {
         if (prev === 'carplay') {
-          postCarplayApi('/api/launch-react-carplay');
+          postApi('/api/launch-react-carplay');
         }
         return 'carplay';
       });
     } else if (intent === 'return_to_kiosk' || intent === 'go_clock') {
-      postCarplayApi('/api/return-to-kiosk');
+      postApi('/api/return-to-kiosk');
       setScreen('factory');
     } else if (intent === 'switch_to_emulator' || intent === 'go_games') setScreen('games');
     else if (intent === 'exit_carplay' || intent === 'go_hal') {
-      postCarplayApi('/api/return-to-kiosk');
+      postApi('/api/return-to-kiosk');
       setScreen('hal');
-    }
+    } else if (intent === 'switch_to_spotify') setScreen('spotify');
+    else if (intent === 'spotify_play_pause') postApi('/api/spotify/toggle');
+    else if (intent === 'spotify_next') postApi('/api/spotify/next');
+    else if (intent === 'spotify_previous') postApi('/api/spotify/previous');
   }, []);
 
   // Listening lives here (not inside the Hal screen) so "HAL, switch to
@@ -101,6 +105,7 @@ export default function DisplaySwitcher() {
         />
       )}
       {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
+      {screen === 'spotify' && <SpotifyPlayer onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'factory' && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'digital' && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'system'  && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}

@@ -1,0 +1,70 @@
+<!doctype html>
+<!--
+  S52 Spotify OAuth bouncer.
+
+  Spotify requires the OAuth authorize redirect_uri to be HTTPS (or strict
+  loopback) — the Pi has neither on its own. This static page is the
+  registered Spotify redirect_uri (host it at
+  https://richardbarney.com/spotify-callback/ on rkbarney.github.io). Spotify
+  redirects here with ?code&state after login; this page immediately
+  forwards the phone's browser to the Pi over the LAN/hotspot to finish the
+  token exchange (full top-level navigation http<-https is not blocked by
+  browsers the way subresource "mixed content" is).
+
+  Deploy: copy this file to rkbarney.github.io as spotify-callback/index.html.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S52 Spotify</title>
+<style>
+  body {
+    background: #0d0d0d;
+    color: #ffb300;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+    text-align: center;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .err { color: #ff6644; }
+  a { color: #ffb300; }
+</style>
+</head>
+<body>
+<div id="msg">Connecting to car&hellip;</div>
+<script>
+  // Default mDNS hostname of the dash unit; override per-link with
+  // ?host=other-name.local if you ever rename the Pi.
+  var DEFAULT_HOST = 's52.local';
+
+  var params = new URLSearchParams(window.location.search);
+  var error = params.get('error');
+  var code = params.get('code');
+  var state = params.get('state');
+  var host = params.get('host') || DEFAULT_HOST;
+
+  var msg = document.getElementById('msg');
+
+  if (error) {
+    msg.innerHTML = '<span class="err">Spotify login failed: ' + error.replace(/[<>&]/g, '') + '</span>';
+  } else if (!code || !state) {
+    msg.innerHTML = '<span class="err">Missing login details — rescan the QR code on the car\'s screen.</span>';
+  } else {
+    var target = 'http://' + host + '/spotify-callback?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(state);
+    msg.textContent = 'Connecting to car…';
+    window.location.replace(target);
+    // Fallback if the phone isn't on the same network as the Pi right now.
+    setTimeout(function () {
+      msg.innerHTML = 'If nothing happened, make sure your phone is on the ' +
+        'car\'s WiFi/hotspot, then <a href="' + target + '">tap here</a>.';
+    }, 4000);
+  }
+</script>
+</body>
+</html>

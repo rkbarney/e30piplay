@@ -7,7 +7,8 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 ## What it does
 
 - Boots into **HAL**, a voice-driven assistant screen (offline wake-word + STT, cloud LLM, TTS) that can navigate the UI by voice
-- Cycles through five faces — `HAL`, `Factory` clock, `Digital` clock, `System` (OTA), and `Games` (ROM emulator) — and a CarPlay entry screen
+- Cycles through six faces — `HAL`, `Spotify` (native Spotify Connect player), `Factory` clock, `Digital` clock, `System` (OTA), and `Games` (ROM emulator) — and a CarPlay entry screen
+- Spotify face logs in via a phone-scannable QR code (PKCE OAuth) and gives HAL transport control (play/pause/skip) over the Pi's own Spotify Connect device, independent of CarPlay
 - Uses `-` to cycle faces and `+` to open the CarPlay screen (launch Electron from there on the Pi)
 - Runs in a fixed 320x480 design viewport with auto scaling
 
@@ -179,6 +180,7 @@ Runtime references:
 - Boot branding: `scripts/s52-boot-branding.sh`
 - HAL voice sidecar ("HAL, switch to CarPlay"): `scripts/s52-hal-voice.py` (offline whisper.cpp STT → Claude Haiku, cloud-only by design → Piper TTS with a cloned HAL 9000 voice, espeak-ng as a last-resort fallback; `s52-hal-voice.service`), config template `scripts/s52-hal-voice.env.example` → `~/.config/s52-hal-voice.env`. Skip at install with `S52_SKIP_HAL_VOICE=1` (whisper.cpp build is slow/offline-unfriendly). Paused automatically while CarPlay is in the foreground (see `src/useHalVoice.js`) so it doesn't compete with the dongle's mic for Siri. Recognizes wake-word homophones whisper commonly mis-hears (`how`/`hall`/`hell`/`pal`), gives a time-of-day boot greeting, and answers a set of owner-curated canned lines/Easter eggs before falling back to the LLM.
 - WiFi profile helper (phone hotspot + autoconnect priority): `scripts/s52-add-wifi-hotspot.sh`, config template `scripts/s52-wifi.env.example` → `~/.config/s52-wifi.env`. Set **`S52_HOTSPOT_CON_NAME`** and **`S52_HOME_CONN`** in `~/.config/s52-wifi.env` before running the helper. The System screen lists saved WiFi profiles from NetworkManager and switches via **`/api/wifi`**.
+- Spotify player (native Spotify Connect on the Pi, controllable by HAL): `setup.sh` installs **raspotify** (librespot, named `S52_SPOTIFY_DEVICE_NAME`, default `S52 E30`) as a systemd unit running as the kiosk user so it shares the same PipeWire sink as CarPlay, plus **`spotify-server.cjs`** (port 3002, `s52-spotify.service`) which does PKCE OAuth + the Spotify Web API control layer (login, now-playing, transport). Config template `scripts/s52-spotify.env.example` → `~/.config/s52-spotify.env` (needs **`SPOTIFY_CLIENT_ID`** from a [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) app; Premium account required for playback control). Skip at install with **`S52_SKIP_SPOTIFY=1`**. Spotify's OAuth redirect must be HTTPS, which the Pi doesn't have on its own — `docs/spotify-callback-bouncer.html` is a static page meant to be hosted on a domain you control (e.g. GitHub Pages) that bounces the phone's browser back down to the Pi over LAN/hotspot (`http://s52.local/spotify-callback`) to finish the token exchange; the Spotify face shows a QR code linking to that bouncer URL so login is just a phone scan.
 
 ## Factory-style boot branding (hide Raspberry Pi login/branding)
 
