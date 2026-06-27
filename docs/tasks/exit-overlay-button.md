@@ -1,5 +1,10 @@
 # Always-reachable "exit CarPlay" button
 
+**Status: Implemented.** `scripts/s52-exit-overlay.py` is installed and wired up by
+`setup.sh`/`s52-labwc-autostart.sh`, and `CarPlayReceiver.jsx`'s BACK button now
+calls `/api/return-to-kiosk` directly (see README.md's "Exiting CarPlay/LIVI"
+section). Kept here for the design rationale.
+
 ## Context
 
 The kiosk (Chromium, showing FactoryClock/DigitalClock/SystemScreen/Games) and the

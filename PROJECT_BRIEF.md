@@ -28,7 +28,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Component | Model | Status |
 |---|---|---|
-| Display | OSOYOO 3.5" HDMI Capacitive Touch, 480×320 | 🛒 Order |
+| Display | Waveshare 2.8" HDMI Capacitive Touch, 480×640 portrait | ✅ Installed |
 | Computer | Raspberry Pi 5 (8GB) | ✅ Ordered |
 | Pi case | Official Pi 5 case with fan | ✅ Ordered |
 | CarPlay dongle | Carlinkit Wireless CarPlay (USB) | ✅ Ordered |
@@ -52,17 +52,11 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 ## Display Screens
 
-### Boot Sequence
-- ASCII terminal aesthetic, Courier New font
-- M-TECH logo + S52 Solutions branding
-- Scrolling system init messages
-- Progress bar 0→100%
+### HAL (default boot screen)
+- Voice-driven assistant: offline wake-word + whisper.cpp STT, Claude Haiku for intent/replies, Piper TTS in a cloned HAL 9000 voice
+- Can navigate the whole UI by voice ("HAL, switch to CarPlay", "HAL, show the clock", etc.)
 
-### Logo Intro
-- BMW logo (1970–1989 era) spins in fast, decelerates, settles
-- Fades into clock face
-
-### OEM Clock (default)
+### OEM Clock (Factory)
 - White on black, no numbers
 - Cartesian cross at 12/3/6/9 with spoke marks at other hours
 - Rounded square face matching factory E30 clock shape
@@ -73,14 +67,16 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 - AM/PM indicator
 - OEM button labels: h/DAT, HOUR, TEMP / min/DAT, DATE, MEMO
 
-### S52 Clock
-- Amber on black (BMW factory instrument colour)
-- 12/3/6/9 numerals, animated hands, digital readout
+### System
+- OTA / update screen — pull latest code, switch branches, view WiFi profiles
+
+### Games
+- ROM emulator screen
 
 ### CarPlay
 - Full-screen CarPlay via upstream Electron project (not embedded here yet)
-- Press `+` on any clock face to enter
-- Press `+` again to return to clock
+- Press `+` on any face to enter
+- Press `+` again to return to the previous face
 
 ---
 
@@ -88,8 +84,8 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Button | Action |
 |---|---|
-| `−` | Cycle clock faces: OEM → Digital → S52 → OEM |
-| `+` | Enter CarPlay (from any clock) / Exit CarPlay |
+| `−` | Cycle faces: HAL → Factory → Digital → System → Games → HAL |
+| `+` | Enter CarPlay (from any face) / Exit CarPlay back to the last face |
 
 ---
 
@@ -131,16 +127,20 @@ e30piplay/
 │   ├── global.css
 │   └── components/
 │       ├── DisplaySwitcher.jsx   # Screen routing, button logic
-│       ├── BootScreen.jsx        # ASCII terminal boot
-│       ├── LogoIntro.jsx         # BMW logo spin animation
+│       ├── Hal.jsx               # Voice assistant screen
 │       ├── FactoryClock.jsx      # OEM white analog clock
 │       ├── DigitalClock.jsx      # OEM red LED digital clock
-│       ├── AnalogClock.jsx       # S52 amber analog clock
-│       └── CarPlayReceiver.jsx   # “Open CarPlay” → POST /api → cage + Electron AppImage
+│       ├── SystemScreen.jsx      # OTA / update screen
+│       ├── Games.jsx             # ROM emulator screen
+│       ├── CarPlayReceiver.jsx   # “Open CarPlay” → POST /api → cage + Electron AppImage
+│       └── ViewportScale.jsx     # Scales fixed 320×480 UI to the real screen
 ├── public/
 │   └── BMW-Logo-1970-1989.png
 ├── setup.sh                      # Pi OS Lite + cage + nginx (one shot)
 ├── carplay-server.cjs            # Launcher API (localhost + nginx /api/)
+├── scripts/                      # Voice sidecar, WiFi/branch/update helpers, etc.
+├── docs/
+│   └── environment.md            # As-built hardware/software (source of truth)
 ├── SHOPPING_LIST.md
 └── PROJECT_BRIEF.md
 ```

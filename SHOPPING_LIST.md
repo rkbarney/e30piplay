@@ -6,7 +6,8 @@
 - ✅ Carlinkit Wireless CarPlay dongle (USB)
 - ✅ USB to 3.5mm audio DAC
 - ✅ 3.5mm AUX cable (DAC → Kenwood head unit)
-- ~~Hosyond 3.5" SPI touchscreen~~ → replaced by OSOYOO below
+- ~~Hosyond 3.5" SPI touchscreen~~ → replaced by Waveshare 2.8" HDMI display (see below)
+- ✅ Waveshare 2.8" HDMI Capacitive Touch, 480×640 portrait — installed (see `docs/environment.md`)
 
 ---
 
@@ -16,7 +17,6 @@
 
 | Item | Notes |
 |---|---|
-| **OSOYOO 3.5" HDMI Capacitive Touch** (480×320) | Replaces Hosyond. HDMI = 60fps CarPlay. Micro HDMI cable included. ASIN: B0DRF9Q566 |
 | **MicroSD card — 32GB+ A2 rated** | SanDisk Extreme or Samsung Pro Endurance. A2 rating matters for Pi boot speed |
 | **Short USB-A cables ×2 (~6")** | Carlinkit dongle + audio DAC to Pi USB ports |
 | **3.5mm PC microphone (for CarPlay phone calls)** | Needed for call/Siri **uplink** — the other side can't hear you without a Pi-side mic. **Uses no extra USB port:** plug into the **mic-in jack of the existing C-Media/Unitek USB audio adapter** (it does speaker-out *and* mic-in on one port; its USB descriptor confirms a real biased Microphone input). Must be a **PC mic with a TRS/TS plug** ("for computer / PC mic jack"). **Avoid 4-ring TRRS smartphone lavs** — they mis-mate with a dedicated PC mic jack (dead silent, the exact failure we hit). Search: **"3.5mm computer microphone"**, **"3.5mm lavalier microphone for PC"** (best car fit — clip near visor), or "mini 3.5mm electret PC mic". $5–15 at Best Buy/Walmart/Target/Staples. **Do NOT reuse the Kenwood car mic** — see note below. |
@@ -56,9 +56,9 @@
 
 ## What You Don't Need
 
-- ~~Micro HDMI to HDMI cable~~ — included with the OSOYOO display
+- ~~Micro HDMI to HDMI cable~~ — included with the Waveshare display
 - ~~SPI display driver setup~~ — HDMI is plug and play
-- ~~Separate USB touch cable~~ — the OSOYOO capacitive touch runs over USB, likely included
+- ~~Separate USB touch cable~~ — the Waveshare capacitive touch runs over USB, included
 - ~~Reusing the Kenwood head-unit mic~~ — **won't transfer.** Car head-unit mics are matched to that unit's specific bias voltage, impedance, and plug wiring. Tested into a USB audio adapter's mic-in (a real biased Microphone input per its USB descriptor) it read **dead silent (0.3% FS)** on both a Pi and a Mac, while it works fine in the Kenwood. "Mic input" is not a universal standard. Use a USB mic instead (above). A MacBook 3.5mm jack can't validate these mics either — it only reads 4-pole CTIA headset plugs.
 
 ---

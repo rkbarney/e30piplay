@@ -6,8 +6,8 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 
 ## What it does
 
-- Shows a terminal-style boot screen and logo intro
-- Cycles between clock faces (`Factory`, `Digital`) and the `System` (OTA) screen
+- Boots into **HAL**, a voice-driven assistant screen (offline wake-word + STT, cloud LLM, TTS) that can navigate the UI by voice
+- Cycles through five faces — `HAL`, `Factory` clock, `Digital` clock, `System` (OTA), and `Games` (ROM emulator) — and a CarPlay entry screen
 - Uses `-` to cycle faces and `+` to open the CarPlay screen (launch Electron from there on the Pi)
 - Runs in a fixed 320x480 design viewport with auto scaling
 
@@ -28,14 +28,14 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 │   ├── global.css
 │   └── components/
 │       ├── DisplaySwitcher.jsx
-│       ├── BootScreen.jsx
-│       ├── LogoIntro.jsx
+│       ├── Hal.jsx
 │       ├── FactoryClock.jsx
 │       ├── DigitalClock.jsx
-│       ├── AnalogClock.jsx
+│       ├── SystemScreen.jsx
+│       ├── Games.jsx
 │       ├── CarPlayReceiver.jsx
-│       ├── ViewportScale.jsx
-│       └── KioskExit.jsx
+│       ├── ScreenFrame.jsx
+│       └── ViewportScale.jsx
 ├── docker/
 │   └── web/
 ├── public/
@@ -43,7 +43,9 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 ├── docker-compose.yml
 ├── setup.sh
 ├── docs/
-│   └── linux-deployment-paths.md
+│   ├── environment.md
+│   ├── carlinkit-dongle-reference.md
+│   └── livi-receiver-trial.md
 └── PROJECT_BRIEF.md
 ```
 
@@ -58,7 +60,7 @@ Open the Vite URL and test with a 320x480 viewport for realistic layout.
 
 ### Docker on macOS (nginx + built UI only)
 
-The Pi stack is **Lite + cage + Chromium**; Docker Desktop on macOS cannot mirror that fully. Use Compose to serve the **same nginx-style static bundle** as the Pi for UI checks only ([docs/linux-deployment-paths.md](docs/linux-deployment-paths.md)).
+The Pi stack is **Lite + cage + Chromium**; Docker Desktop on macOS cannot mirror that fully. Use Compose to serve the **same nginx-style static bundle** as the Pi for UI checks only.
 
 1. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) and start it.
 2. From the repo root:
@@ -175,7 +177,7 @@ Runtime references:
 - CarPlay focus bridge: **`carplay-server.cjs`** + **`scripts/s52-carplay-switch.sh`** → **`/usr/local/bin/s52-carplay-switch.sh`** (`wlrctl toplevel focus|minimize app_id:react-carplay`)
 - Optional kiosk URL / ports: `scripts/s52-display-layout.conf.example` → `~/.config/s52-display-layout.conf`
 - Boot branding: `scripts/s52-boot-branding.sh`
-- HAL voice sidecar ("HAL, switch to CarPlay"): `scripts/s52-hal-voice.py` (offline whisper.cpp STT + espeak-ng TTS, `s52-hal-voice.service`), config template `scripts/s52-hal-voice.env.example` → `~/.config/s52-hal-voice.env`. Skip at install with `S52_SKIP_HAL_VOICE=1` (whisper.cpp build is slow/offline-unfriendly). Paused automatically while CarPlay is in the foreground (see `src/useHalVoice.js`) so it doesn't compete with the dongle's mic for Siri.
+- HAL voice sidecar ("HAL, switch to CarPlay"): `scripts/s52-hal-voice.py` (offline whisper.cpp STT → Claude Haiku, cloud-only by design → Piper TTS with a cloned HAL 9000 voice, espeak-ng as a last-resort fallback; `s52-hal-voice.service`), config template `scripts/s52-hal-voice.env.example` → `~/.config/s52-hal-voice.env`. Skip at install with `S52_SKIP_HAL_VOICE=1` (whisper.cpp build is slow/offline-unfriendly). Paused automatically while CarPlay is in the foreground (see `src/useHalVoice.js`) so it doesn't compete with the dongle's mic for Siri. Recognizes wake-word homophones whisper commonly mis-hears (`how`/`hall`/`hell`/`pal`), gives a time-of-day boot greeting, and answers a set of owner-curated canned lines/Easter eggs before falling back to the LLM.
 - WiFi profile helper (phone hotspot + autoconnect priority): `scripts/s52-add-wifi-hotspot.sh`, config template `scripts/s52-wifi.env.example` → `~/.config/s52-wifi.env`. Set **`S52_HOTSPOT_CON_NAME`** and **`S52_HOME_CONN`** in `~/.config/s52-wifi.env` before running the helper. The System screen lists saved WiFi profiles from NetworkManager and switches via **`/api/wifi`**.
 
 ## Factory-style boot branding (hide Raspberry Pi login/branding)
