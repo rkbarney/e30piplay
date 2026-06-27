@@ -4,7 +4,7 @@ import ScreenFrame from './ScreenFrame';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
-export default function SystemScreen({ onMinus, onPlus }) {
+export default function SystemScreen({ onMinus, onPlus, onSettings }) {
   const [version, setVersion] = useState(null);   // { sha, branch, online, behind, updateAvailable, dirty, branches }
   const [wifi, setWifi]       = useState(null);   // { connected, profile, ssid, signal, profiles }
   const [status, setStatus]   = useState('loading'); // loading | idle | checking | installing | error
@@ -164,28 +164,41 @@ export default function SystemScreen({ onMinus, onPlus }) {
         <div style={styles.divider} />
 
         <div style={styles.body}>
-          <button
-            type="button"
-            style={{
-              ...styles.branchBtn,
-              ...(busy || !hasProfiles ? styles.branchBtnDisabled : null),
-            }}
-            onClick={() => setWifiPicker(true)}
-            disabled={busy || !hasProfiles}
-            aria-label="WiFi network"
-          >
-            <span style={styles.branchBtnLabel}>NETWORK</span>
-            <span style={styles.branchBtnValue}>{wifiLabel} ▾</span>
-          </button>
+          <div style={styles.branchRow}>
+            <button
+              type="button"
+              style={{
+                ...styles.branchBtn,
+                ...(busy || !hasProfiles ? styles.branchBtnDisabled : null),
+              }}
+              onClick={() => setWifiPicker(true)}
+              disabled={busy || !hasProfiles}
+              aria-label="WiFi network"
+            >
+              <span style={styles.branchBtnLabel}>NETWORK</span>
+              <span style={styles.branchBtnValue}>{wifiLabel} ▾</span>
+            </button>
+
+            <button
+              type="button"
+              style={{ ...styles.branchBtn, ...(busy ? styles.branchBtnDisabled : null) }}
+              onClick={() => setPicker(true)}
+              disabled={busy || choices.length <= 1}
+            >
+              <span style={styles.branchBtnLabel}>BRANCH</span>
+              <span style={styles.branchBtnValue}>{current || '—'} ▾</span>
+            </button>
+          </div>
 
           <button
             type="button"
-            style={{ ...styles.branchBtn, ...(busy ? styles.branchBtnDisabled : null) }}
-            onClick={() => setPicker(true)}
-            disabled={busy || choices.length <= 1}
+            style={styles.settingsBtn}
+            onClick={onSettings}
+            disabled={!onSettings}
+            aria-label="Settings"
           >
-            <span style={styles.branchBtnLabel}>BRANCH</span>
-            <span style={styles.branchBtnValue}>{current || '—'} ▾</span>
+            <span style={styles.branchBtnLabel}>SETTINGS</span>
+            <span style={{ ...styles.branchBtnValue, fontSize: '18px' }}>▸</span>
           </button>
         </div>
 
@@ -280,6 +293,7 @@ export default function SystemScreen({ onMinus, onPlus }) {
 SystemScreen.propTypes = {
   onMinus: PropTypes.func,
   onPlus: PropTypes.func,
+  onSettings: PropTypes.func,
 };
 
 const AMBER = '#ffb300';
@@ -333,6 +347,12 @@ const styles = {
     justifyContent: 'stretch',
     gap: '8px',
   },
+  branchRow: {
+    display: 'flex',
+    flex: 1,
+    minHeight: 0,
+    gap: '8px',
+  },
   branchBtn: {
     display: 'flex',
     flexDirection: 'column',
@@ -349,6 +369,20 @@ const styles = {
     WebkitTapHighlightColor: 'transparent',
   },
   branchBtnDisabled: { opacity: 0.35, cursor: 'default' },
+  settingsBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    width: '100%',
+    flexShrink: 0,
+    height: '52px',
+    background: '#161208',
+    border: '2px solid #3a2800',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    WebkitTapHighlightColor: 'transparent',
+  },
   branchBtnLabel: {
     color: '#888',
     fontSize: '15px',

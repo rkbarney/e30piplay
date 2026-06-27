@@ -3,15 +3,14 @@ import FactoryClock    from './FactoryClock';
 import DigitalClock    from './DigitalClock';
 import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
+import SettingsScreen  from './SettingsScreen';
 import Games           from './Games';
 import Hal             from './Hal';
 import useHalVoice     from '../useHalVoice';
+import useSettings     from '../useSettings';
+import { FACES, DEFAULT_BOOT_SCREEN } from '../screens';
 
-// Faces cycled by the − button — one loop, HAL included, so it's always
-// reachable again no matter where you wander off to.
-const FACES = ['hal', 'factory', 'digital', 'system', 'games'];
-
-const BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? 'hal';
+const BUILD_BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? DEFAULT_BOOT_SCREEN;
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
 async function postCarplayApi(path) {
@@ -26,9 +25,14 @@ async function postCarplayApi(path) {
 }
 
 export default function DisplaySwitcher() {
-  // `screen` is either a face name (from FACES) or 'carplay'.
-  const [screen, setScreen] = useState(BOOT_SCREEN);
-  const lastFaceRef = useRef(BOOT_SCREEN);
+  const [settings, updateSettings] = useSettings();
+  const bootScreen = (settings.bootScreen && FACES.includes(settings.bootScreen))
+    ? settings.bootScreen
+    : BUILD_BOOT_SCREEN;
+
+  // `screen` is either a face name (from FACES), 'carplay', or 'settings'.
+  const [screen, setScreen] = useState(bootScreen);
+  const lastFaceRef = useRef(bootScreen);
   if (FACES.includes(screen)) lastFaceRef.current = screen;
 
   // Voice intents from the HAL speech sidecar (see useHalVoice) map onto the
@@ -84,6 +88,9 @@ export default function DisplaySwitcher() {
     setScreen(prev => (prev === 'carplay' ? lastFaceRef.current : 'carplay'));
   }, []);
 
+  const openSettings  = useCallback(() => setScreen('settings'), []);
+  const closeSettings = useCallback(() => setScreen('system'), []);
+
   useEffect(() => {
     document.body.classList.add('clock-active');
     return () => document.body.classList.remove('clock-active');
@@ -100,11 +107,14 @@ export default function DisplaySwitcher() {
           sidecarConnected={sidecarConnected}
         />
       )}
-      {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
-      {screen === 'factory' && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'digital' && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'system'  && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'games'   && <Games onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'carplay'  && <CarPlayReceiver onBack={handlePlus} />}
+      {screen === 'factory'  && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'digital'  && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'system'   && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} onSettings={openSettings} />}
+      {screen === 'games'    && <Games onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'settings' && (
+        <SettingsScreen settings={settings} onUpdate={updateSettings} onBack={closeSettings} />
+      )}
     </div>
   );
 }
