@@ -1,12 +1,70 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
 import { FACES, FACE_LABELS } from '../screens';
 
+const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
+
 export default function SettingsScreen({ settings, onUpdate, onBack }) {
   const [bootPicker, setBootPicker] = useState(false);
+  const [confirm, setConfirm] = useState(null); // 'reboot' | 'reinstall' | null
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [canForce, setCanForce] = useState(false);
 
   const bootScreen = settings.bootScreen || FACES[0];
+
+  const reboot = useCallback(async () => {
+    setConfirm(null);
+    setBusy(true);
+    setCanForce(false);
+    setMessage('Rebooting…');
+    try {
+      const res = await fetch(`${API_BASE}/api/reboot`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setMessage(data.detail || data.error || 'Reboot failed.');
+        setBusy(false);
+        return;
+      }
+      setMessage('Rebooting now — the display will go dark for a bit.');
+    } catch {
+      setMessage('Reboot request failed (lost connection?).');
+      setBusy(false);
+    }
+  }, []);
+
+  const reinstall = useCallback(async (force = false) => {
+    setConfirm(null);
+    setBusy(true);
+    setCanForce(false);
+    setMessage(force
+      ? 'Discarding local changes, then reinstalling…'
+      : 'Reinstalling — pulling code and re-running setup. This can take several minutes.');
+    try {
+      const res = await fetch(`${API_BASE}/api/reinstall`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ force }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        const detail = data.detail || data.error || 'Reinstall failed.';
+        setMessage(detail);
+        setCanForce(!force && /local changes/i.test(detail));
+        setBusy(false);
+        return;
+      }
+      setMessage('Reinstall complete — reboot to apply everything.');
+      setBusy(false);
+    } catch {
+      setMessage('Reinstall request failed (lost connection?).');
+      setBusy(false);
+    }
+  }, []);
 
   return (
     <ScreenFrame variant="amber" buttons={[{ label: 'BACK', onClick: onBack }]}>
@@ -17,33 +75,65 @@ export default function SettingsScreen({ settings, onUpdate, onBack }) {
         <div style={styles.divider} />
 
         <div style={styles.body}>
-          <button
-            type="button"
-            style={styles.row}
-            onClick={() => onUpdate({ showMouse: !settings.showMouse })}
-            aria-label="Show mouse pointer"
-          >
-            <span style={styles.rowLabel}>SHOW MOUSE</span>
-            <span style={{ ...styles.rowValue, ...(settings.showMouse ? styles.rowValueOn : null) }}>
-              {settings.showMouse ? 'ON' : 'OFF'}
-            </span>
-          </button>
+          <div style={styles.settingsRow}>
+            <button
+              type="button"
+              style={styles.settingsBtn}
+              onClick={() => onUpdate({ showMouse: !settings.showMouse })}
+              aria-label="Show mouse pointer"
+            >
+              <span style={styles.rowLabel}>SHOW MOUSE</span>
+              <span style={{ ...styles.rowValue, ...(settings.showMouse ? styles.rowValueOn : null) }}>
+                {settings.showMouse ? 'ON' : 'OFF'}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            style={styles.row}
-            onClick={() => setBootPicker(true)}
-            aria-label="Default boot screen"
-          >
-            <span style={styles.rowLabel}>BOOT SCREEN</span>
-            <span style={styles.rowValue}>{FACE_LABELS[bootScreen]} ▾</span>
-          </button>
+            <button
+              type="button"
+              style={styles.settingsBtn}
+              onClick={() => setBootPicker(true)}
+              aria-label="Default boot screen"
+            >
+              <span style={styles.rowLabel}>BOOT SCREEN</span>
+              <span style={styles.rowValue}>{FACE_LABELS[bootScreen]} ▾</span>
+            </button>
+          </div>
+
+          <div style={styles.actions}>
+            <button
+              type="button"
+              style={{ ...styles.actionBtn, ...(busy ? styles.actionBtnDisabled : null) }}
+              onClick={() => setConfirm('reboot')}
+              disabled={busy}
+            >
+              REBOOT
+            </button>
+            <button
+              type="button"
+              style={{ ...styles.actionBtn, ...styles.actionBtnWarn, ...(busy ? styles.actionBtnDisabled : null) }}
+              onClick={() => setConfirm('reinstall')}
+              disabled={busy}
+            >
+              REINSTALL
+            </button>
+          </div>
         </div>
 
-        <div style={styles.hint}>
-          SHOW MOUSE stays off for the car (no pointer device) — flip it on at
-          the bench. BOOT SCREEN takes effect on next launch.
-        </div>
+        {message ? (
+          <div style={styles.message}>
+            {message}
+            {canForce ? (
+              <button type="button" style={styles.forceBtn} onClick={() => reinstall(true)}>
+                FORCE REINSTALL
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div style={styles.hint}>
+            SHOW MOUSE stays off for the car — flip it on at the bench. REINSTALL
+            re-runs full setup (packages, services); REBOOT to apply after.
+          </div>
+        )}
 
         {bootPicker ? (
           <div style={styles.dialog}>
@@ -69,6 +159,37 @@ export default function SettingsScreen({ settings, onUpdate, onBack }) {
               })}
             </div>
             <button type="button" style={styles.dialogCancel} onClick={() => setBootPicker(false)}>
+              CANCEL
+            </button>
+          </div>
+        ) : null}
+
+        {confirm === 'reboot' ? (
+          <div style={styles.dialog}>
+            <div style={styles.dialogTitle}>REBOOT?</div>
+            <div style={styles.confirmText}>
+              The Pi will restart now. The display goes dark for about a minute.
+            </div>
+            <button type="button" style={styles.dialogConfirm} onClick={reboot}>
+              CONFIRM REBOOT
+            </button>
+            <button type="button" style={styles.dialogCancel} onClick={() => setConfirm(null)}>
+              CANCEL
+            </button>
+          </div>
+        ) : null}
+
+        {confirm === 'reinstall' ? (
+          <div style={styles.dialog}>
+            <div style={styles.dialogTitle}>REINSTALL?</div>
+            <div style={styles.confirmText}>
+              Pulls the latest code and re-runs full setup — packages, services,
+              everything. Takes several minutes. Reboot after to apply it all.
+            </div>
+            <button type="button" style={styles.dialogConfirm} onClick={() => reinstall(false)}>
+              CONFIRM REINSTALL
+            </button>
+            <button type="button" style={styles.dialogCancel} onClick={() => setConfirm(null)}>
               CANCEL
             </button>
           </div>
@@ -127,7 +248,13 @@ const styles = {
     justifyContent: 'stretch',
     gap: '8px',
   },
-  row: {
+  settingsRow: {
+    display: 'flex',
+    flex: 1,
+    minHeight: 0,
+    gap: '8px',
+  },
+  settingsBtn: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -135,7 +262,7 @@ const styles = {
     gap: '8px',
     width: '100%',
     flex: 1,
-    minHeight: '88px',
+    minHeight: '70px',
     background: '#161208',
     border: '2px solid #3a2800',
     borderRadius: '10px',
@@ -144,22 +271,74 @@ const styles = {
   },
   rowLabel: {
     color: '#888',
-    fontSize: '15px',
+    fontSize: '13px',
     fontFamily: MONO,
     fontWeight: 'bold',
-    letterSpacing: '0.12em',
+    letterSpacing: '0.1em',
   },
   rowValue: {
     color: AMBER,
-    fontSize: '22px',
+    fontSize: '18px',
     fontWeight: 'bold',
     fontFamily: MONO,
-    maxWidth: '260px',
+    maxWidth: '120px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowValueOn: { color: '#88ff88' },
+  actions: {
+    display: 'flex',
+    flexShrink: 0,
+    gap: '10px',
+  },
+  actionBtn: {
+    flex: 1,
+    height: '46px',
+    background: '#1a1000',
+    border: '2px solid #7a5500',
+    borderRadius: '10px',
+    color: AMBER,
+    fontSize: '14px',
+    fontWeight: 'bold',
+    fontFamily: MONO,
+    letterSpacing: '0.08em',
+    cursor: 'pointer',
+    WebkitTapHighlightColor: 'transparent',
+    userSelect: 'none',
+  },
+  actionBtnWarn: { background: '#2a0800', borderColor: '#ff6644', color: '#ffaa88' },
+  actionBtnDisabled: { opacity: 0.35, cursor: 'default' },
+  message: {
+    color: '#bbb',
+    fontSize: '10px',
+    fontFamily: MONO,
+    lineHeight: 1.4,
+    wordBreak: 'break-word',
+    maxHeight: '54px',
+    overflowY: 'auto',
+    whiteSpace: 'pre-wrap',
+    flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  forceBtn: {
+    alignSelf: 'flex-start',
+    flexShrink: 0,
+    height: '24px',
+    padding: '0 10px',
+    background: '#2a0800',
+    border: '1px solid #ff6644',
+    borderRadius: '6px',
+    color: '#ffaa88',
+    fontSize: '9px',
+    fontWeight: 'bold',
+    fontFamily: MONO,
+    letterSpacing: '0.06em',
+    cursor: 'pointer',
+    WebkitTapHighlightColor: 'transparent',
+  },
   hint: {
     color: '#665533',
     fontSize: '10px',
@@ -194,6 +373,15 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
+  },
+  confirmText: {
+    flex: 1,
+    minHeight: 0,
+    color: '#ccc',
+    fontFamily: MONO,
+    fontSize: '13px',
+    lineHeight: 1.5,
+    overflowY: 'auto',
   },
   choice: {
     display: 'flex',
@@ -233,6 +421,20 @@ const styles = {
     fontWeight: 'bold',
     fontFamily: MONO,
     letterSpacing: '0.1em',
+    cursor: 'pointer',
+    WebkitTapHighlightColor: 'transparent',
+  },
+  dialogConfirm: {
+    flexShrink: 0,
+    height: '56px',
+    background: '#2a0800',
+    border: '2px solid #ff6644',
+    borderRadius: '10px',
+    color: '#ffaa88',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    fontFamily: MONO,
+    letterSpacing: '0.08em',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
   },

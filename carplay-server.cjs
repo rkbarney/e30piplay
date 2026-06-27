@@ -247,6 +247,26 @@ async function runUpdate(force = false) {
   return { log: `${stdout}${stderr}`.trim() };
 }
 
+// Full reinstall: git pull + re-run setup.sh (packages, systemd units, AppImage,
+// sudoers — anything setup.sh does, not just app code). Long-running, like update.
+async function runReinstall(force = false) {
+  const script = path.join(APP_DIR, 'scripts', 's52-reinstall.sh');
+  const args = force ? ['--force'] : [];
+  const { stdout, stderr } = await run('bash', [script, ...args], {
+    timeout: 900000,
+    cwd: APP_DIR,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return { log: `${stdout}${stderr}`.trim() };
+}
+
+// systemctl reboot returns almost immediately (it schedules the shutdown), so
+// this resolves well before the box actually goes down — the HTTP response
+// reaches the UI first.
+async function runReboot() {
+  await run('sudo', ['-n', '/usr/local/bin/s52-reboot.sh'], { timeout: 10000 });
+}
+
 // Branch names we'll accept from the UI. Anything else is rejected outright.
 const BRANCH_RE = /^[A-Za-z0-9._/-]+$/;
 
@@ -443,6 +463,19 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       const { log } = await runUpdate(Boolean(body.force));
       json(res, 200, { ok: true, log });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/reinstall') {
+      const body = await readJson(req);
+      const { log } = await runReinstall(Boolean(body.force));
+      json(res, 200, { ok: true, log });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/reboot') {
+      await runReboot();
+      json(res, 200, { ok: true });
       return;
     }
 
