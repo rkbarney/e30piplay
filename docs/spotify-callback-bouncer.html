@@ -42,12 +42,17 @@
   // Default mDNS hostname of the dash unit; override per-link with
   // ?host=other-name.local if you ever rename the Pi.
   var DEFAULT_HOST = 's52.local';
+  // Only allow mDNS-style ".local" hostnames here — this page is a
+  // registered Spotify redirect_uri, so an unvalidated ?host= would be an
+  // open redirect that leaks the auth code/state to an arbitrary server.
+  var HOST_PATTERN = /^[a-z0-9-]+\.local$/i;
 
   var params = new URLSearchParams(window.location.search);
   var error = params.get('error');
   var code = params.get('code');
   var state = params.get('state');
-  var host = params.get('host') || DEFAULT_HOST;
+  var requestedHost = params.get('host');
+  var host = (requestedHost && HOST_PATTERN.test(requestedHost)) ? requestedHost : DEFAULT_HOST;
 
   var msg = document.getElementById('msg');
 
