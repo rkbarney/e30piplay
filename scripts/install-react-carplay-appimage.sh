@@ -29,9 +29,18 @@ fi
 
 mkdir -p "$APP_DIR" "${HOME}/.local/bin"
 
-echo "Downloading..."
-curl -fsSL "$URL" -o "${IMAGE}.part"
-mv "${IMAGE}.part" "$IMAGE"
+# Re-running this script (e.g. via Settings → REINSTALL) shouldn't re-pull a
+# ~150MB Electron app every time. The image path is already version-pinned
+# (react-carplay-${VERSION}-arm64.AppImage), so an existing file at this path
+# is this exact version — skip the download unless it's missing or empty.
+# Bump/pin a different REACT_CARPLAY_VERSION to force a fresh pull.
+if [ -s "$IMAGE" ]; then
+  echo "Already have ${IMAGE} — skipping download (set REACT_CARPLAY_VERSION to force a different build, or rm it first)."
+else
+  echo "Downloading..."
+  curl -fsSL "$URL" -o "${IMAGE}.part"
+  mv "${IMAGE}.part" "$IMAGE"
+fi
 chmod +x "$IMAGE"
 
 echo "udev (Carlinkit + common MTK IDs)..."
