@@ -8,9 +8,9 @@ import Games           from './Games';
 import Hal             from './Hal';
 import useHalVoice     from '../useHalVoice';
 import useSettings     from '../useSettings';
-import { FACES }       from '../screens';
+import { FACES, DEFAULT_BOOT_SCREEN } from '../screens';
 
-const BUILD_BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? 'hal';
+const BUILD_BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? DEFAULT_BOOT_SCREEN;
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
 async function postCarplayApi(path) {

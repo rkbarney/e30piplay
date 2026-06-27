@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import ScreenFrame from './ScreenFrame';
-import { FACES, FACE_LABELS } from '../screens';
+import { FACES, FACE_LABELS, DEFAULT_BOOT_SCREEN } from '../screens';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
@@ -12,7 +12,7 @@ export default function SettingsScreen({ settings, onUpdate, onBack }) {
   const [message, setMessage] = useState('');
   const [canForce, setCanForce] = useState(false);
 
-  const bootScreen = settings.bootScreen || FACES[0];
+  const bootScreen = settings.bootScreen || DEFAULT_BOOT_SCREEN;
 
   const reboot = useCallback(async () => {
     setConfirm(null);
