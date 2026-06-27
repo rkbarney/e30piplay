@@ -57,7 +57,6 @@ sudo apt-get install -y -qq \
   chromium \
   nginx \
   curl \
-  unclutter \
   alsa-utils \
   pulseaudio-utils \
   pipewire-pulse \
@@ -484,9 +483,9 @@ WantedBy=multi-user.target
 SERVICE
 
 # Older bench/kiosk experiments may have dropped cursor.conf here with
-# XCURSOR_THEME=blank / XCURSOR_SIZE=1 — that makes the pointer invisible
-# even with a mouse. Touchscreen installs should use unclutter in autostart
-# (auto-enabled when a touch device is present), not a blank cursor theme.
+# XCURSOR_THEME=blank / XCURSOR_SIZE=1 — that makes the pointer invisible even
+# with a mouse attached at the bench. Cursor visibility is now an in-app
+# Settings toggle (src/useSettings.js), not a system-level cursor theme.
 sudo rm -f /etc/systemd/system/s52-cage-kiosk.service.d/cursor.conf
 
 # Plymouth → labwc handoff: keep the amber splash on the framebuffer while
