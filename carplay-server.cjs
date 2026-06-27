@@ -350,6 +350,69 @@ async function carplayReady() {
   }
 }
 
+// ── Navit (turn-by-turn) ────────────────────────────────────────────────────
+// Same wlrctl focus/minimize trick as the CarPlay receiver, against the
+// `navit` apt package's GTK toplevel instead of an Electron one. Navit is
+// expected to be pre-launched (iconified) by s52-labwc-autostart.sh, same as
+// react-carplay, so "launch" here is just a focus — no spawn, no VT switch.
+const NAVIT_APP_ID = 'navit';
+const NAVIT_PROCESS = 'navit';
+
+async function navitReady() {
+  try {
+    await run(WLRCTL, ['toplevel', 'find', `app_id:${NAVIT_APP_ID}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function launchNavit() {
+  try {
+    await wlrctlToplevel('focus', NAVIT_APP_ID);
+  } catch {
+    if (!(await navitReady())) throw new Error(`no Navit toplevel (${NAVIT_APP_ID}) to focus`);
+  }
+  await wlrctlToplevelBestEffort('maximize', NAVIT_APP_ID);
+}
+
+async function returnNavitToKiosk() {
+  try {
+    await wlrctlToplevel('minimize', NAVIT_APP_ID);
+  } catch {
+    /* already exited / iconified — kiosk is visible either way */
+  }
+}
+
+// Kill + wait for the autostart loop to respawn it, then focus — same recovery
+// path as restartCarplayReceiver(), for when Navit wedges (e.g. stuck loading
+// a map extract).
+async function restartNavit() {
+  try {
+    await run('pkill', ['-x', NAVIT_PROCESS]);
+  } catch {
+    /* already stopped */
+  }
+
+  const deadline = Date.now() + 30000;
+  if (await navitReady()) {
+    const goneDeadline = Date.now() + 10000;
+    while (Date.now() < goneDeadline) {
+      if (!(await navitReady())) break;
+      await sleep(500);
+    }
+  }
+
+  while (Date.now() < deadline) {
+    if (await navitReady()) {
+      await launchNavit();
+      return;
+    }
+    await sleep(1000);
+  }
+  throw new Error(`${NAVIT_PROCESS} did not become ready within 30s`);
+}
+
 // ── ROM listing ───────────────────────────────────────────────────────────────
 // Maps file extension → EmulatorJS system name (EJS_core / config.system).
 // NES uses the 'nes' system (fceumm core).
@@ -479,6 +542,30 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/return-to-kiosk') {
       await returnToKiosk();
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/navit-ready') {
+      const ready = await navitReady();
+      json(res, ready ? 200 : 503, { ready, appId: NAVIT_APP_ID });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/launch-navit') {
+      await launchNavit();
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/relaunch-navit') {
+      await restartNavit();
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/return-navit-to-kiosk') {
+      await returnNavitToKiosk();
       json(res, 200, { ok: true });
       return;
     }

@@ -13,6 +13,7 @@
 #   S52_SKIP_REACT_CARPLAY_APPIMAGE=1   # skip upstream Electron download (offline / headless)
 #   REACT_CARPLAY_VERSION=4.0.5         # passed through to install-react-carplay-appimage.sh
 #   S52_SKIP_HAL_VOICE=1     # skip the HAL voice sidecar (whisper.cpp build is slow/offline-unfriendly)
+#   S52_SKIP_NAVIT_CONFIG=1  # skip applying the 480x640 portrait navit.xml overrides
 #
 # Do NOT use `source` or `. setup.sh`.
 # =============================================================================
@@ -25,6 +26,7 @@ S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
 S52_SKIP_HAL_VOICE="${S52_SKIP_HAL_VOICE:-0}"
+S52_SKIP_NAVIT_CONFIG="${S52_SKIP_NAVIT_CONFIG:-0}"
 # Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
 # install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
 # after you have confirmed key-based SSH works.
@@ -75,7 +77,9 @@ sudo apt-get install -y -qq \
   build-essential \
   portaudio19-dev \
   espeak-ng \
-  zlib1g-dev
+  zlib1g-dev \
+  navit \
+  xwayland
 
 sudo systemctl enable ssh
 sudo systemctl start ssh
@@ -552,6 +556,18 @@ echo "[10b] Applying CarPlay DongleConfig (scripts/s52-carplay-config.json)…"
 bash "$SOURCE_DIR/scripts/s52-apply-carplay-config.sh" || \
   echo "  NOTE: CarPlay config apply skipped/failed (non-fatal)." >&2
 
+# Navit (apt package) — 480x640 portrait window + a synthetic "Demo" vehicle
+# so the NAVIGATION face shows something moving with no GPS/map data yet.
+# No OSM map extract is fetched here (large, region-specific download); see
+# scripts/s52-apply-navit-config.sh header for the manual maptool step.
+if [[ "$S52_SKIP_NAVIT_CONFIG" == "1" ]]; then
+  echo "[10c] Skipping Navit config (S52_SKIP_NAVIT_CONFIG=1)."
+else
+  echo "[10c] Applying Navit portrait config (scripts/s52-apply-navit-config.sh)…"
+  bash "$SOURCE_DIR/scripts/s52-apply-navit-config.sh" || \
+    echo "  NOTE: Navit config apply skipped/failed (non-fatal — is the navit package installed?)." >&2
+fi
+
 # ── 11. HAL voice sidecar ("HAL, switch to CarPlay") ──────────────────────────
 # Offline whisper.cpp STT via pywhispercpp, which builds whisper.cpp from
 # source on first `pip install` — slow and needs internet once for the build
@@ -636,5 +652,10 @@ echo "  Stop UI:  sudo systemctl stop s52-cage-kiosk"
 echo ""
 echo "  CarPlay:  Use + → Open CarPlay on the display (Electron via cage). Quit Electron → kiosk returns."
 echo "            SSH: sudo /usr/local/bin/s52-carplay-switch.sh return"
+echo ""
+echo "  Navit:    − cycle to NAVIGATION, tap to open. No map data yet — see"
+echo "            scripts/s52-apply-navit-config.sh for the maptool/.bin step."
+echo "            UNVERIFIED: confirm 'navit' is the real wlrctl app_id on your"
+echo "            hardware (wlrctl toplevel list) — see s52-labwc-autostart.sh."
 echo "============================================"
 echo ""

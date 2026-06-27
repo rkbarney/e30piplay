@@ -270,3 +270,29 @@ elif [ -x "${CARPLAY_LAUNCHER}" ]; then
 else
   echo "[$(date)] missing ${CARPLAY_LAUNCHER}; run install-react-carplay-appimage.sh" >&2
 fi
+
+# Background Navit (apt package) — same pre-warm/iconify trick as react-carplay
+# above, so the NAVIGATION face's "OPEN NAVIGATION" button is an instant
+# wlrctl focus instead of a cold GTK + map-load start.
+#
+# CAVEAT (unverified on real hardware as of this writing): the windowRule in
+# ~/.config/labwc/rc.xml iconifies app_id "navit", which assumes Debian's GTK
+# build of navit reports that app_id under Wayland. If it instead maps
+# visibly (no iconify), it will sit on top of the kiosk at boot — check
+# `wlrctl toplevel list` after first boot and adjust the rc.xml identifier if
+# it differs.
+NAVIT_LAUNCHER="$(command -v navit 2>/dev/null || true)"
+NAVIT_LOG="${S52_NAVIT_LOG:-/tmp/navit.log}"
+NAVIT_START_DELAY="${S52_NAVIT_START_DELAY:-4}"
+if [ -n "${NAVIT_LAUNCHER}" ]; then
+  (
+    sleep "${NAVIT_START_DELAY}"
+    while true; do
+      "${NAVIT_LAUNCHER}" \
+        2>&1 | { if command -v systemd-cat >/dev/null 2>&1; then tee -a "${NAVIT_LOG}" | systemd-cat -t s52-navit-app; else cat >>"${NAVIT_LOG}"; fi; } || true
+      sleep 3
+    done
+  ) &
+else
+  echo "[$(date)] navit not installed; run setup.sh or 'sudo apt-get install navit'" >&2
+fi

@@ -26,5 +26,10 @@
     <windowRule identifier="dev.f-io.livi" serverDecoration="no">
       <action name="Iconify"/>
     </windowRule>
+    <!-- Navit (apt package), pre-launched the same way for an instant
+         focus-only switch from the NAVIGATION face. -->
+    <windowRule identifier="navit" serverDecoration="no">
+      <action name="Iconify"/>
+    </windowRule>
   </windowRules>
 </openbox_config>

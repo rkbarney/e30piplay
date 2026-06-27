@@ -67,6 +67,12 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 - AM/PM indicator
 - OEM button labels: h/DAT, HOUR, TEMP / min/DAT, DATE, MEMO
 
+### Navigation (prototype)
+- Offline turn-by-turn via [Navit](https://navit-project.org/) (apt package), OSM map data
+- Pre-warmed at boot (iconified) same as CarPlay; `−` cycles to it, tap to focus
+- No destination input on-device yet (tiny screen) — planned: enter start/stop on a
+  phone-served mirror page (geocoded via Nominatim) while on the car's hotspot
+
 ### System
 - OTA / update screen — pull latest code, switch branches, view WiFi profiles
 
@@ -84,7 +90,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Button | Action |
 |---|---|
-| `−` | Cycle faces: HAL → Factory → Digital → System → Games → HAL |
+| `−` | Cycle faces: HAL → Factory → Digital → System → Navigation → Games → HAL |
 | `+` | Enter CarPlay (from any face) / Exit CarPlay back to the last face |
 
 ---
@@ -133,6 +139,7 @@ e30piplay/
 │       ├── SystemScreen.jsx      # OTA / update screen
 │       ├── Games.jsx             # ROM emulator screen
 │       ├── CarPlayReceiver.jsx   # “Open CarPlay” → POST /api → cage + Electron AppImage
+│       ├── NavitReceiver.jsx     # “Open Navigation” → POST /api → wlrctl focus on Navit
 │       └── ViewportScale.jsx     # Scales fixed 320×480 UI to the real screen
 ├── public/
 │   └── BMW-Logo-1970-1989.png
