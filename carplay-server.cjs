@@ -350,67 +350,74 @@ async function carplayReady() {
   }
 }
 
-// ── Navit (turn-by-turn) ────────────────────────────────────────────────────
-// Same wlrctl focus/minimize trick as the CarPlay receiver, against the
-// `navit` apt package's GTK toplevel instead of an Electron one. Navit is
-// expected to be pre-launched (iconified) by s52-labwc-autostart.sh, same as
-// react-carplay, so "launch" here is just a focus — no spawn, no VT switch.
-const NAVIT_APP_ID = 'navit';
-const NAVIT_PROCESS = 'navit';
+// ── Organic Maps (turn-by-turn, OSM vector) ─────────────────────────────────
+// Same wlrctl focus/minimize handoff as the CarPlay receiver, against the
+// Organic Maps *Flatpak* (app.organicmaps.desktop) Qt toplevel instead of an
+// Electron one. Pre-launched/iconified by s52-labwc-autostart.sh just like
+// react-carplay, so "launch" is a focus, not a spawn.
+//
+// UNVERIFIED on hardware: MAPS_APP_ID is the app_id Organic Maps reports to the
+// Wayland compositor (what `wlrctl toplevel list` shows), which is NOT
+// guaranteed to equal the Flatpak ref. Qt-under-Flatpak usually reports the
+// desktop-file id ('app.organicmaps.desktop'), but if it comes up via Xwayland
+// the WM_CLASS may differ ('OMaps' / 'organicmaps'). Check after first boot and
+// override with S52_MAPS_APP_ID + the matching rc.xml windowRule if it differs.
+const MAPS_APP_ID = process.env.S52_MAPS_APP_ID || 'app.organicmaps.desktop';
+const MAPS_FLATPAK_REF = process.env.S52_MAPS_FLATPAK_REF || 'app.organicmaps.desktop';
 
-async function navitReady() {
+async function mapsReady() {
   try {
-    await run(WLRCTL, ['toplevel', 'find', `app_id:${NAVIT_APP_ID}`]);
+    await run(WLRCTL, ['toplevel', 'find', `app_id:${MAPS_APP_ID}`]);
     return true;
   } catch {
     return false;
   }
 }
 
-async function launchNavit() {
+async function launchMaps() {
   try {
-    await wlrctlToplevel('focus', NAVIT_APP_ID);
+    await wlrctlToplevel('focus', MAPS_APP_ID);
   } catch {
-    if (!(await navitReady())) throw new Error(`no Navit toplevel (${NAVIT_APP_ID}) to focus`);
+    if (!(await mapsReady())) throw new Error(`no Organic Maps toplevel (${MAPS_APP_ID}) to focus`);
   }
-  await wlrctlToplevelBestEffort('maximize', NAVIT_APP_ID);
+  await wlrctlToplevelBestEffort('maximize', MAPS_APP_ID);
 }
 
-async function returnNavitToKiosk() {
+async function returnMapsToKiosk() {
   try {
-    await wlrctlToplevel('minimize', NAVIT_APP_ID);
+    await wlrctlToplevel('minimize', MAPS_APP_ID);
   } catch {
     /* already exited / iconified — kiosk is visible either way */
   }
 }
 
-// Kill + wait for the autostart loop to respawn it, then focus — same recovery
-// path as restartCarplayReceiver(), for when Navit wedges (e.g. stuck loading
-// a map extract).
-async function restartNavit() {
+// Flatpak apps can't be pkill'd by a plain process name (the binary runs inside
+// the sandbox), so we ask Flatpak to stop the instance and let the autostart
+// while-loop respawn it, then focus — same recovery shape as restartCarplayReceiver().
+async function restartMaps() {
   try {
-    await run('pkill', ['-x', NAVIT_PROCESS]);
+    await run('flatpak', ['kill', MAPS_FLATPAK_REF]);
   } catch {
-    /* already stopped */
+    /* already stopped / flatpak missing */
   }
 
   const deadline = Date.now() + 30000;
-  if (await navitReady()) {
+  if (await mapsReady()) {
     const goneDeadline = Date.now() + 10000;
     while (Date.now() < goneDeadline) {
-      if (!(await navitReady())) break;
+      if (!(await mapsReady())) break;
       await sleep(500);
     }
   }
 
   while (Date.now() < deadline) {
-    if (await navitReady()) {
-      await launchNavit();
+    if (await mapsReady()) {
+      await launchMaps();
       return;
     }
     await sleep(1000);
   }
-  throw new Error(`${NAVIT_PROCESS} did not become ready within 30s`);
+  throw new Error(`Organic Maps (${MAPS_FLATPAK_REF}) did not become ready within 30s`);
 }
 
 // ── ROM listing ───────────────────────────────────────────────────────────────
@@ -546,26 +553,26 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === 'GET' && url.pathname === '/api/navit-ready') {
-      const ready = await navitReady();
-      json(res, ready ? 200 : 503, { ready, appId: NAVIT_APP_ID });
+    if (req.method === 'GET' && url.pathname === '/api/maps-ready') {
+      const ready = await mapsReady();
+      json(res, ready ? 200 : 503, { ready, appId: MAPS_APP_ID });
       return;
     }
 
-    if (req.method === 'POST' && url.pathname === '/api/launch-navit') {
-      await launchNavit();
+    if (req.method === 'POST' && url.pathname === '/api/launch-maps') {
+      await launchMaps();
       json(res, 200, { ok: true });
       return;
     }
 
-    if (req.method === 'POST' && url.pathname === '/api/relaunch-navit') {
-      await restartNavit();
+    if (req.method === 'POST' && url.pathname === '/api/relaunch-maps') {
+      await restartMaps();
       json(res, 200, { ok: true });
       return;
     }
 
-    if (req.method === 'POST' && url.pathname === '/api/return-navit-to-kiosk') {
-      await returnNavitToKiosk();
+    if (req.method === 'POST' && url.pathname === '/api/return-maps-to-kiosk') {
+      await returnMapsToKiosk();
       json(res, 200, { ok: true });
       return;
     }

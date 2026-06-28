@@ -13,7 +13,7 @@
 #   S52_SKIP_REACT_CARPLAY_APPIMAGE=1   # skip upstream Electron download (offline / headless)
 #   REACT_CARPLAY_VERSION=4.0.5         # passed through to install-react-carplay-appimage.sh
 #   S52_SKIP_HAL_VOICE=1     # skip the HAL voice sidecar (whisper.cpp build is slow/offline-unfriendly)
-#   S52_SKIP_NAVIT_CONFIG=1  # skip applying the 480x640 portrait navit.xml overrides
+#   S52_SKIP_ORGANIC_MAPS=1  # skip installing the Organic Maps flatpak (~large download)
 #
 # Do NOT use `source` or `. setup.sh`.
 # =============================================================================
@@ -26,7 +26,7 @@ S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
 S52_SKIP_HAL_VOICE="${S52_SKIP_HAL_VOICE:-0}"
-S52_SKIP_NAVIT_CONFIG="${S52_SKIP_NAVIT_CONFIG:-0}"
+S52_SKIP_ORGANIC_MAPS="${S52_SKIP_ORGANIC_MAPS:-0}"
 # Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
 # install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
 # after you have confirmed key-based SSH works.
@@ -78,7 +78,7 @@ sudo apt-get install -y -qq \
   portaudio19-dev \
   espeak-ng \
   zlib1g-dev \
-  navit \
+  flatpak \
   xwayland
 
 sudo systemctl enable ssh
@@ -556,16 +556,20 @@ echo "[10b] Applying CarPlay DongleConfig (scripts/s52-carplay-config.json)…"
 bash "$SOURCE_DIR/scripts/s52-apply-carplay-config.sh" || \
   echo "  NOTE: CarPlay config apply skipped/failed (non-fatal)." >&2
 
-# Navit (apt package) — 480x640 portrait window + a synthetic "Demo" vehicle
-# so the NAVIGATION face shows something moving with no GPS/map data yet.
-# No OSM map extract is fetched here (large, region-specific download); see
-# scripts/s52-apply-navit-config.sh header for the manual maptool step.
-if [[ "$S52_SKIP_NAVIT_CONFIG" == "1" ]]; then
-  echo "[10c] Skipping Navit config (S52_SKIP_NAVIT_CONFIG=1)."
+# Organic Maps (Flatpak) — modern OSM vector renderer for the ORGANIC MAPS face.
+# Large download, so skippable for offline/headless installs. Installed
+# user-wide (--user) so it runs as the kiosk user without root; pre-warmed at
+# boot by s52-labwc-autostart.sh.
+if [[ "$S52_SKIP_ORGANIC_MAPS" == "1" ]]; then
+  echo "[10c] Skipping Organic Maps flatpak (S52_SKIP_ORGANIC_MAPS=1)."
+elif command -v flatpak >/dev/null 2>&1; then
+  echo "[10c] Installing Organic Maps flatpak (app.organicmaps.desktop)…"
+  flatpak remote-add --user --if-not-exists flathub \
+    https://flathub.org/repo/flathub.flatpakrepo || true
+  flatpak install --user -y --noninteractive flathub app.organicmaps.desktop || \
+    echo "  NOTE: Organic Maps flatpak install skipped/failed (non-fatal — check network / flathub reachability)." >&2
 else
-  echo "[10c] Applying Navit portrait config (scripts/s52-apply-navit-config.sh)…"
-  bash "$SOURCE_DIR/scripts/s52-apply-navit-config.sh" || \
-    echo "  NOTE: Navit config apply skipped/failed (non-fatal — is the navit package installed?)." >&2
+  echo "[10c] flatpak not available; skipping Organic Maps install." >&2
 fi
 
 # ── 11. HAL voice sidecar ("HAL, switch to CarPlay") ──────────────────────────
@@ -653,9 +657,10 @@ echo ""
 echo "  CarPlay:  Use + → Open CarPlay on the display (Electron via cage). Quit Electron → kiosk returns."
 echo "            SSH: sudo /usr/local/bin/s52-carplay-switch.sh return"
 echo ""
-echo "  Navit:    − cycle to NAVIGATION, tap to open. No map data yet — see"
-echo "            scripts/s52-apply-navit-config.sh for the maptool/.bin step."
-echo "            UNVERIFIED: confirm 'navit' is the real wlrctl app_id on your"
-echo "            hardware (wlrctl toplevel list) — see s52-labwc-autostart.sh."
+echo "  Maps:     − cycle to ORGANIC MAPS, tap to open. Download a region from"
+echo "            Organic Maps' built-in downloader first (boots to empty globe)."
+echo "            UNVERIFIED: confirm 'app.organicmaps.desktop' is the real wlrctl"
+echo "            app_id on your hardware (wlrctl toplevel list) — if not, set"
+echo "            S52_MAPS_APP_ID + the rc.xml windowRule. See s52-labwc-autostart.sh."
 echo "============================================"
 echo ""

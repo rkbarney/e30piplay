@@ -1,8 +1,8 @@
 /**
- * NavitReceiver — hands the display to Navit (apt package, GTK toplevel)
- * for offline OSM turn-by-turn. Unlike CarPlayReceiver this is a regular
+ * MapsReceiver — hands the display to Organic Maps (Flatpak,
+ * app.organicmaps.desktop, Qt toplevel) for offline OSM turn-by-turn. A regular
  * cycled face (− / + behave the same as every other face); tapping the big
- * button focuses the pre-warmed Navit window via wlrctl (see
+ * button focuses the pre-warmed Organic Maps window via wlrctl (see
  * scripts/s52-labwc-autostart.sh) instead of auto-opening on mount, since
  * there's no phone-handshake reason to jump straight to it.
  */
@@ -13,7 +13,7 @@ import ScreenFrame from './ScreenFrame';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
-export default function NavitReceiver({ onMinus, onPlus }) {
+export default function MapsReceiver({ onMinus, onPlus }) {
   const [phase, setPhase] = useState('idle'); // idle | opening | restarting
   const [err, setErr] = useState('');
 
@@ -34,24 +34,24 @@ export default function NavitReceiver({ onMinus, onPlus }) {
     }
   }, []);
 
-  const openNavit = useCallback(() => call('/api/launch-navit', 'opening'), [call]);
-  const restartNavit = useCallback(() => call('/api/relaunch-navit', 'restarting'), [call]);
+  const openMaps = useCallback(() => call('/api/launch-maps', 'opening'), [call]);
+  const restartMaps = useCallback(() => call('/api/relaunch-maps', 'restarting'), [call]);
 
   const busy = phase === 'opening' || phase === 'restarting';
   const label =
-    phase === 'opening' ? 'OPENING…' : phase === 'restarting' ? 'RESTARTING…' : 'OPEN\nNAVIGATION';
+    phase === 'opening' ? 'OPENING…' : phase === 'restarting' ? 'RESTARTING…' : 'OPEN\nMAPS';
 
   return (
     <ScreenFrame
       variant="mono"
       buttons={[{ key: 'minus', label: '−', onClick: onMinus }, { key: 'plus', label: '+', onClick: onPlus }]}
     >
-      <div style={styles.title}>NAVIGATION</div>
+      <div style={styles.title}>ORGANIC MAPS</div>
       <button
         type="button"
         style={{ ...styles.bigBtn, ...(busy ? styles.bigBtnBusy : null) }}
-        onClick={openNavit}
-        onDoubleClick={restartNavit}
+        onClick={openMaps}
+        onDoubleClick={restartMaps}
         disabled={busy}
       >
         {label}
@@ -63,7 +63,7 @@ export default function NavitReceiver({ onMinus, onPlus }) {
   );
 }
 
-NavitReceiver.propTypes = {
+MapsReceiver.propTypes = {
   onMinus: PropTypes.func,
   onPlus: PropTypes.func,
 };

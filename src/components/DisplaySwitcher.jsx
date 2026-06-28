@@ -5,12 +5,13 @@ import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
 import Games           from './Games';
 import Hal             from './Hal';
-import NavitReceiver   from './NavitReceiver';
+import MapsReceiver    from './MapsReceiver';
 import useHalVoice     from '../useHalVoice';
 
 // Faces cycled by the − button — one loop, HAL included, so it's always
-// reachable again no matter where you wander off to.
-const FACES = ['hal', 'factory', 'digital', 'system', 'navit', 'games'];
+// reachable again no matter where you wander off to. 'maps' is the Organic
+// Maps navigation face.
+const FACES = ['hal', 'factory', 'digital', 'system', 'maps', 'games'];
 
 const BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? 'hal';
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
@@ -105,7 +106,7 @@ export default function DisplaySwitcher() {
       {screen === 'factory' && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'digital' && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'system'  && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'navit'   && <NavitReceiver onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'maps'    && <MapsReceiver onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'games'   && <Games onMinus={handleMinus} onPlus={handlePlus} />}
     </div>
   );
