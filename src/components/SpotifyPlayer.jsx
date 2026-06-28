@@ -19,6 +19,7 @@ import ScreenFrame from './ScreenFrame';
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 const NOW_PLAYING_POLL_MS = 3000;
 const STATUS_POLL_MS = 4000;
+const AMBER = '#ffb300';
 
 async function getJson(path, opts) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -35,6 +36,49 @@ function formatTime(ms) {
   const sec = totalSec % 60;
   return `${min}:${String(sec).padStart(2, '0')}`;
 }
+
+/** Inline SVG transport glyphs — Pi kiosk Chromium lacks emoji/font glyphs for ⏮▶⏸⏭. */
+function TransportIcon({ kind }) {
+  const common = {
+    width: kind === 'play' || kind === 'pause' ? 28 : 22,
+    height: kind === 'play' || kind === 'pause' ? 28 : 22,
+    viewBox: '0 0 24 24',
+    fill: AMBER,
+    style: { display: 'block' },
+    'aria-hidden': true,
+  };
+  if (kind === 'previous') {
+    return (
+      <svg {...common}>
+        <path d="M6 6v12l8-6-8-6zm8 0v12l8-6-8-6z" />
+      </svg>
+    );
+  }
+  if (kind === 'next') {
+    return (
+      <svg {...common}>
+        <path d="M4 6v12l8-6-8-6zm8 0v12l8-6-8-6z" />
+      </svg>
+    );
+  }
+  if (kind === 'pause') {
+    return (
+      <svg {...common}>
+        <rect x="6" y="5" width="4" height="14" rx="1" />
+        <rect x="14" y="5" width="4" height="14" rx="1" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M8 5v14l11-7-11-7z" />
+    </svg>
+  );
+}
+
+TransportIcon.propTypes = {
+  kind: PropTypes.oneOf(['previous', 'play', 'pause', 'next']).isRequired,
+};
 
 export default function SpotifyPlayer({ onMinus, onPlus }) {
   // unknown | login | player
@@ -183,16 +227,21 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
               <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
             </div>
             <div style={styles.controls}>
-              <button type="button" style={styles.ctrlBtn} disabled={busy} onClick={() => sendTransport('previous')}>⏮</button>
+              <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Previous track" onClick={() => sendTransport('previous')}>
+                <TransportIcon kind="previous" />
+              </button>
               <button
                 type="button"
                 style={styles.ctrlBtnBig}
                 disabled={busy}
+                aria-label={nowPlaying?.playing ? 'Pause' : 'Play'}
                 onClick={() => sendTransport('toggle')}
               >
-                {nowPlaying?.playing ? '⏸' : '▶'}
+                <TransportIcon kind={nowPlaying?.playing ? 'pause' : 'play'} />
               </button>
-              <button type="button" style={styles.ctrlBtn} disabled={busy} onClick={() => sendTransport('next')}>⏭</button>
+              <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Next track" onClick={() => sendTransport('next')}>
+                <TransportIcon kind="next" />
+              </button>
             </div>
           </>
         )}
@@ -206,7 +255,6 @@ SpotifyPlayer.propTypes = {
   onPlus: PropTypes.func,
 };
 
-const AMBER = '#ffb300';
 const MONO = "'Courier New', monospace";
 
 const styles = {
@@ -343,6 +391,10 @@ const styles = {
     fontSize: '20px',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
   },
   ctrlBtnBig: {
     width: '68px',
@@ -354,5 +406,9 @@ const styles = {
     fontSize: '26px',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
   },
 };
