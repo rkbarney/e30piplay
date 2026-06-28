@@ -57,7 +57,6 @@ sudo apt-get install -y -qq \
   chromium \
   nginx \
   curl \
-  unclutter \
   alsa-utils \
   pulseaudio-utils \
   pipewire-pulse \
@@ -341,6 +340,7 @@ sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-enable-livi-receiver-root.sh" /usr/local/bin/s52-enable-livi-receiver-root.sh
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-restart-kiosk.sh" /usr/local/bin/s52-restart-kiosk.sh
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-wifi-switch.sh" /usr/local/bin/s52-wifi-switch.sh
+sudo install -m 755 "$SOURCE_DIR/scripts/s52-reboot.sh" /usr/local/bin/s52-reboot.sh
 
 # Canonical app tree for NOPASSWD root helpers (never trust caller-supplied paths).
 printf '%s\n' "$APP_DIR" | sudo tee /etc/s52-app-dir > /dev/null
@@ -351,6 +351,16 @@ sudo chmod 644 /etc/s52-app-dir
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-deploy.sh" /usr/local/bin/s52-deploy.sh
 
 # Preserve WAYLAND_DISPLAY/XDG_RUNTIME_DIR through sudo so wlrctl can find labwc.
+#
+# The last line (NOPASSWD: ALL) is broader than the single-purpose helpers
+# above it: it backs Settings → REINSTALL (POST /api/reinstall →
+# s52-reinstall.sh → setup.sh), which needs whatever root access setup.sh
+# itself needs — apt-get install, systemd units, this very sudoers file,
+# AppImage installs, etc. — and that set changes as setup.sh grows, so it
+# can't be pinned to one allow-listed script the way deploy/restart/wifi are.
+# Mitigated by /api/* being bound to localhost only (see carplay-server.cjs);
+# anything that can reach this UI to tap REINSTALL already has physical/local
+# access to the Pi.
 sudo tee /etc/sudoers.d/s52-carplay-launcher > /dev/null <<SUDOERS
 Defaults!/usr/local/bin/s52-carplay-switch.sh env_keep += "WAYLAND_DISPLAY XDG_RUNTIME_DIR"
 Defaults!/usr/local/bin/s52-deploy.sh env_keep += "APP_DIR"
@@ -359,6 +369,8 @@ $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-enable-livi-receiver-root.s
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-deploy.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-restart-kiosk.sh
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-wifi-switch.sh
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/local/bin/s52-reboot.sh
+$SERVICE_USER ALL=(ALL) NOPASSWD: ALL
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/s52-carplay-launcher
 sudo visudo -cf /etc/sudoers.d/s52-carplay-launcher
@@ -609,9 +621,9 @@ WantedBy=multi-user.target
 SERVICE
 
 # Older bench/kiosk experiments may have dropped cursor.conf here with
-# XCURSOR_THEME=blank / XCURSOR_SIZE=1 — that makes the pointer invisible
-# even with a mouse. Touchscreen installs should use unclutter in autostart
-# (auto-enabled when a touch device is present), not a blank cursor theme.
+# XCURSOR_THEME=blank / XCURSOR_SIZE=1 — that makes the pointer invisible even
+# with a mouse attached at the bench. Cursor visibility is now an in-app
+# Settings toggle (src/useSettings.js), not a system-level cursor theme.
 sudo rm -f /etc/systemd/system/s52-cage-kiosk.service.d/cursor.conf
 
 # Plymouth → labwc handoff: keep the amber splash on the framebuffer while

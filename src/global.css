@@ -81,14 +81,17 @@ html, body {
   line-height: 1.4;
   -webkit-font-smoothing: none;
   image-rendering: pixelated;
-  /* Hide cursor on touch-first installs; show normal pointer at the bench with a mouse. */
+  /* Hidden by default (car has no mouse). The Settings screen's "Show mouse"
+     toggle adds .show-cursor to <body> for bench debugging — see useSettings.js.
+     Previously this used `@media (hover: hover) and (pointer: fine)`, but
+     Chromium's Linux/Wayland Ozone backend doesn't implement that media
+     feature reliably and matched "fine pointer" even on the touch-only car
+     display, so the cursor never actually hid. */
   cursor: none;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  html, body {
-    cursor: auto;
-  }
+body.show-cursor {
+  cursor: auto;
 }
 
 body.clock-active,

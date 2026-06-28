@@ -3,19 +3,18 @@ import FactoryClock    from './FactoryClock';
 import DigitalClock    from './DigitalClock';
 import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
+import SettingsScreen  from './SettingsScreen';
 import Games           from './Games';
 import Hal             from './Hal';
 import SpotifyPlayer   from './SpotifyPlayer';
 import useHalVoice     from '../useHalVoice';
+import useSettings     from '../useSettings';
+import { FACES, DEFAULT_BOOT_SCREEN } from '../screens';
 
-// Faces cycled by the − button — one loop, HAL included, so it's always
-// reachable again no matter where you wander off to.
-const FACES = ['hal', 'spotify', 'factory', 'digital', 'system', 'games'];
-
-const BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? 'hal';
+const BUILD_BOOT_SCREEN = import.meta.env.VITE_BOOT_SCREEN ?? DEFAULT_BOOT_SCREEN;
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
-async function postApi(path) {
+async function postCarplayApi(path) {
   try {
     await fetch(`${API_BASE}${path}`, {
       method: 'POST',
@@ -27,9 +26,14 @@ async function postApi(path) {
 }
 
 export default function DisplaySwitcher() {
-  // `screen` is either a face name (from FACES) or 'carplay'.
-  const [screen, setScreen] = useState(BOOT_SCREEN);
-  const lastFaceRef = useRef(BOOT_SCREEN);
+  const [settings, updateSettings] = useSettings();
+  const bootScreen = (settings.bootScreen && FACES.includes(settings.bootScreen))
+    ? settings.bootScreen
+    : BUILD_BOOT_SCREEN;
+
+  // `screen` is either a face name (from FACES), 'carplay', or 'settings'.
+  const [screen, setScreen] = useState(bootScreen);
+  const lastFaceRef = useRef(bootScreen);
   if (FACES.includes(screen)) lastFaceRef.current = screen;
 
   // Voice intents from the HAL speech sidecar (see useHalVoice) map onto the
@@ -43,21 +47,21 @@ export default function DisplaySwitcher() {
       // raced wlrctl focus ahead of React and showed LIVI over the wrong face.
       setScreen(prev => {
         if (prev === 'carplay') {
-          postApi('/api/launch-react-carplay');
+          postCarplayApi('/api/launch-react-carplay');
         }
         return 'carplay';
       });
     } else if (intent === 'return_to_kiosk' || intent === 'go_clock') {
-      postApi('/api/return-to-kiosk');
+      postCarplayApi('/api/return-to-kiosk');
       setScreen('factory');
     } else if (intent === 'switch_to_emulator' || intent === 'go_games') setScreen('games');
     else if (intent === 'exit_carplay' || intent === 'go_hal') {
-      postApi('/api/return-to-kiosk');
+      postCarplayApi('/api/return-to-kiosk');
       setScreen('hal');
     } else if (intent === 'switch_to_spotify') setScreen('spotify');
-    else if (intent === 'spotify_play_pause') postApi('/api/spotify/toggle');
-    else if (intent === 'spotify_next') postApi('/api/spotify/next');
-    else if (intent === 'spotify_previous') postApi('/api/spotify/previous');
+    else if (intent === 'spotify_play_pause') postCarplayApi('/api/spotify/toggle');
+    else if (intent === 'spotify_next') postCarplayApi('/api/spotify/next');
+    else if (intent === 'spotify_previous') postCarplayApi('/api/spotify/previous');
   }, []);
 
   // Listening lives here (not inside the Hal screen) so "HAL, switch to
@@ -88,6 +92,9 @@ export default function DisplaySwitcher() {
     setScreen(prev => (prev === 'carplay' ? lastFaceRef.current : 'carplay'));
   }, []);
 
+  const openSettings  = useCallback(() => setScreen('settings'), []);
+  const closeSettings = useCallback(() => setScreen('system'), []);
+
   useEffect(() => {
     document.body.classList.add('clock-active');
     return () => document.body.classList.remove('clock-active');
@@ -104,12 +111,15 @@ export default function DisplaySwitcher() {
           sidecarConnected={sidecarConnected}
         />
       )}
-      {screen === 'carplay' && <CarPlayReceiver onBack={handlePlus} />}
-      {screen === 'spotify' && <SpotifyPlayer onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'factory' && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'digital' && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'system'  && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} />}
-      {screen === 'games'   && <Games onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'carplay'  && <CarPlayReceiver onBack={handlePlus} />}
+      {screen === 'spotify'  && <SpotifyPlayer onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'factory'  && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'digital'  && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'system'   && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} onSettings={openSettings} />}
+      {screen === 'games'    && <Games onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'settings' && (
+        <SettingsScreen settings={settings} onUpdate={updateSettings} onBack={closeSettings} />
+      )}
     </div>
   );
 }
