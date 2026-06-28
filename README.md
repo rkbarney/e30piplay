@@ -74,19 +74,7 @@ The Pi stack is **Lite + cage + Chromium**; Docker Desktop on macOS cannot mirro
 
 3. Open [http://127.0.0.1:8080](http://127.0.0.1:8080) — devtools device mode ~320×480.
 
-**Spotify login (Docker):** copy `.env.example` → `.env`, set `SPOTIFY_CLIENT_ID` only (redirect URI is defaulted by `docker-compose.yml`). Register `http://127.0.0.1:8080/spotify-callback` in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) (Spotify requires HTTP for loopback — ignore the "not secure" warning and click Add), then use **Open Spotify login** on the dash screen. See **Docker vs Pi** below for the full split.
-
-### Docker vs Pi (Spotify OAuth)
-
-| | **Docker dev (Mac)** | **Pi production** |
-|---|----------------------|-------------------|
-| Config file | Repo-root `.env` (from `.env.example`) | `~/.config/s52-spotify.env` (from `scripts/s52-spotify.env.example`) |
-| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:8080/spotify-callback` (compose default; no manual `.env` entry needed) | `https://www.richardbarney.com/spotify-callback/` (HTTPS bouncer → `http://s52.local/spotify-callback`) |
-| Login UI | **Open Spotify login** button — browser on this machine | Phone **QR code** on the dash screen |
-| TLS | Plain HTTP on `:8080` (Spotify loopback OAuth requirement) | Pi serves HTTP; bouncer page supplies HTTPS for Spotify |
-| Server fallback (no env) | N/A — compose sets loopback URI | `spotify-server.cjs` defaults to bouncer URL |
-
-`spotify-server.cjs` infers mode from the redirect URI (`loopback` → Docker UI, bouncer → Pi QR). Optional override: `S52_SPOTIFY_MODE=docker|pi`.
+**Spotify login is Pi-only.** It uses a phone QR → `richardbarney.com` HTTPS bouncer → `s52.local/spotify-callback` flow (see the Spotify player notes below). There is no Docker dev path — the loopback OAuth flow never worked, so the compose preview ships without a spotify service. Test Spotify login on the Pi.
 
 ## Quality checks
 

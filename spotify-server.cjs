@@ -30,25 +30,6 @@ function logOAuth(event, detail = {}) {
   console.error('[spotify-oauth]', event, JSON.stringify({ redirect_uri: REDIRECT_URI, ...detail }));
 }
 
-function isLoopbackRedirect(uri) {
-  try {
-    const { hostname, protocol } = new URL(uri);
-    const loopbackHost = hostname === '127.0.0.1' || hostname === 'localhost';
-    // Spotify requires http (not https) for loopback; Docker dev uses :8080.
-    return loopbackHost && (protocol === 'http:' || protocol === 'https:');
-  } catch {
-    return false;
-  }
-}
-
-// docker = loopback redirect + "Open login" button; pi = bouncer URL + QR.
-// Optional override: S52_SPOTIFY_MODE=docker|pi (otherwise inferred from URI).
-function spotifyOAuthMode() {
-  const forced = process.env.S52_SPOTIFY_MODE;
-  if (forced === 'docker' || forced === 'pi') return forced;
-  return isLoopbackRedirect(REDIRECT_URI) ? 'docker' : 'pi';
-}
-
 const SCOPES = [
   'user-read-playback-state',
   'user-modify-playback-state',
@@ -283,8 +264,6 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         service: 's52-spotify',
         pid: process.pid,
-        mode: spotifyOAuthMode(),
-        loopback: isLoopbackRedirect(REDIRECT_URI),
       });
       return;
     }
@@ -295,8 +274,6 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         authenticated: Boolean(tokens?.refresh_token),
         deviceName: DEVICE_NAME,
-        mode: spotifyOAuthMode(),
-        loopback: isLoopbackRedirect(REDIRECT_URI),
       });
       return;
     }
@@ -306,13 +283,10 @@ const server = http.createServer(async (req, res) => {
         json(res, 500, { ok: false, error: 'SPOTIFY_CLIENT_ID not configured' });
         return;
       }
-      const loopback = isLoopbackRedirect(REDIRECT_URI);
       json(res, 200, {
         ok: true,
         url: startLogin(),
         redirectUri: REDIRECT_URI,
-        loopback,
-        mode: spotifyOAuthMode(),
       });
       return;
     }
@@ -387,10 +361,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  const mode = spotifyOAuthMode();
   // eslint-disable-next-line no-console
   const clientHint = CLIENT_ID ? `${CLIENT_ID.slice(0, 8)}…` : '(unset)';
   console.log(
-    `spotify-server listening on ${HOST}:${PORT} (oauth mode=${mode}, client=${clientHint}, redirect=${REDIRECT_URI})`,
+    `spotify-server listening on ${HOST}:${PORT} (client=${clientHint}, redirect=${REDIRECT_URI})`,
   );
 });

@@ -3,11 +3,10 @@
  * spotify-server.cjs (PKCE OAuth + Spotify Web API), with raspotify as the
  * actual Connect receiver/audio engine.
  *
- * Login UI follows spotify-server OAuth mode (inferred from redirect URI):
- *   - Pi (bouncer redirect): QR code — scan with phone; bouncer forwards to
- *     s52.local/spotify-callback over LAN/hotspot.
- *   - Docker (loopback redirect): "Open Spotify login" button — same machine
- *     browser only; no phone QR (127.0.0.1 on a phone is the phone itself).
+ * Login is a phone-scannable QR code: it points at the richardbarney.com
+ * HTTPS bouncer, which forwards back to s52.local/spotify-callback over the
+ * LAN/hotspot to finish the token exchange (Spotify requires an HTTPS
+ * authorize redirect, which the Pi has no way to serve on its own).
  * Polls /api/spotify/status until OAuth completes, then shows the player.
  */
 
@@ -71,8 +70,6 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
   const [phase, setPhase] = useState('unknown');
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [loginUrl, setLoginUrl] = useState('');
-  const [loginLoopback, setLoginLoopback] = useState(false);
-  const [loginRedirectUri, setLoginRedirectUri] = useState('');
   const [loginError, setLoginError] = useState('');
   const [nowPlaying, setNowPlaying] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -87,12 +84,6 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
         return;
       }
       setLoginUrl(data.url);
-      setLoginLoopback(Boolean(data.loopback));
-      setLoginRedirectUri(data.redirectUri || '');
-      if (data.loopback) {
-        setQrDataUrl(null);
-        return;
-      }
       const dataUrl = await QRCode.toDataURL(data.url, { margin: 1, width: 220 });
       setQrDataUrl(dataUrl);
     } catch {
@@ -133,8 +124,6 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
         setPhase('login');
         setQrDataUrl(null);
         setLoginUrl('');
-        setLoginLoopback(false);
-        setLoginRedirectUri('');
         return;
       }
       if (data?.ok) setNowPlaying(data);
@@ -161,32 +150,10 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
         {phase === 'login' ? (
           <>
             <div style={styles.title}>SPOTIFY</div>
-            {loginLoopback ? (
-              <>
-                <button
-                  type="button"
-                  style={styles.loginBtn}
-                  disabled={!loginUrl}
-                  onClick={() => { if (loginUrl) window.open(loginUrl, '_blank', 'noopener,noreferrer'); }}
-                >
-                  Open Spotify login
-                </button>
-                <div style={styles.hint}>Use a browser on this machine{'\n'}(not the phone QR)</div>
-                {loginRedirectUri ? (
-                  <div style={styles.redirectHint}>
-                    Dashboard redirect URI must match exactly:{'\n'}
-                    <span style={styles.redirectUri}>{loginRedirectUri}</span>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <div style={styles.qrBox}>
-                  {qrDataUrl ? <img src={qrDataUrl} alt="Scan to log in" style={styles.qrImg} /> : <div style={styles.qrPlaceholder}>…</div>}
-                </div>
-                <div style={styles.hint}>Scan with your phone{'\n'}to connect Spotify</div>
-              </>
-            )}
+            <div style={styles.qrBox}>
+              {qrDataUrl ? <img src={qrDataUrl} alt="Scan to log in" style={styles.qrImg} /> : <div style={styles.qrPlaceholder}>…</div>}
+            </div>
+            <div style={styles.hint}>Scan with your phone{'\n'}to connect Spotify</div>
             {loginError ? <div style={styles.error}>{loginError}</div> : null}
           </>
         ) : (
@@ -286,33 +253,7 @@ const styles = {
     whiteSpace: 'pre-line',
     lineHeight: 1.4,
   },
-  redirectHint: {
-    color: '#887744',
-    fontSize: '10px',
-    fontFamily: MONO,
-    textAlign: 'center',
-    whiteSpace: 'pre-line',
-    lineHeight: 1.35,
-    maxWidth: '100%',
-  },
-  redirectUri: {
-    color: AMBER,
-    wordBreak: 'break-all',
-  },
   error: { color: '#ff6644', fontSize: '11px', fontFamily: MONO, textAlign: 'center' },
-  loginBtn: {
-    width: '220px',
-    padding: '14px 16px',
-    borderRadius: '8px',
-    background: '#2a1c00',
-    border: `2px solid ${AMBER}`,
-    color: AMBER,
-    fontSize: '14px',
-    fontFamily: MONO,
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    WebkitTapHighlightColor: 'transparent',
-  },
 
   artBox: {
     width: '160px',
