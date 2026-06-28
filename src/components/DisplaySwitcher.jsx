@@ -4,6 +4,7 @@ import DigitalClock    from './DigitalClock';
 import CarPlayReceiver from './CarPlayReceiver';
 import SystemScreen    from './SystemScreen';
 import SettingsScreen  from './SettingsScreen';
+import MapsReceiver    from './MapsReceiver';
 import Games           from './Games';
 import Hal             from './Hal';
 import SpotifyPlayer   from './SpotifyPlayer';
@@ -116,6 +117,7 @@ export default function DisplaySwitcher() {
       {screen === 'factory'  && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'digital'  && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'system'   && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} onSettings={openSettings} />}
+      {screen === 'maps'     && <MapsReceiver onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'games'    && <Games onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'settings' && (
         <SettingsScreen settings={settings} onUpdate={updateSettings} onBack={closeSettings} />
