@@ -444,14 +444,15 @@ OVERRIDE
     install -m 644 "$SOURCE_DIR/spotify-server.cjs" "$APP_DIR/spotify-server.cjs"
   fi
 
-  # Secrets (SPOTIFY_CLIENT_ID) live in the service user's ~/.config, off the
-  # repo. Scaffold from the committed example (never clobber a real file).
+  # Pi production OAuth: ~/.config/s52-spotify.env (bouncer redirect + phone QR).
+  # Docker dev uses repo-root .env + docker-compose loopback defaults instead.
   SVC_CONFIG="/home/$SERVICE_USER/.config"
   install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$SVC_CONFIG"
   if [[ ! -f "$SVC_CONFIG/s52-spotify.env" ]]; then
     install -m 600 -o "$SERVICE_USER" -g "$SERVICE_USER" \
       "$SOURCE_DIR/scripts/s52-spotify.env.example" "$SVC_CONFIG/s52-spotify.env"
     echo "    NOTE: set SPOTIFY_CLIENT_ID in $SVC_CONFIG/s52-spotify.env — Spotify login can't start without it."
+    echo "    Pi redirect URI (bouncer): https://www.richardbarney.com/spotify-callback/ — see scripts/s52-spotify.env.example."
   fi
 
   sudo tee /etc/systemd/system/s52-spotify.service > /dev/null <<SERVICE

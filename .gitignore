@@ -38,3 +38,8 @@ reply.wav
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Environment secrets (never commit)
+.env
+.env.*
+!.env.example

@@ -1,7 +1,14 @@
-# Dev preview: nginx + built app + ROM API on http://localhost:8080
+# Dev preview: nginx + built app + ROM API on http://127.0.0.1:8080
 #   docker compose up --build
 #
 # Drop ROMs (.nes, .gb, .gbc, .sfc, .smc) into ./roms/ before starting.
+#
+# Spotify OAuth — Docker vs Pi (see README "Docker vs Pi"):
+#   Docker: SPOTIFY_REDIRECT_URI defaults below to loopback HTTP; put only
+#           SPOTIFY_CLIENT_ID in repo-root .env (.env.example). Login UI =
+#           "Open Spotify login" button (same machine, not phone QR).
+#   Pi:     ~/.config/s52-spotify.env with bouncer redirect URI; login UI =
+#           phone QR → richardbarney.com bouncer → s52.local/spotify-callback.
 
 services:
   api:
@@ -26,6 +33,23 @@ services:
       - ./roms:/roms:ro
     depends_on:
       - api
+      - spotify
+
+  spotify:
+    image: node:20-bookworm-slim
+    working_dir: /app
+    volumes:
+      - ./spotify-server.cjs:/app/spotify-server.cjs:ro
+      - spotify-config:/root/.config
+    environment:
+      PORT: "3002"
+      HOST: 0.0.0.0
+      # Docker: only SPOTIFY_CLIENT_ID required in repo-root .env — redirect
+      # defaults to loopback HTTP (Pi uses ~/.config/s52-spotify.env instead).
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_REDIRECT_URI: ${SPOTIFY_REDIRECT_URI:-http://127.0.0.1:8080/spotify-callback}
+    command: node spotify-server.cjs
+
 
   # Headless HAL voice bench — test Whisper→Claude→Piper→intent with no audio
   # hardware. Needs ~/.config/hal.env (ANTHROPIC_API_KEY); models cache in a
@@ -49,3 +73,5 @@ services:
 
 volumes:
   hal-models:
+
+  spotify-config:

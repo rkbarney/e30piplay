@@ -21,9 +21,33 @@ const crypto = require('crypto');
 const PORT = Number.parseInt(process.env.PORT || '3002', 10) || 3002;
 const HOST = process.env.HOST || '127.0.0.1';
 
-const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
-const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI || 'https://richardbarney.com/spotify-callback/';
+const CLIENT_ID = (process.env.SPOTIFY_CLIENT_ID || '').trim();
+const REDIRECT_URI = (process.env.SPOTIFY_REDIRECT_URI || 'https://www.richardbarney.com/spotify-callback/').trim();
 const DEVICE_NAME = process.env.SPOTIFY_DEVICE_NAME || 'S52 E30';
+
+function logOAuth(event, detail = {}) {
+  // eslint-disable-next-line no-console
+  console.error('[spotify-oauth]', event, JSON.stringify({ redirect_uri: REDIRECT_URI, ...detail }));
+}
+
+function isLoopbackRedirect(uri) {
+  try {
+    const { hostname, protocol } = new URL(uri);
+    const loopbackHost = hostname === '127.0.0.1' || hostname === 'localhost';
+    // Spotify requires http (not https) for loopback; Docker dev uses :8080.
+    return loopbackHost && (protocol === 'http:' || protocol === 'https:');
+  } catch {
+    return false;
+  }
+}
+
+// docker = loopback redirect + "Open login" button; pi = bouncer URL + QR.
+// Optional override: S52_SPOTIFY_MODE=docker|pi (otherwise inferred from URI).
+function spotifyOAuthMode() {
+  const forced = process.env.S52_SPOTIFY_MODE;
+  if (forced === 'docker' || forced === 'pi') return forced;
+  return isLoopbackRedirect(REDIRECT_URI) ? 'docker' : 'pi';
+}
 
 const SCOPES = [
   'user-read-playback-state',
@@ -90,7 +114,14 @@ async function exchangeCode(code, verifier) {
     body,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || data.error || 'token exchange failed');
+  if (!res.ok) {
+    logOAuth('token_exchange_failed', {
+      http_status: res.status,
+      spotify_error: data.error,
+      spotify_error_description: data.error_description,
+    });
+    throw new Error(data.error_description || data.error || 'token exchange failed');
+  }
   writeTokens({
     access_token: data.access_token,
     refresh_token: data.refresh_token,
@@ -248,13 +279,25 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/spotify/health') {
-      json(res, 200, { ok: true, service: 's52-spotify', pid: process.pid });
+      json(res, 200, {
+        ok: true,
+        service: 's52-spotify',
+        pid: process.pid,
+        mode: spotifyOAuthMode(),
+        loopback: isLoopbackRedirect(REDIRECT_URI),
+      });
       return;
     }
 
     if (req.method === 'GET' && url.pathname === '/api/spotify/status') {
       const tokens = readTokens();
-      json(res, 200, { ok: true, authenticated: Boolean(tokens?.refresh_token), deviceName: DEVICE_NAME });
+      json(res, 200, {
+        ok: true,
+        authenticated: Boolean(tokens?.refresh_token),
+        deviceName: DEVICE_NAME,
+        mode: spotifyOAuthMode(),
+        loopback: isLoopbackRedirect(REDIRECT_URI),
+      });
       return;
     }
 
@@ -263,7 +306,14 @@ const server = http.createServer(async (req, res) => {
         json(res, 500, { ok: false, error: 'SPOTIFY_CLIENT_ID not configured' });
         return;
       }
-      json(res, 200, { ok: true, url: startLogin() });
+      const loopback = isLoopbackRedirect(REDIRECT_URI);
+      json(res, 200, {
+        ok: true,
+        url: startLogin(),
+        redirectUri: REDIRECT_URI,
+        loopback,
+        mode: spotifyOAuthMode(),
+      });
       return;
     }
 
@@ -274,11 +324,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     // LAN-reachable (see nginx config) — hit directly by the phone's browser.
-    if (req.method === 'GET' && url.pathname === '/spotify-callback') {
+    if (req.method === 'GET' && (url.pathname === '/spotify-callback' || url.pathname === '/spotify-callback/')) {
       const code = url.searchParams.get('code');
       const state = url.searchParams.get('state');
       const error = url.searchParams.get('error');
-      if (error) { html(res, 400, callbackErrorPage(error)); return; }
+      if (error) {
+        const errorDescription = url.searchParams.get('error_description');
+        logOAuth('authorize_callback_error', {
+          error,
+          error_description: errorDescription,
+        });
+        html(res, 400, callbackErrorPage(errorDescription || error));
+        return;
+      }
       const pending = state && pendingLogins.get(state);
       if (!pending || pending.expiresAt < Date.now()) {
         html(res, 400, callbackErrorPage('login expired or invalid — rescan the QR code'));
@@ -289,6 +347,7 @@ const server = http.createServer(async (req, res) => {
         await exchangeCode(code, pending.verifier);
         html(res, 200, CALLBACK_OK_PAGE);
       } catch (e) {
+        logOAuth('callback_token_exchange_error', { message: e.message });
         html(res, 500, callbackErrorPage(e.message));
       }
       return;
@@ -328,6 +387,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  const mode = spotifyOAuthMode();
   // eslint-disable-next-line no-console
-  console.log(`spotify-server listening on ${HOST}:${PORT}`);
+  const clientHint = CLIENT_ID ? `${CLIENT_ID.slice(0, 8)}…` : '(unset)';
+  console.log(
+    `spotify-server listening on ${HOST}:${PORT} (oauth mode=${mode}, client=${clientHint}, redirect=${REDIRECT_URI})`,
+  );
 });
