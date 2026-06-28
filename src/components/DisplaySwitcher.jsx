@@ -6,6 +6,7 @@ import SystemScreen    from './SystemScreen';
 import SettingsScreen  from './SettingsScreen';
 import Games           from './Games';
 import Hal             from './Hal';
+import SpotifyPlayer   from './SpotifyPlayer';
 import useHalVoice     from '../useHalVoice';
 import useSettings     from '../useSettings';
 import { FACES, DEFAULT_BOOT_SCREEN } from '../screens';
@@ -57,7 +58,10 @@ export default function DisplaySwitcher() {
     else if (intent === 'exit_carplay' || intent === 'go_hal') {
       postCarplayApi('/api/return-to-kiosk');
       setScreen('hal');
-    }
+    } else if (intent === 'switch_to_spotify') setScreen('spotify');
+    else if (intent === 'spotify_play_pause') postCarplayApi('/api/spotify/toggle');
+    else if (intent === 'spotify_next') postCarplayApi('/api/spotify/next');
+    else if (intent === 'spotify_previous') postCarplayApi('/api/spotify/previous');
   }, []);
 
   // Listening lives here (not inside the Hal screen) so "HAL, switch to
@@ -108,6 +112,7 @@ export default function DisplaySwitcher() {
         />
       )}
       {screen === 'carplay'  && <CarPlayReceiver onBack={handlePlus} />}
+      {screen === 'spotify'  && <SpotifyPlayer onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'factory'  && <FactoryClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'digital'  && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'system'   && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} onSettings={openSettings} />}

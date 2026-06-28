@@ -222,6 +222,37 @@ server {
         proxy_set_header   X-Forwarded-Proto \$scheme;
     }
 
+    # Same loopback-only trust boundary as /api above, just routed to the
+    # Spotify control sidecar (play/pause/now-playing/login-url) on :3002.
+    location ^~ /api/spotify {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+
+        proxy_pass         http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header   Host \$host;
+        proxy_set_header   X-Real-IP \$remote_addr;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+    }
+
+    # Deliberately NOT loopback-restricted: the OAuth bounce page on
+    # richardbarney.com redirects the phone's browser here directly over the
+    # LAN/hotspot to finish the PKCE token exchange (Spotify requires an HTTPS
+    # authorize redirect, which the Pi doesn't have, so the public bouncer
+    # forwards here). Safe to expose: it only succeeds against a state value
+    # the Pi itself generated for an in-progress login, which expires in 10
+    # minutes — see spotify-server.cjs.
+    location = /spotify-callback {
+        proxy_pass         http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header   Host \$host;
+        proxy_set_header   X-Real-IP \$remote_addr;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+    }
+
     # ROM files — served directly from the roms/ directory in the app folder.
     # Copy ROMs to ${APP_DIR}/roms/ over SSH; they are never committed to git.
     location ^~ /roms/ {
@@ -365,6 +396,100 @@ if [[ "$_carplay_ok" == "0" ]]; then
   systemctl status s52-carplay --no-pager >&2 || true
 fi
 unset _carplay_ok _i _code
+
+# ── 5b. Spotify (raspotify Connect receiver + spotify-server.cjs control API) ─
+if [[ "$S52_SKIP_SPOTIFY" == "1" ]]; then
+  echo "[5b/10] Skipping Spotify (S52_SKIP_SPOTIFY=1)."
+else
+  echo "[5b/10] Spotify (raspotify + spotify-server.cjs)…"
+
+  if ! dpkg -s raspotify &>/dev/null; then
+    HTTP_CODE=$(curl -sL -o /tmp/raspotify-install.sh -w "%{http_code}" --max-time 60 \
+      https://dtcooper.github.io/raspotify/install.sh) || true
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      sudo sh /tmp/raspotify-install.sh
+    else
+      echo "    WARNING: could not fetch raspotify installer (HTTP ${HTTP_CODE:-error}) — skipping." >&2
+    fi
+    rm -f /tmp/raspotify-install.sh
+  fi
+
+  if dpkg -s raspotify &>/dev/null; then
+    sudo systemctl stop raspotify 2>/dev/null || true
+    # librespot's pulseaudio backend reuses whatever sink CarPlay's USB DAC
+    # setup picked (pi-audio-usb-default.sh writes PULSE_SINK there) so both
+    # receivers come out the same speaker without separate routing.
+    DEVICE_LINE=""
+    AUDIO_ENV="/home/$SERVICE_USER/.config/s52-carplay-audio.env"
+    if [[ -f "$AUDIO_ENV" ]]; then
+      PULSE_SINK_VAL=$(grep -m1 '^export PULSE_SINK=' "$AUDIO_ENV" | sed 's/^export PULSE_SINK=//')
+      [[ -n "$PULSE_SINK_VAL" ]] && DEVICE_LINE="LIBRESPOT_DEVICE=\"$PULSE_SINK_VAL\""
+    fi
+    sudo tee /etc/raspotify/conf > /dev/null <<RASPOTIFY
+LIBRESPOT_NAME="${S52_SPOTIFY_DEVICE_NAME:-S52 E30}"
+LIBRESPOT_BACKEND="pulseaudio"
+$DEVICE_LINE
+LIBRESPOT_BITRATE="320"
+LIBRESPOT_INITIAL_VOLUME="80"
+LIBRESPOT_OPTIONS="--disable-discovery=false"
+RASPOTIFY
+
+    # raspotify's packaged unit runs as its own system user with no Wayland/
+    # Pulse session; override it to run as the kiosk user so it reaches the
+    # same PipeWire/Pulse session (and DAC) as CarPlay and Chromium.
+    sudo mkdir -p /etc/systemd/system/raspotify.service.d
+    sudo tee /etc/systemd/system/raspotify.service.d/override.conf > /dev/null <<OVERRIDE
+[Service]
+User=$SERVICE_USER
+Group=$SERVICE_USER
+Environment=XDG_RUNTIME_DIR=/run/user/$S52_UID
+OVERRIDE
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable raspotify
+    sudo systemctl restart raspotify
+  fi
+
+  if [[ -f "$APP_DIR/spotify-server.cjs" ]] && cmp -s "$SOURCE_DIR/spotify-server.cjs" "$APP_DIR/spotify-server.cjs"; then
+    chmod 644 "$APP_DIR/spotify-server.cjs" || true
+  else
+    install -m 644 "$SOURCE_DIR/spotify-server.cjs" "$APP_DIR/spotify-server.cjs"
+  fi
+
+  # Pi production OAuth: ~/.config/s52-spotify.env (bouncer redirect + phone QR).
+  # Docker dev uses repo-root .env + docker-compose loopback defaults instead.
+  SVC_CONFIG="/home/$SERVICE_USER/.config"
+  install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$SVC_CONFIG"
+  if [[ ! -f "$SVC_CONFIG/s52-spotify.env" ]]; then
+    install -m 600 -o "$SERVICE_USER" -g "$SERVICE_USER" \
+      "$SOURCE_DIR/scripts/s52-spotify.env.example" "$SVC_CONFIG/s52-spotify.env"
+    echo "    NOTE: set SPOTIFY_CLIENT_ID in $SVC_CONFIG/s52-spotify.env — Spotify login can't start without it."
+    echo "    Pi redirect URI (bouncer): https://www.richardbarney.com/spotify-callback/ — see scripts/s52-spotify.env.example."
+  fi
+
+  sudo tee /etc/systemd/system/s52-spotify.service > /dev/null <<SERVICE
+[Unit]
+Description=S52 Spotify control API (PKCE OAuth + Web API bridge to raspotify)
+After=network.target raspotify.service
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=-/home/$SERVICE_USER/.config/s52-spotify.env
+Environment=PORT=3002
+ExecStart=/usr/bin/node $APP_DIR/spotify-server.cjs
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable s52-spotify
+  sudo systemctl restart s52-spotify
+fi
 
 # ── 6. Carlinkit udev ─────────────────────────────────────────────────────────
 echo "[6/10] Carlinkit udev rules…"

@@ -1,7 +1,14 @@
-# Dev preview: nginx + built app + ROM API on http://localhost:8080
+# Dev preview: nginx + built app + ROM API on http://127.0.0.1:8080
 #   docker compose up --build
 #
 # Drop ROMs (.nes, .gb, .gbc, .sfc, .smc) into ./roms/ before starting.
+#
+# Spotify OAuth — Docker vs Pi (see README "Docker vs Pi"):
+#   Docker: SPOTIFY_REDIRECT_URI defaults below to loopback HTTP; put only
+#           SPOTIFY_CLIENT_ID in repo-root .env (.env.example). Login UI =
+#           "Open Spotify login" button (same machine, not phone QR).
+#   Pi:     ~/.config/s52-spotify.env with bouncer redirect URI; login UI =
+#           phone QR → richardbarney.com bouncer → s52.local/spotify-callback.
 
 services:
   api:
@@ -20,32 +27,31 @@ services:
     build:
       context: .
       dockerfile: docker/web/Dockerfile
+    # Bind to loopback only: the proxied /api (branch switch / deploy / process
+    # control) and /api/spotify are the same privileged surface the Pi keeps
+    # loopback-only in nginx — don't expose them to the dev machine's LAN.
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     volumes:
       - ./roms:/roms:ro
     depends_on:
       - api
+      - spotify
 
-  # Headless HAL voice bench — test Whisper→Claude→Piper→intent with no audio
-  # hardware. Needs ~/.config/hal.env (ANTHROPIC_API_KEY); models cache in a
-  # named volume; HAL's reply WAV lands in ./out.
-  #   mkdir -p out
-  #   docker compose run --rm hal-bench --say "HAL, switch to CarPlay"
-  #   afplay out/reply.wav
-  hal-bench:
-    build:
-      context: .
-      dockerfile: docker/hal-bench/Dockerfile
+  spotify:
+    image: node:20-bookworm-slim
+    working_dir: /app
     volumes:
-      - hal-models:/root/.local/share          # whisper + piper model cache
-      - ${HOME}/.config/hal.env:/root/.config/hal.env:ro
-      - ./out:/out
-      # Live-mount scripts + context so prompt/canned tweaks take effect, no rebuild.
-      - ./scripts/s52-hal-voice.py:/app/scripts/s52-hal-voice.py:ro
-      - ./scripts/hal-bench.py:/app/scripts/hal-bench.py:ro
-      - ./scripts/hal-context.yaml.example:/root/.config/hal-context.yaml:ro
-    command: ["--say", "HAL, switch to CarPlay"]
+      - ./spotify-server.cjs:/app/spotify-server.cjs:ro
+      - spotify-config:/root/.config
+    environment:
+      PORT: "3002"
+      HOST: 0.0.0.0
+      # Docker: only SPOTIFY_CLIENT_ID required in repo-root .env — redirect
+      # defaults to loopback HTTP (Pi uses ~/.config/s52-spotify.env instead).
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_REDIRECT_URI: ${SPOTIFY_REDIRECT_URI:-http://127.0.0.1:8080/spotify-callback}
+    command: node spotify-server.cjs
 
 volumes:
-  hal-models:
+  spotify-config:

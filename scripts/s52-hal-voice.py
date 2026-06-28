@@ -58,10 +58,19 @@ log = logging.getLogger('s52-hal-voice')
 HOST = os.environ.get('S52_HAL_WS_HOST', '127.0.0.1')
 PORT = int(os.environ.get('S52_HAL_WS_PORT', '8765'))
 CARPLAY_API = os.environ.get('S52_CARPLAY_API', 'http://127.0.0.1:3001')
+SPOTIFY_API = os.environ.get('S52_SPOTIFY_API', 'http://127.0.0.1:3002')
 # Screen-switch intents that also hit carplay-server when the kiosk WS may drop.
 # switch_to_carplay is UI-only: CarPlayReceiver POSTs launch on mount (same as +).
 INTENT_API_PATHS = {
     'return_to_kiosk': '/api/return-to-kiosk',
+}
+# Spotify transport intents — switch_to_spotify is UI-only (no API call, just
+# a screen change), the rest hit spotify-server directly so they still work
+# even if the kiosk WS drops.
+INTENT_SPOTIFY_API_PATHS = {
+    'spotify_play_pause': '/api/spotify/toggle',
+    'spotify_next': '/api/spotify/next',
+    'spotify_previous': '/api/spotify/previous',
 }
 
 SAMPLE_RATE = 16000          # required by both webrtcvad and whisper.cpp
@@ -111,6 +120,7 @@ ERROR_SPEECH = os.environ.get(
 # (DisplaySwitcher.jsx maps them onto the same navigation the +/− buttons drive).
 VALID_INTENTS = frozenset({
     'switch_to_carplay', 'return_to_kiosk', 'switch_to_emulator', 'none',
+    'switch_to_spotify', 'spotify_play_pause', 'spotify_next', 'spotify_previous',
 })
 
 # ── Piper TTS (HAL 9000 voice) ────────────────────────────────────────────────
@@ -504,10 +514,18 @@ def build_system_prompt(context, carplay_active):
         'navigation, maps, directions, music apps, or phone calls\n'
         '{"intent": "return_to_kiosk"}    - return to the clock / home screen\n'
         '{"intent": "switch_to_emulator"} - open the retro game emulator\n'
+        '{"intent": "switch_to_spotify"}  - bring up the on-dash Spotify player; '
+        'use this when asked to play music/songs/a playlist, not for nav/maps/calls\n'
+        '{"intent": "spotify_play_pause"} - toggle play/pause on the Spotify player\n'
+        '{"intent": "spotify_next"}       - skip to the next track\n'
+        '{"intent": "spotify_previous"}   - go back to the previous track\n'
         '{"intent": "none"}               - conversation only, when no screen '
         'change is needed\n'
         'Pick the single best intent. Never invent other intents, and never '
-        'speak the JSON aloud or mention it.'
+        'speak the JSON aloud or mention it. There is no way to play a '
+        'specific song, artist, or playlist by name yet — if asked, say so and '
+        'suggest picking something from the Spotify screen, then emit '
+        '"switch_to_spotify".'
     )
     return '\n'.join(lines)
 
@@ -1281,7 +1299,7 @@ class HalTts:
 
     def render_wav(self, text, path):
         """Synthesize to a WAV file instead of the speakers — for headless
-        bench tests (scripts/hal-bench.py) where there's no audio device."""
+        runs where there's no audio device."""
         if not self.ready:
             raise RuntimeError('Piper voice not loaded')
         import wave
@@ -1372,12 +1390,13 @@ class HalVoiceServer:
             *(c.send(data) for c in list(self.clients)), return_exceptions=True,
         )
 
-    async def invoke_carplay_api(self, path):
-        """POST to carplay-server so voice works even if the kiosk WS drops."""
+    async def invoke_api(self, base, path):
+        """POST to a sidecar (carplay-server or spotify-server) so voice works
+        even if the kiosk WS drops."""
         import urllib.error
         import urllib.request
 
-        url = f'{CARPLAY_API.rstrip("/")}{path}'
+        url = f'{base.rstrip("/")}{path}'
 
         def _post():
             req = urllib.request.Request(
@@ -1388,11 +1407,11 @@ class HalVoiceServer:
 
         try:
             status = await asyncio.to_thread(_post)
-            log.info('carplay API %s → HTTP %s', path, status)
+            log.info('API %s → HTTP %s', path, status)
         except urllib.error.HTTPError as exc:
-            log.warning('carplay API %s → HTTP %s', path, exc.code)
+            log.warning('API %s → HTTP %s', path, exc.code)
         except Exception as exc:  # noqa: BLE001 - launch failure shouldn't crash HAL
-            log.warning('carplay API %s failed: %s', path, exc)
+            log.warning('API %s failed: %s', path, exc)
 
     def note_capture_level(self, pcm_int16):
         """RMS of the live capture block — same 0..1 scale as useAudioLevel.js."""
@@ -1571,7 +1590,10 @@ class HalVoiceServer:
             await self.broadcast({'type': 'command', 'intent': intent})
             api_path = INTENT_API_PATHS.get(intent)
             if api_path:
-                await self.invoke_carplay_api(api_path)
+                await self.invoke_api(CARPLAY_API, api_path)
+            spotify_path = INTENT_SPOTIFY_API_PATHS.get(intent)
+            if spotify_path:
+                await self.invoke_api(SPOTIFY_API, spotify_path)
         await self.broadcast({'type': 'idle'})
 
     def enqueue_utterance(self, pcm_int16):
