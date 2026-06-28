@@ -56,6 +56,13 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 - Voice-driven assistant: offline wake-word + whisper.cpp STT, Claude Haiku for intent/replies, Piper TTS in a cloned HAL 9000 voice
 - Can navigate the whole UI by voice ("HAL, switch to CarPlay", "HAL, show the clock", etc.)
 
+### Spotify
+- Native Spotify Connect player on the Pi (raspotify/librespot as the audio engine + a custom Web API control layer), separate from CarPlay
+- Login via a phone-scannable QR code: PKCE OAuth through a static HTTPS bouncer page (richardbarney.com/spotify-callback/), which bounces the phone's browser back down to the Pi over LAN/hotspot to finish the token exchange
+- Shows album art, track/artist, and play/pause/skip controls sized for the small screen
+- HAL voice control is transport-only (play/pause, next, previous) — no play-by-name/search yet
+- Requires a Spotify Premium account and a Spotify app Client ID (`~/.config/s52-spotify.env`)
+
 ### OEM Clock (Factory)
 - White on black, no numbers
 - Cartesian cross at 12/3/6/9 with spoke marks at other hours
@@ -84,7 +91,7 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Button | Action |
 |---|---|
-| `−` | Cycle faces: HAL → Factory → Digital → System → Organic Maps → Games → HAL |
+| `−` | Cycle faces: HAL → Spotify → Factory → Digital → System → Organic Maps → Games → HAL |
 | `+` | Enter CarPlay (from any face) / Exit CarPlay back to the last face |
 
 Offline turn-by-turn lives on the **Organic Maps** face (Flatpak
@@ -133,6 +140,7 @@ e30piplay/
 │   └── components/
 │       ├── DisplaySwitcher.jsx   # Screen routing, button logic
 │       ├── Hal.jsx               # Voice assistant screen
+│       ├── SpotifyPlayer.jsx     # Native Spotify Connect player (QR login + transport)
 │       ├── FactoryClock.jsx      # OEM white analog clock
 │       ├── DigitalClock.jsx      # OEM red LED digital clock
 │       ├── SystemScreen.jsx      # OTA / update screen

@@ -31,13 +31,14 @@ roms/
 # EmulatorJS data (large binary assets — fetched at deploy time by install-emulatorjs.sh)
 public/emulatorjs/
 
-# HAL bench output (TTS reply WAVs from scripts/hal-bench.py / docker compose hal-bench)
-out/
-reply.wav
-
 # Python bytecode
 __pycache__/
 *.pyc
 
 # Local docker compose overrides (e.g. host port remaps) — never commit
 docker-compose.override.yml
+
+# Environment secrets (never commit)
+.env
+.env.*
+!.env.example
