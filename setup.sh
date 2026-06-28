@@ -13,6 +13,7 @@
 #   S52_SKIP_REACT_CARPLAY_APPIMAGE=1   # skip upstream Electron download (offline / headless)
 #   REACT_CARPLAY_VERSION=4.0.5         # passed through to install-react-carplay-appimage.sh
 #   S52_SKIP_HAL_VOICE=1     # skip the HAL voice sidecar (whisper.cpp build is slow/offline-unfriendly)
+#   S52_SKIP_SPOTIFY=1       # skip raspotify + spotify-server.cjs (offline / no Spotify account)
 #
 # Do NOT use `source` or `. setup.sh`.
 # =============================================================================
@@ -25,6 +26,7 @@ S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
 S52_SKIP_HAL_VOICE="${S52_SKIP_HAL_VOICE:-0}"
+S52_SKIP_SPOTIFY="${S52_SKIP_SPOTIFY:-0}"
 # Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
 # install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
 # after you have confirmed key-based SSH works.
