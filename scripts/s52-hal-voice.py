@@ -1299,7 +1299,7 @@ class HalTts:
 
     def render_wav(self, text, path):
         """Synthesize to a WAV file instead of the speakers — for headless
-        bench tests (scripts/hal-bench.py) where there's no audio device."""
+        runs where there's no audio device."""
         if not self.ready:
             raise RuntimeError('Piper voice not loaded')
         import wave

@@ -36,6 +36,36 @@ function formatTime(ms) {
   return `${min}:${String(sec).padStart(2, '0')}`;
 }
 
+// Inline SVG transport icons. The Pi's kiosk Chromium has no font with the
+// Unicode media glyphs (⏮ ⏯ ⏭), so those render as empty "tofu" squares —
+// drawing the shapes ourselves makes the buttons font-independent.
+const ICON_PATHS = {
+  previous: 'M6 6h2v12H6zm3.5 6l8.5 6V6z',
+  next: 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z',
+  play: 'M8 5v14l11-7z',
+  pause: 'M6 5h4v14H6zm8 0h4v14h-4z',
+};
+
+function TransportIcon({ name, size = 24 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={ICON_PATHS[name]} />
+    </svg>
+  );
+}
+
+TransportIcon.propTypes = {
+  name: PropTypes.oneOf(['previous', 'next', 'play', 'pause']).isRequired,
+  size: PropTypes.number,
+};
+
 export default function SpotifyPlayer({ onMinus, onPlus }) {
   // unknown | login | player
   const [phase, setPhase] = useState('unknown');
@@ -183,16 +213,21 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
               <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
             </div>
             <div style={styles.controls}>
-              <button type="button" style={styles.ctrlBtn} disabled={busy} onClick={() => sendTransport('previous')}>⏮</button>
+              <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Previous" onClick={() => sendTransport('previous')}>
+                <TransportIcon name="previous" size={24} />
+              </button>
               <button
                 type="button"
                 style={styles.ctrlBtnBig}
                 disabled={busy}
+                aria-label={nowPlaying?.playing ? 'Pause' : 'Play'}
                 onClick={() => sendTransport('toggle')}
               >
-                {nowPlaying?.playing ? '⏸' : '▶'}
+                <TransportIcon name={nowPlaying?.playing ? 'pause' : 'play'} size={30} />
               </button>
-              <button type="button" style={styles.ctrlBtn} disabled={busy} onClick={() => sendTransport('next')}>⏭</button>
+              <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Next" onClick={() => sendTransport('next')}>
+                <TransportIcon name="next" size={24} />
+              </button>
             </div>
           </>
         )}
@@ -340,8 +375,11 @@ const styles = {
     background: '#1a1000',
     border: `2px solid #7a5500`,
     color: AMBER,
-    fontSize: '20px',
     cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
     WebkitTapHighlightColor: 'transparent',
   },
   ctrlBtnBig: {
@@ -351,8 +389,11 @@ const styles = {
     background: '#2a1c00',
     border: `2px solid ${AMBER}`,
     color: AMBER,
-    fontSize: '26px',
     cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
     WebkitTapHighlightColor: 'transparent',
   },
 };
