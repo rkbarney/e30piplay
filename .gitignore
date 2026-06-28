@@ -38,3 +38,6 @@ reply.wav
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Local docker compose overrides (e.g. host port remaps) — never commit
+docker-compose.override.yml

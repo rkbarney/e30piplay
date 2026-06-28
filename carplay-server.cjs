@@ -191,6 +191,76 @@ async function restartCarplayReceiver() {
   throw new Error(`${processName} did not become ready within 90s`);
 }
 
+// ── Organic Maps (offline navigation, OSM vector) ───────────────────────────
+// Same wlrctl focus/minimize handoff as the CarPlay receiver, against the
+// Organic Maps *Flatpak* (app.organicmaps.desktop) Qt toplevel instead of an
+// Electron one. Pre-launched/iconified by s52-labwc-autostart.sh just like
+// react-carplay, so "launch" is a focus, not a spawn.
+//
+// UNVERIFIED on hardware: MAPS_APP_ID is the app_id Organic Maps reports to the
+// Wayland compositor (what `wlrctl toplevel list` shows), which is NOT
+// guaranteed to equal the Flatpak ref. Qt-under-Flatpak usually reports the
+// desktop-file id ('app.organicmaps.desktop'), but if it comes up via Xwayland
+// the WM_CLASS may differ ('OMaps' / 'organicmaps'). Check after first boot and
+// override with S52_MAPS_APP_ID + the matching rc.xml windowRule if it differs.
+const MAPS_APP_ID = process.env.S52_MAPS_APP_ID || 'app.organicmaps.desktop';
+const MAPS_FLATPAK_REF = process.env.S52_MAPS_FLATPAK_REF || 'app.organicmaps.desktop';
+
+async function mapsReady() {
+  try {
+    await run(WLRCTL, ['toplevel', 'find', `app_id:${MAPS_APP_ID}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function launchMaps() {
+  try {
+    await wlrctlToplevel('focus', MAPS_APP_ID);
+  } catch {
+    if (!(await mapsReady())) throw new Error(`no Organic Maps toplevel (${MAPS_APP_ID}) to focus`);
+  }
+  await wlrctlToplevelBestEffort('maximize', MAPS_APP_ID);
+}
+
+async function returnMapsToKiosk() {
+  try {
+    await wlrctlToplevel('minimize', MAPS_APP_ID);
+  } catch {
+    /* already exited / iconified — kiosk is visible either way */
+  }
+}
+
+// Flatpak apps can't be pkill'd by a plain process name (the binary runs inside
+// the sandbox), so we ask Flatpak to stop the instance and let the autostart
+// while-loop respawn it, then focus — same recovery shape as restartCarplayReceiver().
+async function restartMaps() {
+  try {
+    await run('flatpak', ['kill', MAPS_FLATPAK_REF]);
+  } catch {
+    /* already stopped / flatpak missing */
+  }
+
+  const deadline = Date.now() + 30000;
+  if (await mapsReady()) {
+    const goneDeadline = Date.now() + 10000;
+    while (Date.now() < goneDeadline) {
+      if (!(await mapsReady())) break;
+      await sleep(500);
+    }
+  }
+
+  while (Date.now() < deadline) {
+    if (await mapsReady()) {
+      await launchMaps();
+      return;
+    }
+    await sleep(1000);
+  }
+  throw new Error(`Organic Maps (${MAPS_FLATPAK_REF}) did not become ready within 30s`);
+}
+
 const GIT = 'git';
 
 // Current build info + whether the remote is ahead. `git fetch` needs network;
@@ -512,6 +582,30 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/return-to-kiosk') {
       await returnToKiosk();
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/maps-ready') {
+      const ready = await mapsReady();
+      json(res, ready ? 200 : 503, { ready, appId: MAPS_APP_ID });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/launch-maps') {
+      await launchMaps();
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/relaunch-maps') {
+      await restartMaps();
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/return-maps-to-kiosk') {
+      await returnMapsToKiosk();
       json(res, 200, { ok: true });
       return;
     }
