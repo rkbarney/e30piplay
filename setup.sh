@@ -646,15 +646,17 @@ SERVICE
 # Settings toggle (src/useSettings.js), not a system-level cursor theme.
 sudo rm -f /etc/systemd/system/s52-cage-kiosk.service.d/cursor.conf
 
-# Plymouth → labwc handoff: keep the amber splash on the framebuffer while
-# labwc is grabbing DRM by overriding the default `plymouth quit` with
-# `plymouth quit --retain-splash`. Only takes effect if Plymouth is
-# installed (s52-boot-branding.sh apply).
+# Plymouth → labwc handoff: plain `plymouth quit` (not --retain-splash).
+# retain-splash freezes Plymouth boot-stage text on the panel (e.g. "completed
+# socket interaction for boot stage final") when labwc fails to grab DRM output,
+# which looks like a hung boot. Only takes effect if Plymouth is installed
+# (s52-boot-branding.sh apply).
+sudo rm -f /etc/systemd/system/plymouth-quit.service.d/retain-splash.conf
 sudo mkdir -p /etc/systemd/system/plymouth-quit.service.d
-sudo tee /etc/systemd/system/plymouth-quit.service.d/retain-splash.conf > /dev/null <<'PLYMOUTH'
+sudo tee /etc/systemd/system/plymouth-quit.service.d/quit.conf > /dev/null <<'PLYMOUTH'
 [Service]
 ExecStart=
-ExecStart=-/usr/bin/plymouth quit --retain-splash
+ExecStart=-/usr/bin/plymouth quit
 PLYMOUTH
 
 # Disable NetworkManager-wait-online — the kiosk doesn't gate on network at
