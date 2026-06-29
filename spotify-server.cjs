@@ -178,7 +178,16 @@ async function spotifyApi(method, apiPath, { query, body, retry = true } = {}) {
   }
   if (res.status === 204) return null;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  // Write commands (play/pause/next) sometimes answer 2xx with an empty or
+  // non-JSON body — don't let a parse error masquerade as a request failure.
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
   if (!res.ok) {
     const err = new Error(data?.error?.message || `Spotify API ${res.status}`);
     err.status = res.status;
@@ -269,6 +278,16 @@ async function getRecentPlaylistOrder() {
   }
 }
 
+// The current user's id, cached (it never changes for a given token). Needed
+// to build the Liked Songs collection context URI.
+let cachedUserId = null;
+async function getUserId() {
+  if (cachedUserId) return cachedUserId;
+  const me = await spotifyApi('GET', '/me');
+  cachedUserId = me?.id || null;
+  return cachedUserId;
+}
+
 // Feature 1 — the user's playlists, mapped to the fields the dash list needs.
 // Sorted by last-played descending where known (see getRecentPlaylistOrder);
 // playlists with no recent play keep Spotify's default library order beneath.
@@ -292,6 +311,22 @@ async function getPlaylists() {
       const ra = rank.has(a.uri) ? rank.get(a.uri) : Number.POSITIVE_INFINITY;
       const rb = rank.has(b.uri) ? rank.get(b.uri) : Number.POSITIVE_INFINITY;
       return ra - rb;
+    });
+  }
+
+  // Pin Liked Songs at the very top (above the recency sort). It isn't a real
+  // playlist — Spotify's saved-tracks collection plays via the undocumented
+  // `spotify:user:<id>:collection` context URI, which needs no extra scope.
+  const uid = await getUserId().catch(() => null);
+  if (uid) {
+    items.unshift({
+      id: 'liked-songs',
+      name: 'Liked Songs',
+      uri: `spotify:user:${uid}:collection`,
+      owner: null,
+      trackCount: null,
+      artUrl: null,
+      liked: true,
     });
   }
   return items;

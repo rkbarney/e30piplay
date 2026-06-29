@@ -106,8 +106,9 @@ export default function SpotifyLibrary({ onClose, onPlayed }) {
             <Row
               key={p.id}
               art={p.artUrl}
+              liked={p.liked}
               title={p.name}
-              subtitle={p.trackCount != null ? `${p.trackCount} tracks` : p.owner}
+              subtitle={p.liked ? 'Saved songs' : (p.trackCount != null ? `${p.trackCount} tracks` : p.owner)}
               busy={busyKey === p.uri}
               onClick={() => play(p.uri, { contextUri: p.uri })}
             />
@@ -138,10 +139,24 @@ export default function SpotifyLibrary({ onClose, onPlayed }) {
   );
 }
 
-function Row({ art, title, subtitle, busy, onClick }) {
+// Heart drawn as inline SVG — the kiosk Chromium has no font for the ♥ glyph
+// (same tofu problem as the transport icons), so the shape is drawn directly.
+function HeartTile() {
+  return (
+    <div style={styles.thumbPlaceholder}>
+      <svg width="26" height="26" viewBox="0 0 24 24" fill={AMBER} aria-hidden="true">
+        <path d="M12 21s-7.5-4.6-9.7-9.3C.9 8.3 2.6 5 6 5c2 0 3.3 1.2 4 2.5C10.7 6.2 12 5 14 5c3.4 0 5.1 3.3 3.7 6.7C19.5 16.4 12 21 12 21z" />
+      </svg>
+    </div>
+  );
+}
+
+function Row({ art, liked, title, subtitle, busy, onClick }) {
   return (
     <button type="button" style={{ ...styles.row, ...(busy ? styles.rowBusy : null) }} onClick={onClick}>
-      {art ? (
+      {liked ? (
+        <HeartTile />
+      ) : art ? (
         <img src={art} alt="" style={styles.thumb} />
       ) : (
         <div style={styles.thumbPlaceholder}>♪</div>
@@ -156,6 +171,7 @@ function Row({ art, title, subtitle, busy, onClick }) {
 
 Row.propTypes = {
   art: PropTypes.string,
+  liked: PropTypes.bool,
   title: PropTypes.string,
   subtitle: PropTypes.string,
   busy: PropTypes.bool,
