@@ -246,10 +246,35 @@ async function getNowPlaying() {
   return np;
 }
 
+// Most-recently-played playlist URIs, newest first. Spotify exposes no
+// "last played" field on playlists, so we derive it from recently-played
+// tracks' context — which only covers the last ~50 tracks over a short
+// window, so only recently-played playlists get a recency rank. Best-effort:
+// any failure just yields no ordering rather than breaking the playlist list.
+async function getRecentPlaylistOrder() {
+  try {
+    const data = await spotifyApi('GET', '/me/player/recently-played', { query: { limit: 50 } });
+    const order = [];
+    const seen = new Set();
+    for (const it of data?.items || []) {
+      const uri = it.context?.type === 'playlist' ? it.context.uri : null;
+      if (uri && !seen.has(uri)) {
+        seen.add(uri);
+        order.push(uri);
+      }
+    }
+    return order;
+  } catch {
+    return [];
+  }
+}
+
 // Feature 1 — the user's playlists, mapped to the fields the dash list needs.
+// Sorted by last-played descending where known (see getRecentPlaylistOrder);
+// playlists with no recent play keep Spotify's default library order beneath.
 async function getPlaylists() {
   const data = await spotifyApi('GET', '/me/playlists', { query: { limit: 50 } });
-  return (data?.items || []).filter(Boolean).map(p => ({
+  const items = (data?.items || []).filter(Boolean).map(p => ({
     id: p.id,
     name: p.name,
     uri: p.uri,
@@ -257,6 +282,19 @@ async function getPlaylists() {
     trackCount: p.tracks?.total ?? null,
     artUrl: p.images?.[0]?.url || null,
   }));
+
+  const recentOrder = await getRecentPlaylistOrder();
+  if (recentOrder.length) {
+    const rank = new Map(recentOrder.map((uri, i) => [uri, i]));
+    // Stable sort: recently-played float up by recency; the rest keep their
+    // original relative (default) order since Array.sort is stable in Node.
+    items.sort((a, b) => {
+      const ra = rank.has(a.uri) ? rank.get(a.uri) : Number.POSITIVE_INFINITY;
+      const rb = rank.has(b.uri) ? rank.get(b.uri) : Number.POSITIVE_INFINITY;
+      return ra - rb;
+    });
+  }
+  return items;
 }
 
 // Feature 2 — recently played tracks. The API repeats tracks across listens, so
