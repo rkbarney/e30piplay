@@ -144,62 +144,74 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
     }
   }, []);
 
+  if (phase === 'login') {
+    return (
+      <ScreenFrame variant="amber" buttons={[{ label: '−', onClick: onMinus }, { label: '+', onClick: onPlus }]}>
+        <div style={styles.unit}>
+          <div style={styles.title}>SPOTIFY</div>
+          <div style={styles.qrBox}>
+            {qrDataUrl ? <img src={qrDataUrl} alt="Scan to log in" style={styles.qrImg} /> : <div style={styles.qrPlaceholder}>…</div>}
+          </div>
+          <div style={styles.hint}>Scan with your phone{'\n'}to connect Spotify</div>
+          {loginError ? <div style={styles.error}>{loginError}</div> : null}
+        </div>
+      </ScreenFrame>
+    );
+  }
+
+  const pct = nowPlaying?.durationMs
+    ? Math.min(100, (100 * (nowPlaying.progressMs ?? 0)) / nowPlaying.durationMs)
+    : 0;
+
+  // The player intentionally does NOT use ScreenFrame: the album art fills the
+  // entire 320×480 screen edge-to-edge, and the nav (−/+) buttons float over
+  // the artwork's bottom scrim instead of sitting in a separate black band.
   return (
-    <ScreenFrame variant="amber" buttons={[{ label: '−', onClick: onMinus }, { label: '+', onClick: onPlus }]}>
-      <div style={styles.unit}>
-        {phase === 'login' ? (
-          <>
-            <div style={styles.title}>SPOTIFY</div>
-            <div style={styles.qrBox}>
-              {qrDataUrl ? <img src={qrDataUrl} alt="Scan to log in" style={styles.qrImg} /> : <div style={styles.qrPlaceholder}>…</div>}
-            </div>
-            <div style={styles.hint}>Scan with your phone{'\n'}to connect Spotify</div>
-            {loginError ? <div style={styles.error}>{loginError}</div> : null}
-          </>
-        ) : (
-          <>
-            <div style={styles.artBox}>
-              {nowPlaying?.artUrl ? (
-                <img src={nowPlaying.artUrl} alt="" style={styles.art} />
-              ) : (
-                <div style={styles.artPlaceholder}>♪</div>
-              )}
-            </div>
-            <div style={styles.track}>{nowPlaying?.track || (phase === 'unknown' ? 'Loading…' : 'Nothing playing')}</div>
-            <div style={styles.artist}>{nowPlaying?.artists || ''}</div>
-            <div style={styles.progressRow}>
-              <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
-              <div style={styles.progressTrack}>
-                <div style={{
-                  ...styles.progressFill,
-                  width: nowPlaying?.durationMs
-                    ? `${Math.min(100, (100 * (nowPlaying.progressMs ?? 0)) / nowPlaying.durationMs)}%`
-                    : '0%',
-                }} />
-              </div>
-              <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
-            </div>
-            <div style={styles.controls}>
-              <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Previous" onClick={() => sendTransport('previous')}>
-                <TransportIcon name="previous" size={24} />
-              </button>
-              <button
-                type="button"
-                style={styles.ctrlBtnBig}
-                disabled={busy}
-                aria-label={nowPlaying?.playing ? 'Pause' : 'Play'}
-                onClick={() => sendTransport('toggle')}
-              >
-                <TransportIcon name={nowPlaying?.playing ? 'pause' : 'play'} size={30} />
-              </button>
-              <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Next" onClick={() => sendTransport('next')}>
-                <TransportIcon name="next" size={24} />
-              </button>
-            </div>
-          </>
-        )}
+    <div style={styles.screen}>
+      {nowPlaying?.artUrl ? (
+        <img src={nowPlaying.artUrl} alt="" style={styles.artBg} />
+      ) : (
+        <div style={styles.artBgPlaceholder}>♪</div>
+      )}
+      <div style={styles.scrim} />
+
+      <div style={styles.topInfo}>
+        <div style={styles.track}>{nowPlaying?.track || (phase === 'unknown' ? 'Loading…' : 'Nothing playing')}</div>
+        <div style={styles.artist}>{nowPlaying?.artists || ''}</div>
       </div>
-    </ScreenFrame>
+
+      <div style={styles.overlay}>
+        <div style={styles.progressRow}>
+          <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
+          <div style={styles.progressTrack}>
+            <div style={{ ...styles.progressFill, width: `${pct}%` }} />
+          </div>
+          <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
+        </div>
+        <div style={styles.controls}>
+          <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Previous" onClick={() => sendTransport('previous')}>
+            <TransportIcon name="previous" size={24} />
+          </button>
+          <button
+            type="button"
+            style={styles.ctrlBtnBig}
+            disabled={busy}
+            aria-label={nowPlaying?.playing ? 'Pause' : 'Play'}
+            onClick={() => sendTransport('toggle')}
+          >
+            <TransportIcon name={nowPlaying?.playing ? 'pause' : 'play'} size={30} />
+          </button>
+          <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Next" onClick={() => sendTransport('next')}>
+            <TransportIcon name="next" size={24} />
+          </button>
+        </div>
+      </div>
+
+      <div style={styles.navRow}>
+        <button type="button" style={styles.navBtn} aria-label="Previous screen" onClick={onMinus}>−</button>
+        <button type="button" style={styles.navBtn} aria-label="Next screen" onClick={onPlus}>+</button>
+      </div>
+    </div>
   );
 }
 
@@ -255,38 +267,86 @@ const styles = {
   },
   error: { color: '#ff6644', fontSize: '11px', fontFamily: MONO, textAlign: 'center' },
 
-  artBox: {
-    width: '160px',
-    height: '160px',
-    borderRadius: '8px',
+  // Full-bleed player: album art fills the entire 320×480 screen, with a dark
+  // gradient scrim so the track info, transport controls, and floating nav
+  // buttons stay legible over any artwork.
+  screen: {
+    position: 'relative',
+    width: '320px',
+    height: '480px',
     overflow: 'hidden',
-    background: '#161208',
-    border: '2px solid #3a2800',
+    background: '#0d0d0d',
+    fontFamily: MONO,
+  },
+  artBg: {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  artBgPlaceholder: {
+    position: 'absolute',
+    inset: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
+    color: '#3a2800',
+    fontSize: '120px',
+    background: '#161208',
   },
-  art: { width: '100%', height: '100%', objectFit: 'cover' },
-  artPlaceholder: { color: '#3a2800', fontSize: '48px' },
+  scrim: {
+    position: 'absolute',
+    inset: 0,
+    background:
+      'linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 16%, rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.5) 84%, rgba(0,0,0,0.95) 100%)',
+  },
+  overlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: '84px',
+    padding: '0 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  // Title + artist pinned near the top (against the top scrim) so they don't
+  // sit over the middle of the artwork.
+  topInfo: {
+    position: 'absolute',
+    top: '16px',
+    left: 0,
+    right: 0,
+    padding: '0 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+    boxSizing: 'border-box',
+  },
   track: {
     color: AMBER,
-    fontSize: '16px',
+    fontSize: '22px',
     fontFamily: MONO,
     fontWeight: 'bold',
-    maxWidth: '270px',
+    maxWidth: '100%',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    textShadow: '0 1px 4px rgba(0,0,0,0.9)',
   },
   artist: {
-    color: '#aa8844',
-    fontSize: '13px',
+    color: '#d8b070',
+    fontSize: '17px',
     fontFamily: MONO,
-    maxWidth: '270px',
+    fontWeight: 'bold',
+    maxWidth: '100%',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    textShadow: '0 1px 4px rgba(0,0,0,0.9)',
   },
   progressRow: {
     width: '100%',
@@ -294,11 +354,17 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
   },
-  time: { color: '#776644', fontSize: '10px', fontFamily: MONO, flexShrink: 0 },
+  time: {
+    color: '#e8d0a0',
+    fontSize: '12px',
+    fontFamily: MONO,
+    flexShrink: 0,
+    textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+  },
   progressTrack: {
     flex: 1,
     height: '4px',
-    background: '#3a2800',
+    background: 'rgba(255,255,255,0.25)',
     borderRadius: '2px',
     overflow: 'hidden',
   },
@@ -306,14 +372,14 @@ const styles = {
   controls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
+    gap: '20px',
     marginTop: '4px',
   },
   ctrlBtn: {
-    width: '54px',
-    height: '54px',
+    width: '56px',
+    height: '56px',
     borderRadius: '50%',
-    background: '#1a1000',
+    background: 'rgba(26,16,0,0.75)',
     border: `2px solid #7a5500`,
     color: AMBER,
     cursor: 'pointer',
@@ -321,13 +387,14 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 0,
+    touchAction: 'manipulation',
     WebkitTapHighlightColor: 'transparent',
   },
   ctrlBtnBig: {
-    width: '68px',
-    height: '68px',
+    width: '70px',
+    height: '70px',
     borderRadius: '50%',
-    background: '#2a1c00',
+    background: 'rgba(42,28,0,0.85)',
     border: `2px solid ${AMBER}`,
     color: AMBER,
     cursor: 'pointer',
@@ -335,6 +402,41 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 0,
+    touchAction: 'manipulation',
+    WebkitTapHighlightColor: 'transparent',
+  },
+
+  // Nav (−/+) row, floating over the bottom of the artwork instead of the
+  // usual ScreenFrame black band.
+  navRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '84px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '0 14px 20px',
+    boxSizing: 'border-box',
+  },
+  navBtn: {
+    width: '120px',
+    height: '48px',
+    borderRadius: '12px',
+    background: 'rgba(20,12,0,0.55)',
+    border: `2px solid ${AMBER}99`,
+    color: AMBER,
+    fontFamily: MONO,
+    fontWeight: 'bold',
+    fontSize: '34px',
+    lineHeight: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    touchAction: 'manipulation',
     WebkitTapHighlightColor: 'transparent',
   },
 };
