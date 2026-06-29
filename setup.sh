@@ -734,6 +734,19 @@ if [[ "$S52_SKIP_HAL_VOICE" == "1" ]]; then
   echo "        Install later: rerun setup.sh without S52_SKIP_HAL_VOICE=1"
 else
   echo "[11/11] HAL voice sidecar (whisper.cpp STT → Claude Haiku → Piper voice)…"
+  # HAL runs as the SYSTEM service installed below. An older path
+  # (scripts/s52-install-hal-voice.sh) installed a duplicate *user* service; if
+  # one is left enabled it boots a second sidecar that loses the mic/websocket
+  # race to this one, crash-loops, and replays the "Good afternoon, Dave"
+  # greeting on every restart. Remove the rogue user unit so there's exactly one.
+  if [[ -e "/home/$SERVICE_USER/.config/systemd/user/s52-hal-voice.service" ]]; then
+    sudo -u "$SERVICE_USER" XDG_RUNTIME_DIR="/run/user/${S52_UID}" \
+      systemctl --user disable --now s52-hal-voice 2>/dev/null || true
+    rm -f "/home/$SERVICE_USER/.config/systemd/user/s52-hal-voice.service" \
+          "/home/$SERVICE_USER/.config/systemd/user/default.target.wants/s52-hal-voice.service"
+    sudo -u "$SERVICE_USER" XDG_RUNTIME_DIR="/run/user/${S52_UID}" \
+      systemctl --user daemon-reload 2>/dev/null || true
+  fi
   VENV_DIR="$HOME/.venvs/s52-hal-voice"
   python3 -m venv "$VENV_DIR"
   if "$VENV_DIR/bin/pip" install -q -r "$SOURCE_DIR/scripts/s52-hal-voice-requirements.txt"; then
