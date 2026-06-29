@@ -737,7 +737,14 @@ else
   VENV_DIR="$HOME/.venvs/s52-hal-voice"
   python3 -m venv "$VENV_DIR"
   if "$VENV_DIR/bin/pip" install -q -r "$SOURCE_DIR/scripts/s52-hal-voice-requirements.txt"; then
-    install -m 755 "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"
+    # install(1) fails with "same file" when SOURCE_DIR == APP_DIR (every
+    # in-place reinstall), aborting set -e before the service unit below — same
+    # guard the carplay-server.cjs / spotify-server.cjs copies above use.
+    if cmp -s "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"; then
+      chmod 755 "$APP_DIR/scripts/s52-hal-voice.py" || true
+    else
+      install -m 755 "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"
+    fi
 
     # Secrets + car context live in the service user's ~/.config, off the repo.
     # Scaffold from the committed examples (never clobber a real file); HAL needs
