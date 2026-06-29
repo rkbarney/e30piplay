@@ -136,3 +136,12 @@ html.clock-active {
 .games-scroll::-webkit-scrollbar {
   display: none;
 }
+
+/* Pulsing dots while a reinstall is streaming (ReinstallProgress). */
+@keyframes s52ReinstallPulse {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}
+.s52-reinstall-dots {
+  animation: s52ReinstallPulse 1.1s ease-in-out infinite;
+}

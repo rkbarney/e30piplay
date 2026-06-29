@@ -5,7 +5,7 @@ import { FACES, FACE_LABELS, DEFAULT_BOOT_SCREEN } from '../screens';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 
-export default function SettingsScreen({ settings, onUpdate, onBack }) {
+export default function SettingsScreen({ settings, onUpdate, onBack, onReinstallStarted }) {
   const [bootPicker, setBootPicker] = useState(false);
   const [confirm, setConfirm] = useState(null); // 'reboot' | 'reinstall' | null
   const [busy, setBusy] = useState(false);
@@ -41,9 +41,7 @@ export default function SettingsScreen({ settings, onUpdate, onBack }) {
     setConfirm(null);
     setBusy(true);
     setCanForce(false);
-    setMessage(force
-      ? 'Discarding local changes, then reinstalling…'
-      : 'Reinstalling — pulling code and re-running setup. This can take several minutes.');
+    setMessage('Starting reinstall…');
     try {
       const res = await fetch(`${API_BASE}/api/reinstall`, {
         method: 'POST',
@@ -58,13 +56,17 @@ export default function SettingsScreen({ settings, onUpdate, onBack }) {
         setBusy(false);
         return;
       }
-      setMessage('Reinstall complete — reboot to apply everything.');
+      // The job runs detached on the Pi now — hand off to the root-level
+      // progress overlay, which streams the live install log and survives the
+      // kiosk display restarting partway through.
+      setMessage('');
       setBusy(false);
+      onReinstallStarted?.();
     } catch {
       setMessage('Reinstall request failed (lost connection?).');
       setBusy(false);
     }
-  }, []);
+  }, [onReinstallStarted]);
 
   return (
     <ScreenFrame variant="amber" buttons={[{ label: 'BACK', onClick: onBack }]}>
@@ -207,6 +209,7 @@ SettingsScreen.propTypes = {
   }).isRequired,
   onUpdate: PropTypes.func.isRequired,
   onBack: PropTypes.func,
+  onReinstallStarted: PropTypes.func,
 };
 
 const AMBER = '#ffb300';

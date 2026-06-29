@@ -26,6 +26,11 @@ S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
 S52_SKIP_HAL_VOICE="${S52_SKIP_HAL_VOICE:-0}"
+# Without this default, `set -u` aborts the whole reinstall at step 5b (the
+# `[[ "$S52_SKIP_SPOTIFY" == "1" ]]` test) whenever the var is unset — which is
+# every button-triggered reinstall — leaving setup half-applied (the kiosk/seatd
+# units at the bottom never run).
+S52_SKIP_SPOTIFY="${S52_SKIP_SPOTIFY:-0}"
 # Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
 # install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
 # after you have confirmed key-based SSH works.
@@ -618,8 +623,19 @@ Description=S52 labwc kiosk (Chromium + pre-loaded react-carplay)
 # included) still reports "active/running", because labwc never crashes, it
 # just never wins DRM. plymouth-quit-wait.service blocks until plymouth has
 # fully torn down, so labwc never starts before the display is actually free.
-After=nginx.service plymouth-quit-wait.service
+#
+# seatd ordering + PartOf: labwc grabs DRM through libseat/seatd. If seatd is
+# restarted out from under a running labwc (apt touching it, a daemon-reload
+# during a re-run of setup.sh, etc.), labwc loses its seat but does NOT exit —
+# it sits there logging "libseat Broken pipe / Failed to close device / view
+# has no output" while systemd still reports it active (NRestarts=0), so
+# Restart=on-failure never fires and the panel freezes on the last frame
+# (looks identical to the Plymouth boot hang). PartOf=seatd.service makes
+# systemd restart this unit whenever seatd restarts, so labwc re-grabs DRM
+# instead of becoming a zombie.
+After=nginx.service plymouth-quit-wait.service seatd.service
 Wants=nginx.service
+PartOf=seatd.service
 
 [Service]
 Type=simple
@@ -718,10 +734,30 @@ if [[ "$S52_SKIP_HAL_VOICE" == "1" ]]; then
   echo "        Install later: rerun setup.sh without S52_SKIP_HAL_VOICE=1"
 else
   echo "[11/11] HAL voice sidecar (whisper.cpp STT → Claude Haiku → Piper voice)…"
+  # HAL runs as the SYSTEM service installed below. An older path
+  # (scripts/s52-install-hal-voice.sh) installed a duplicate *user* service; if
+  # one is left enabled it boots a second sidecar that loses the mic/websocket
+  # race to this one, crash-loops, and replays the "Good afternoon, Dave"
+  # greeting on every restart. Remove the rogue user unit so there's exactly one.
+  if [[ -e "/home/$SERVICE_USER/.config/systemd/user/s52-hal-voice.service" ]]; then
+    sudo -u "$SERVICE_USER" XDG_RUNTIME_DIR="/run/user/${S52_UID}" \
+      systemctl --user disable --now s52-hal-voice 2>/dev/null || true
+    rm -f "/home/$SERVICE_USER/.config/systemd/user/s52-hal-voice.service" \
+          "/home/$SERVICE_USER/.config/systemd/user/default.target.wants/s52-hal-voice.service"
+    sudo -u "$SERVICE_USER" XDG_RUNTIME_DIR="/run/user/${S52_UID}" \
+      systemctl --user daemon-reload 2>/dev/null || true
+  fi
   VENV_DIR="$HOME/.venvs/s52-hal-voice"
   python3 -m venv "$VENV_DIR"
   if "$VENV_DIR/bin/pip" install -q -r "$SOURCE_DIR/scripts/s52-hal-voice-requirements.txt"; then
-    install -m 755 "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"
+    # install(1) fails with "same file" when SOURCE_DIR == APP_DIR (every
+    # in-place reinstall), aborting set -e before the service unit below — same
+    # guard the carplay-server.cjs / spotify-server.cjs copies above use.
+    if cmp -s "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"; then
+      chmod 755 "$APP_DIR/scripts/s52-hal-voice.py" || true
+    else
+      install -m 755 "$SOURCE_DIR/scripts/s52-hal-voice.py" "$APP_DIR/scripts/s52-hal-voice.py"
+    fi
 
     # Secrets + car context live in the service user's ~/.config, off the repo.
     # Scaffold from the committed examples (never clobber a real file); HAL needs
