@@ -212,31 +212,3 @@ elif [ -x "${CARPLAY_LAUNCHER}" ]; then
 else
   echo "[$(date)] missing ${CARPLAY_LAUNCHER}; run install-react-carplay-appimage.sh" >&2
 fi
-
-# Background Organic Maps (Flatpak app.organicmaps.desktop) — same pre-warm/
-# iconify trick as react-carplay above, so the ORGANIC MAPS face's button is an
-# instant wlrctl focus instead of a cold Qt + map-load start.
-#
-# CAVEAT (unverified on real hardware): rc.xml iconifies app_id
-# "app.organicmaps.desktop"; if Organic Maps reports a different app_id under
-# Wayland/Xwayland it will sit on top of the kiosk at boot — check
-# `wlrctl toplevel list` after first boot and adjust both the rc.xml identifier
-# and S52_MAPS_APP_ID (carplay-server) to match.
-#
-# Flatpak needs the Wayland socket + a session bus; the labwc kiosk session
-# exports WAYLAND_DISPLAY, which `flatpak run` inherits.
-MAPS_FLATPAK_REF="${S52_MAPS_FLATPAK_REF:-app.organicmaps.desktop}"
-MAPS_LOG="${S52_MAPS_LOG:-/tmp/organicmaps.log}"
-MAPS_START_DELAY="${S52_MAPS_START_DELAY:-5}"
-if command -v flatpak >/dev/null 2>&1 && flatpak info "${MAPS_FLATPAK_REF}" >/dev/null 2>&1; then
-  (
-    sleep "${MAPS_START_DELAY}"
-    while true; do
-      flatpak run "${MAPS_FLATPAK_REF}" \
-        2>&1 | { if command -v systemd-cat >/dev/null 2>&1; then tee -a "${MAPS_LOG}" | systemd-cat -t s52-organicmaps-app; else cat >>"${MAPS_LOG}"; fi; } || true
-      sleep 3
-    done
-  ) &
-else
-  echo "[$(date)] Organic Maps flatpak (${MAPS_FLATPAK_REF}) not installed; run setup.sh or 'flatpak install flathub app.organicmaps.desktop'" >&2
-fi

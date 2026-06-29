@@ -13,7 +13,6 @@
 #   S52_SKIP_REACT_CARPLAY_APPIMAGE=1   # skip upstream Electron download (offline / headless)
 #   REACT_CARPLAY_VERSION=4.0.5         # passed through to install-react-carplay-appimage.sh
 #   S52_SKIP_HAL_VOICE=1     # skip the HAL voice sidecar (whisper.cpp build is slow/offline-unfriendly)
-#   S52_SKIP_ORGANIC_MAPS=1  # skip installing the Organic Maps flatpak (~large download)
 #   S52_BENCH=0              # 1 or --bench = patch deployed UI for visible bench mouse cursor
 #
 # Do NOT use `source` or `. setup.sh`.
@@ -27,7 +26,6 @@ S52_DISPLAY_ROTATE="${S52_DISPLAY_ROTATE:-1}"
 S52_CUSTOM_HDMI="${S52_CUSTOM_HDMI:-0}"
 S52_SKIP_REACT_CARPLAY_APPIMAGE="${S52_SKIP_REACT_CARPLAY_APPIMAGE:-0}"
 S52_SKIP_HAL_VOICE="${S52_SKIP_HAL_VOICE:-0}"
-S52_SKIP_ORGANIC_MAPS="${S52_SKIP_ORGANIC_MAPS:-0}"
 # Opt-in SSH hardening (key-only auth, no root login). Default 0 so a fresh
 # install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
 # after you have confirmed key-based SSH works.
@@ -84,8 +82,7 @@ sudo apt-get install -y -qq \
   build-essential \
   portaudio19-dev \
   espeak-ng \
-  zlib1g-dev \
-  flatpak
+  zlib1g-dev
 
 sudo systemctl enable ssh
 sudo systemctl start ssh
@@ -711,22 +708,6 @@ echo "[10b] Applying CarPlay DongleConfig (scripts/s52-carplay-config.json)…"
 bash "$SOURCE_DIR/scripts/s52-apply-carplay-config.sh" || \
   echo "  NOTE: CarPlay config apply skipped/failed (non-fatal)." >&2
 
-# Organic Maps (Flatpak) — modern OSM vector renderer for the ORGANIC MAPS face.
-# Large download, so skippable for offline/headless installs. Installed
-# user-wide (--user) so it runs as the kiosk user without root; pre-warmed at
-# boot by s52-labwc-autostart.sh.
-if [[ "$S52_SKIP_ORGANIC_MAPS" == "1" ]]; then
-  echo "[10c] Skipping Organic Maps flatpak (S52_SKIP_ORGANIC_MAPS=1)."
-elif command -v flatpak >/dev/null 2>&1; then
-  echo "[10c] Installing Organic Maps flatpak (app.organicmaps.desktop)…"
-  flatpak remote-add --user --if-not-exists flathub \
-    https://flathub.org/repo/flathub.flatpakrepo || true
-  flatpak install --user -y --noninteractive flathub app.organicmaps.desktop || \
-    echo "  NOTE: Organic Maps flatpak install skipped/failed (non-fatal — check network / flathub reachability)." >&2
-else
-  echo "[10c] flatpak not available; skipping Organic Maps install." >&2
-fi
-
 # ── 11. HAL voice sidecar ("HAL, switch to CarPlay") ──────────────────────────
 # Offline whisper.cpp STT via pywhispercpp, which builds whisper.cpp from
 # source on first `pip install` — slow and needs internet once for the build
@@ -811,12 +792,5 @@ echo "  Stop UI:  sudo systemctl stop s52-cage-kiosk"
 echo ""
 echo "  CarPlay:  Use + → Open CarPlay on the display (Electron via cage). Quit Electron → kiosk returns."
 echo "            SSH: sudo /usr/local/bin/s52-carplay-switch.sh return"
-echo ""
-echo "  Maps:     − cycle to ORGANIC MAPS, tap to open. Download a region from"
-echo "            Organic Maps' built-in downloader first (boots to empty globe)."
-echo "            Verify before driving: bash $APP_DIR/scripts/s52-verify-maps.sh"
-echo "            UNVERIFIED: confirm 'app.organicmaps.desktop' is the real wlrctl"
-echo "            app_id (wlrctl toplevel list) — if not, set S52_MAPS_APP_ID +"
-echo "            the rc.xml windowRule. See docs/organic-maps-trial.md."
 echo "============================================"
 echo ""
