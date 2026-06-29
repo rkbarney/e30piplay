@@ -211,13 +211,14 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
             <TransportIcon name="next" size={34} />
           </button>
         </div>
-        <div style={styles.progressRow}>
-          <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
-          <div style={styles.progressTrack}>
-            <div style={{ ...styles.progressFill, width: `${pct}%` }} />
-          </div>
-          <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
+      </div>
+
+      <div style={styles.progressRow}>
+        <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
+        <div style={styles.progressTrack}>
+          <div style={{ ...styles.progressFill, width: `${pct}%` }} />
         </div>
+        <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
       </div>
 
       <div style={styles.navRow}>
@@ -367,8 +368,15 @@ const styles = {
     whiteSpace: 'nowrap',
     textShadow: '0 1px 4px rgba(0,0,0,0.9)',
   },
+  // Floats in the gap between the centered transport controls and the bottom
+  // −/+ band, padded to line up with the nav band's edges.
   progressRow: {
-    width: '100%',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: '128px',
+    padding: '0 16px',
+    boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
