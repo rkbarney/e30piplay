@@ -91,13 +91,8 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 | Button | Action |
 |---|---|
-| `−` | Cycle faces: HAL → Spotify → Factory → Digital → System → Organic Maps → Games → HAL |
+| `−` | Cycle faces: HAL → Spotify → Factory → Digital → System → Games → HAL |
 | `+` | Enter CarPlay (from any face) / Exit CarPlay back to the last face |
-
-Offline turn-by-turn lives on the **Organic Maps** face (Flatpak
-`app.organicmaps.desktop`, OSM vector). Pre-warmed at boot (iconified) like
-CarPlay; tapping it focuses the window via `wlrctl`. See
-[docs/organic-maps-trial.md](docs/organic-maps-trial.md).
 
 ---
 

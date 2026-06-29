@@ -45,12 +45,5 @@
     <windowRule identifier="dev.f-io.livi" serverDecoration="no">
       <action name="Iconify"/>
     </windowRule>
-    <!-- Organic Maps (Flatpak app.organicmaps.desktop), pre-launched for an
-         instant focus-only switch from the ORGANIC MAPS face. UNVERIFIED: the
-         identifier must match the app_id from `wlrctl toplevel list` — adjust
-         (and S52_MAPS_APP_ID) if Organic Maps reports something else. -->
-    <windowRule identifier="app.organicmaps.desktop" serverDecoration="no">
-      <action name="Iconify"/>
-    </windowRule>
   </windowRules>
 </openbox_config>
