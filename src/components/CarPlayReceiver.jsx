@@ -7,10 +7,11 @@
  *   • the big RESTART CARPLAY button (content) — full kill+respawn (/api/relaunch),
  *     the reliable kick for a stalled "searching for phone" handshake.
  *   • BACK (full-width button below) — calls /api/return-to-kiosk to minimize the
- *     receiver's Wayland toplevel, then drops the local view to the clock. This
- *     button is only reachable from inside the React app, though — it's covered
- *     by the receiver's full-screen window in practice; the always-on-top overlay
- *     (scripts/s52-exit-overlay.py) is the real way back while CarPlay is focused.
+ *     receiver's Wayland toplevel, then drops the local view to the clock. Note
+ *     this button is only reachable once the kiosk has focus; while the receiver
+ *     covers the panel full-screen, the return paths are the "HAL, return to
+ *     kiosk" voice intent or the SSH escape hatch
+ *     (sudo /usr/local/bin/s52-carplay-switch.sh return).
  */
 
 import { useState, useCallback, useEffect } from 'react';

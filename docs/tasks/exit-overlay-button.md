@@ -1,9 +1,11 @@
 # Always-reachable "exit CarPlay" button
 
-**Status: Implemented.** `scripts/s52-exit-overlay.py` is installed and wired up by
-`setup.sh`/`s52-labwc-autostart.sh`, and `CarPlayReceiver.jsx`'s BACK button now
-calls `/api/return-to-kiosk` directly (see README.md's "Exiting CarPlay/LIVI"
-section). Kept here for the design rationale.
+**Status: Removed.** The `s52-exit-overlay.py` layer-shell overlay was retired —
+the script, its `setup.sh` install, its `s52-labwc-autostart.sh` launch, and the
+`gir1.2-gtklayershell-0.1` apt dependency are all gone. The return path now lives
+entirely in `CarPlayReceiver.jsx`'s BACK button (and the "HAL, return to kiosk"
+voice intent), which call `/api/return-to-kiosk` directly. Kept here for the
+historical design rationale.
 
 ## Context
 

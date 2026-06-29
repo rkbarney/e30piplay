@@ -62,10 +62,10 @@ ssh s52 'bash ~/e30piplay/scripts/s52-enable-livi-receiver.sh react-carplay'
   `s52-labwc-rc.xml` window rules already key off `dev.f-io.livi` vs
   `react-carplay` via `~/.config/s52-carplay-receiver.env`, so `+` and
   auto-iconify behave the same for both. The remaining gap was the *return*
-  path while the receiver is focused full-screen — fixed by the always-on-top
-  exit overlay (`scripts/s52-exit-overlay.py`, see README "CarPlay integration
-  status"), which works identically for either receiver since it never
-  depends on `app_id`.
+  path while the receiver is focused full-screen — handled by the in-app
+  **BACK** button (`CarPlayReceiver.jsx`) and the "HAL, return to kiosk" voice
+  intent, both of which POST `/api/return-to-kiosk` regardless of `app_id`.
+  (The earlier always-on-top exit overlay has been removed.)
 - **Audio routing.** LIVI uses the GStreamer/Pulse path; confirm it lands on the
   USB DAC sink (our `~/.config/s52-carplay-audio.env` `PULSE_SINK`) → Kenwood AUX,
   not HDMI.
