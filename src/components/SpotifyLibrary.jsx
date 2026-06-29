@@ -83,24 +83,6 @@ export default function SpotifyLibrary({ onClose, onPlayed }) {
 
   return (
     <div style={styles.screen}>
-      <div style={styles.header}>
-        <div style={styles.tabs}>
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              type="button"
-              style={{ ...styles.tab, ...(tab === t.key ? styles.tabActive : null) }}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <button type="button" style={styles.closeBtn} aria-label="Back to player" onClick={onClose}>
-          ×
-        </button>
-      </div>
-
       <div style={styles.list}>
         {loading ? (
           <div style={styles.note}>Loading…</div>
@@ -131,6 +113,26 @@ export default function SpotifyLibrary({ onClose, onPlayed }) {
             />
           ))
         )}
+      </div>
+
+      {/* Tab/close bar pinned to the bottom so it lines up with the player's
+          −/+ band — right where the user's finger already is. */}
+      <div style={styles.footer}>
+        <div style={styles.tabs}>
+          {TABS.map(t => (
+            <button
+              key={t.key}
+              type="button"
+              style={{ ...styles.tab, ...(tab === t.key ? styles.tabActive : null) }}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" style={styles.closeBtn} aria-label="Back to player" onClick={onClose}>
+          ×
+        </button>
       </div>
     </div>
   );
@@ -179,18 +181,20 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
   },
-  header: {
+  footer: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '10px 12px',
-    borderBottom: '1px solid #3a2800',
+    // Matches the player's navRow band (height 84, bottom padding 20) so the
+    // tabs sit at the same vertical position as the −/+ buttons.
+    padding: '12px 14px 20px',
+    borderTop: '1px solid #3a2800',
   },
   tabs: { flex: 1, display: 'flex', gap: '8px' },
   tab: {
     flex: 1,
-    height: '40px',
+    height: '48px',
     borderRadius: '8px',
     background: 'rgba(20,12,0,0.6)',
     border: `1px solid ${AMBER}55`,
@@ -212,8 +216,8 @@ const styles = {
   },
   closeBtn: {
     flexShrink: 0,
-    width: '40px',
-    height: '40px',
+    width: '48px',
+    height: '48px',
     borderRadius: '8px',
     background: 'rgba(20,12,0,0.6)',
     border: `1px solid ${AMBER}99`,
