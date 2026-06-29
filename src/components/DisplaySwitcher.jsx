@@ -7,7 +7,9 @@ import SettingsScreen  from './SettingsScreen';
 import Games           from './Games';
 import Hal             from './Hal';
 import SpotifyPlayer   from './SpotifyPlayer';
+import ReinstallProgress from './ReinstallProgress';
 import useHalVoice     from '../useHalVoice';
+import useReinstallWatch from '../useReinstallWatch';
 import useSettings     from '../useSettings';
 import { FACES, DEFAULT_BOOT_SCREEN } from '../screens';
 
@@ -95,6 +97,11 @@ export default function DisplaySwitcher() {
   const openSettings  = useCallback(() => setScreen('settings'), []);
   const closeSettings = useCallback(() => setScreen('system'), []);
 
+  // Reinstall progress lives at the root so it overlays any face — after
+  // setup.sh restarts the kiosk mid-reinstall, Chromium reloads to the boot
+  // face (not Settings), and this re-surfaces the live log there.
+  const reinstall = useReinstallWatch();
+
   useEffect(() => {
     document.body.classList.add('clock-active');
     return () => document.body.classList.remove('clock-active');
@@ -118,7 +125,19 @@ export default function DisplaySwitcher() {
       {screen === 'system'   && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} onSettings={openSettings} />}
       {screen === 'games'    && <Games onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'settings' && (
-        <SettingsScreen settings={settings} onUpdate={updateSettings} onBack={closeSettings} />
+        <SettingsScreen
+          settings={settings}
+          onUpdate={updateSettings}
+          onBack={closeSettings}
+          onReinstallStarted={reinstall.start}
+        />
+      )}
+      {reinstall.show && (
+        <ReinstallProgress
+          state={reinstall.state}
+          log={reinstall.log}
+          onDismiss={reinstall.dismiss}
+        />
       )}
     </div>
   );

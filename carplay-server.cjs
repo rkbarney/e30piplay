@@ -19,6 +19,12 @@ const WLRCTL = '/usr/bin/wlrctl';
 // The systemd unit runs with WorkingDirectory=$APP_DIR, so cwd is the repo.
 const APP_DIR = process.env.APP_DIR || process.cwd();
 
+// Reinstall runs detached (see startReinstall) and streams to these files so the
+// UI can poll progress. /tmp survives a kiosk/server restart but is cleared on
+// reboot — exactly the lifetime we want (the log is meaningless post-reboot).
+const REINSTALL_LOG = '/tmp/s52-reinstall.log';
+const REINSTALL_STATUS = '/tmp/s52-reinstall.status'; // 'running' | 'done' | 'failed:<rc>'
+
 function json(res, status, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(status, {
@@ -248,16 +254,78 @@ async function runUpdate(force = false) {
 }
 
 // Full reinstall: git pull + re-run setup.sh (packages, systemd units, AppImage,
-// sudoers — anything setup.sh does, not just app code). Long-running, like update.
-async function runReinstall(force = false) {
+// sudoers — anything setup.sh does, not just app code).
+//
+// We CAN'T run this as a normal child of this server: setup.sh restarts
+// s52-carplay (this very process) partway through, which would kill the job and
+// drop the HTTP response. Instead launch it in its OWN systemd transient unit
+// via `systemd-run`, so it lives outside our cgroup and survives our restart.
+// It streams stdout/stderr to REINSTALL_LOG and writes REINSTALL_STATUS at the
+// end; the UI polls GET /api/reinstall/status to show live progress and resumes
+// the view after the kiosk display restarts mid-reinstall.
+async function startReinstall(force = false) {
+  // Dirty-tree precheck stays synchronous so the UI's "local changes → FORCE
+  // REINSTALL" prompt still works (the detached job can't report this back in
+  // the POST response).
+  const { stdout: dirty } = await run(GIT, ['-C', APP_DIR, 'status', '--porcelain']);
+  if (dirty.trim() && !force) {
+    const err = new Error('Working tree has local changes — refusing to reinstall. Use FORCE REINSTALL.');
+    err.localChanges = true;
+    throw err;
+  }
+
+  // Idempotent: if a reinstall is already running, don't launch a second one.
+  try {
+    if (fs.readFileSync(REINSTALL_STATUS, 'utf8').trim() === 'running') return;
+  } catch { /* no prior run */ }
+
+  // Fresh files so the UI sees THIS run, never a stale 'done' from last time.
+  fs.writeFileSync(REINSTALL_LOG, '');
+  fs.writeFileSync(REINSTALL_STATUS, 'running');
+
+  const user = os.userInfo().username;
   const script = path.join(APP_DIR, 'scripts', 's52-reinstall.sh');
-  const args = force ? ['--force'] : [];
-  const { stdout, stderr } = await run('bash', [script, ...args], {
-    timeout: 900000,
-    cwd: APP_DIR,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return { log: `${stdout}${stderr}`.trim() };
+  // The inner shell appends to the log and records the exit status. q() guards
+  // against the (controlled) paths breaking out of the single-quoted strings.
+  const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+  const inner = [
+    `exec >> ${q(REINSTALL_LOG)} 2>&1`,
+    `echo '==> Starting reinstall…'`,
+    `bash ${q(script)}${force ? ' --force' : ''}`,
+    `rc=$?`,
+    `if [ "$rc" -eq 0 ]; then echo done > ${q(REINSTALL_STATUS)}; else echo "failed:$rc" > ${q(REINSTALL_STATUS)}; fi`,
+  ].join('; ');
+
+  // --collect GCs the unit when it exits; --no-block returns once it's started
+  // (not when it finishes). Run as the kiosk user (setup.sh expects $HOME etc.);
+  // it sudo's internally for the root bits. Unique unit name avoids colliding
+  // with a not-yet-collected prior unit.
+  await run('sudo', ['-n', 'systemd-run', '--quiet', '--collect', '--no-block',
+    `--unit=s52-reinstall-${Date.now()}`,
+    `--uid=${user}`, `--gid=${user}`,
+    `--setenv=HOME=${os.homedir()}`,
+    `--setenv=APP_DIR=${APP_DIR}`,
+    '/bin/bash', '-c', inner,
+  ], { timeout: 20000 });
+}
+
+// Current reinstall progress for the UI poller. Caps the log payload so a long
+// install doesn't bloat each poll.
+function readReinstallState() {
+  let status = 'idle';
+  try { status = fs.readFileSync(REINSTALL_STATUS, 'utf8').trim() || 'idle'; } catch { /* idle */ }
+  let log = '';
+  try { log = fs.readFileSync(REINSTALL_LOG, 'utf8'); } catch { /* none yet */ }
+  const MAX = 64 * 1024;
+  if (log.length > MAX) log = `…(truncated)…\n${log.slice(log.length - MAX)}`;
+  return { status, log };
+}
+
+// Clear the reinstall log/status so the overlay stops showing once the user
+// acknowledges a finished (done/failed) run without rebooting.
+function ackReinstall() {
+  try { fs.unlinkSync(REINSTALL_STATUS); } catch { /* already gone */ }
+  try { fs.unlinkSync(REINSTALL_LOG); } catch { /* already gone */ }
 }
 
 // systemctl reboot returns almost immediately (it schedules the shutdown), so
@@ -468,8 +536,25 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/reinstall') {
       const body = await readJson(req);
-      const { log } = await runReinstall(Boolean(body.force));
-      json(res, 200, { ok: true, log });
+      try {
+        await startReinstall(Boolean(body.force));
+      } catch (e) {
+        // Dirty tree → soft error so the UI can offer FORCE REINSTALL.
+        if (e.localChanges) { json(res, 200, { ok: false, error: e.message }); return; }
+        throw e;
+      }
+      json(res, 200, { ok: true, started: true });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/reinstall/status') {
+      json(res, 200, { ok: true, ...readReinstallState() });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/reinstall/ack') {
+      ackReinstall();
+      json(res, 200, { ok: true });
       return;
     }
 
