@@ -130,8 +130,9 @@ export default function SettingsScreen({ settings, onUpdate, onBack }) {
           </div>
         ) : (
           <div style={styles.hint}>
-            SHOW MOUSE stays off for the car — flip it on at the bench. REINSTALL
-            re-runs full setup (packages, services); REBOOT to apply after.
+            SHOW MOUSE only toggles the in-app cursor style for bench debugging —
+            it does not enable USB pointer tracking (that is labwc/libinput).
+            Leave off in the car. REINSTALL re-runs full setup; REBOOT after.
           </div>
         )}
 

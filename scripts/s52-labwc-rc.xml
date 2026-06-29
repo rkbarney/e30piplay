@@ -14,6 +14,25 @@
 <openbox_config xmlns="http://openbox.org/3.4/rc">
   <theme><cornerRadius>0</cornerRadius></theme>
   <focus><followMouse>no</followMouse></focus>
+  <!--
+    Touch: send real touch events to Chromium (car UI is touch-native). Pi OS
+    desktop defaults mouseEmulation=yes so file-manager double-click works; on a
+    kiosk with a Waveshare USB panel + bench USB mouse that can leave a visible
+    compositor cursor stuck at the last touch point while REL motion from the
+    physical mouse is ignored. Explicit no here overrides Pi OS if labwc merges
+    system defaults, and documents the intended car/bench split.
+  -->
+  <touch deviceName="" mouseEmulation="no" />
+  <!-- Ensure both the panel (touch) and bench USB mouse (non-touch) deliver
+       events to the compositor cursor. -->
+  <libinput>
+    <device category="touch">
+      <sendEventsMode>yes</sendEventsMode>
+    </device>
+    <device category="non-touch">
+      <sendEventsMode>yes</sendEventsMode>
+    </device>
+  </libinput>
   <windowRules>
     <!--
       Iconify the react-carplay AppImage as soon as labwc maps it (cold-boot

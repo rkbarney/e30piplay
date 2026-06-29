@@ -14,6 +14,7 @@
 #   REACT_CARPLAY_VERSION=4.0.5         # passed through to install-react-carplay-appimage.sh
 #   S52_SKIP_HAL_VOICE=1     # skip the HAL voice sidecar (whisper.cpp build is slow/offline-unfriendly)
 #   S52_SKIP_ORGANIC_MAPS=1  # skip installing the Organic Maps flatpak (~large download)
+#   S52_BENCH=0              # 1 or --bench = patch deployed UI for visible bench mouse cursor
 #
 # Do NOT use `source` or `. setup.sh`.
 # =============================================================================
@@ -31,6 +32,13 @@ S52_SKIP_ORGANIC_MAPS="${S52_SKIP_ORGANIC_MAPS:-0}"
 # install with only a password set is not locked out. Set S52_SSH_HARDEN=1 ONLY
 # after you have confirmed key-based SSH works.
 S52_SSH_HARDEN="${S52_SSH_HARDEN:-0}"
+S52_BENCH="${S52_BENCH:-0}"
+for _arg in "$@"; do
+  case "$_arg" in
+    --bench) S52_BENCH=1 ;;
+  esac
+done
+unset _arg
 
 echo ""
 echo "=== S52 Solutions — Pi OS Lite + cage ==="
@@ -193,6 +201,15 @@ sudo rsync -a --delete "$APP_DIR/dist/" "$WEB_ROOT/"
 sudo chown -R root:www-data "$WEB_ROOT"
 sudo find "$WEB_ROOT" -type d -exec chmod 755 {} \;
 sudo find "$WEB_ROOT" -type f -exec chmod 644 {} \;
+
+# Bench-only: visible mouse on the deployed kiosk (CSS cursor:auto + index.html
+# bootstrap). Off by default — the car has no mouse. Opt in with S52_BENCH=1
+# or `bash setup.sh --bench`. Re-run after manual rsync deploys, or call:
+#   sudo bash $APP_DIR/scripts/s52-enable-bench-mouse.sh
+if [[ "$S52_BENCH" == "1" ]]; then
+  echo "[3c/10] Bench mouse cursor (S52_BENCH=1)…"
+  bash "$SOURCE_DIR/scripts/s52-enable-bench-mouse.sh"
+fi
 
 # ── 4. nginx ───────────────────────────────────────────────────────────────────
 echo "[4/10] Configuring nginx…"

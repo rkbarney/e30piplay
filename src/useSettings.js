@@ -30,6 +30,8 @@ function load() {
 export default function useSettings() {
   const [settings, setSettings] = useState(load);
 
+  // CSS only (cursor: none → auto). Compositor pointer motion is labwc/libinput;
+  // this toggle cannot fix a frozen USB mouse at the bench.
   useEffect(() => {
     document.body.classList.toggle('show-cursor', !!settings.showMouse);
   }, [settings.showMouse]);
