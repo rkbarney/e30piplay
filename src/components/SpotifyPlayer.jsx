@@ -194,16 +194,9 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
       </div>
 
       <div style={styles.overlay}>
-        <div style={styles.progressRow}>
-          <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
-          <div style={styles.progressTrack}>
-            <div style={{ ...styles.progressFill, width: `${pct}%` }} />
-          </div>
-          <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
-        </div>
         <div style={styles.controls}>
           <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Previous" onClick={() => sendTransport('previous')}>
-            <TransportIcon name="previous" size={24} />
+            <TransportIcon name="previous" size={34} />
           </button>
           <button
             type="button"
@@ -212,11 +205,18 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
             aria-label={nowPlaying?.playing ? 'Pause' : 'Play'}
             onClick={() => sendTransport('toggle')}
           >
-            <TransportIcon name={nowPlaying?.playing ? 'pause' : 'play'} size={30} />
+            <TransportIcon name={nowPlaying?.playing ? 'pause' : 'play'} size={50} />
           </button>
           <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Next" onClick={() => sendTransport('next')}>
-            <TransportIcon name="next" size={24} />
+            <TransportIcon name="next" size={34} />
           </button>
+        </div>
+        <div style={styles.progressRow}>
+          <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
+          <div style={styles.progressTrack}>
+            <div style={{ ...styles.progressFill, width: `${pct}%` }} />
+          </div>
+          <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
         </div>
       </div>
 
@@ -317,16 +317,19 @@ const styles = {
     background:
       'linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 16%, rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.5) 84%, rgba(0,0,0,0.95) 100%)',
   },
+  // Transport controls live dead-center over the artwork; the progress bar
+  // sits just below them.
   overlay: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: '84px',
+    top: '50%',
+    transform: 'translateY(-50%)',
     padding: '0 16px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '8px',
+    gap: '22px',
   },
   // Title + artist pinned near the top (against the top scrim) so they don't
   // sit over the middle of the artwork.
@@ -388,12 +391,11 @@ const styles = {
   controls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
-    marginTop: '4px',
+    gap: '16px',
   },
   ctrlBtn: {
-    width: '56px',
-    height: '56px',
+    width: '72px',
+    height: '72px',
     borderRadius: '50%',
     background: 'rgba(26,16,0,0.75)',
     border: `2px solid #7a5500`,
@@ -407,8 +409,8 @@ const styles = {
     WebkitTapHighlightColor: 'transparent',
   },
   ctrlBtnBig: {
-    width: '70px',
-    height: '70px',
+    width: '100px',
+    height: '100px',
     borderRadius: '50%',
     background: 'rgba(42,28,0,0.85)',
     border: `2px solid ${AMBER}`,
