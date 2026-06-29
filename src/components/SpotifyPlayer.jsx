@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import QRCode from 'qrcode';
 import ScreenFrame from './ScreenFrame';
+import SpotifyLibrary from './SpotifyLibrary';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 const NOW_PLAYING_POLL_MS = 3000;
@@ -43,6 +44,7 @@ const ICON_PATHS = {
   next: 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z',
   play: 'M8 5v14l11-7z',
   pause: 'M6 5h4v14H6zm8 0h4v14h-4z',
+  library: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z',
 };
 
 function TransportIcon({ name, size = 24 }) {
@@ -61,13 +63,15 @@ function TransportIcon({ name, size = 24 }) {
 }
 
 TransportIcon.propTypes = {
-  name: PropTypes.oneOf(['previous', 'next', 'play', 'pause']).isRequired,
+  name: PropTypes.oneOf(['previous', 'next', 'play', 'pause', 'library']).isRequired,
   size: PropTypes.number,
 };
 
 export default function SpotifyPlayer({ onMinus, onPlus }) {
   // unknown | login | player
   const [phase, setPhase] = useState('unknown');
+  // player | library — sub-view once logged in; the now-playing player is the default.
+  const [view, setView] = useState('player');
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [loginUrl, setLoginUrl] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -159,6 +163,15 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
     );
   }
 
+  if (view === 'library') {
+    return (
+      <SpotifyLibrary
+        onClose={() => setView('player')}
+        onPlayed={() => setView('player')}
+      />
+    );
+  }
+
   const pct = nowPlaying?.durationMs
     ? Math.min(100, (100 * (nowPlaying.progressMs ?? 0)) / nowPlaying.durationMs)
     : 0;
@@ -181,16 +194,9 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
       </div>
 
       <div style={styles.overlay}>
-        <div style={styles.progressRow}>
-          <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
-          <div style={styles.progressTrack}>
-            <div style={{ ...styles.progressFill, width: `${pct}%` }} />
-          </div>
-          <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
-        </div>
         <div style={styles.controls}>
           <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Previous" onClick={() => sendTransport('previous')}>
-            <TransportIcon name="previous" size={24} />
+            <TransportIcon name="previous" size={34} />
           </button>
           <button
             type="button"
@@ -199,16 +205,27 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
             aria-label={nowPlaying?.playing ? 'Pause' : 'Play'}
             onClick={() => sendTransport('toggle')}
           >
-            <TransportIcon name={nowPlaying?.playing ? 'pause' : 'play'} size={30} />
+            <TransportIcon name={nowPlaying?.playing ? 'pause' : 'play'} size={50} />
           </button>
           <button type="button" style={styles.ctrlBtn} disabled={busy} aria-label="Next" onClick={() => sendTransport('next')}>
-            <TransportIcon name="next" size={24} />
+            <TransportIcon name="next" size={34} />
           </button>
         </div>
       </div>
 
+      <div style={styles.progressRow}>
+        <span style={styles.time}>{formatTime(nowPlaying?.progressMs)}</span>
+        <div style={styles.progressTrack}>
+          <div style={{ ...styles.progressFill, width: `${pct}%` }} />
+        </div>
+        <span style={styles.time}>{formatTime(nowPlaying?.durationMs)}</span>
+      </div>
+
       <div style={styles.navRow}>
         <button type="button" style={styles.navBtn} aria-label="Previous screen" onClick={onMinus}>−</button>
+        <button type="button" style={styles.libBtn} aria-label="Library" onClick={() => setView('library')}>
+          <TransportIcon name="library" size={22} />
+        </button>
         <button type="button" style={styles.navBtn} aria-label="Next screen" onClick={onPlus}>+</button>
       </div>
     </div>
@@ -301,16 +318,19 @@ const styles = {
     background:
       'linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 16%, rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.5) 84%, rgba(0,0,0,0.95) 100%)',
   },
+  // Transport controls live dead-center over the artwork; the progress bar
+  // sits just below them.
   overlay: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: '84px',
+    top: '50%',
+    transform: 'translateY(-50%)',
     padding: '0 16px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '8px',
+    gap: '22px',
   },
   // Title + artist pinned near the top (against the top scrim) so they don't
   // sit over the middle of the artwork.
@@ -348,8 +368,15 @@ const styles = {
     whiteSpace: 'nowrap',
     textShadow: '0 1px 4px rgba(0,0,0,0.9)',
   },
+  // Floats in the gap between the centered transport controls and the bottom
+  // −/+ band, padded to line up with the nav band's edges.
   progressRow: {
-    width: '100%',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: '128px',
+    padding: '0 16px',
+    boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -372,12 +399,11 @@ const styles = {
   controls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
-    marginTop: '4px',
+    gap: '16px',
   },
   ctrlBtn: {
-    width: '56px',
-    height: '56px',
+    width: '72px',
+    height: '72px',
     borderRadius: '50%',
     background: 'rgba(26,16,0,0.75)',
     border: `2px solid #7a5500`,
@@ -391,8 +417,8 @@ const styles = {
     WebkitTapHighlightColor: 'transparent',
   },
   ctrlBtnBig: {
-    width: '70px',
-    height: '70px',
+    width: '100px',
+    height: '100px',
     borderRadius: '50%',
     background: 'rgba(42,28,0,0.85)',
     border: `2px solid ${AMBER}`,
@@ -421,7 +447,7 @@ const styles = {
     boxSizing: 'border-box',
   },
   navBtn: {
-    width: '120px',
+    width: '108px',
     height: '48px',
     borderRadius: '12px',
     background: 'rgba(20,12,0,0.55)',
@@ -431,6 +457,22 @@ const styles = {
     fontWeight: 'bold',
     fontSize: '34px',
     lineHeight: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    touchAction: 'manipulation',
+    WebkitTapHighlightColor: 'transparent',
+  },
+  // Library shortcut, centered between the −/+ nav buttons.
+  libBtn: {
+    width: '52px',
+    height: '48px',
+    borderRadius: '12px',
+    background: 'rgba(20,12,0,0.55)',
+    border: `2px solid ${AMBER}99`,
+    color: AMBER,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
