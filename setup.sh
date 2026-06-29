@@ -618,8 +618,19 @@ Description=S52 labwc kiosk (Chromium + pre-loaded react-carplay)
 # included) still reports "active/running", because labwc never crashes, it
 # just never wins DRM. plymouth-quit-wait.service blocks until plymouth has
 # fully torn down, so labwc never starts before the display is actually free.
-After=nginx.service plymouth-quit-wait.service
+#
+# seatd ordering + PartOf: labwc grabs DRM through libseat/seatd. If seatd is
+# restarted out from under a running labwc (apt touching it, a daemon-reload
+# during a re-run of setup.sh, etc.), labwc loses its seat but does NOT exit —
+# it sits there logging "libseat Broken pipe / Failed to close device / view
+# has no output" while systemd still reports it active (NRestarts=0), so
+# Restart=on-failure never fires and the panel freezes on the last frame
+# (looks identical to the Plymouth boot hang). PartOf=seatd.service makes
+# systemd restart this unit whenever seatd restarts, so labwc re-grabs DRM
+# instead of becoming a zombie.
+After=nginx.service plymouth-quit-wait.service seatd.service
 Wants=nginx.service
+PartOf=seatd.service
 
 [Service]
 Type=simple
