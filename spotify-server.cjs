@@ -30,13 +30,25 @@ function logOAuth(event, detail = {}) {
   console.error('[spotify-oauth]', event, JSON.stringify({ redirect_uri: REDIRECT_URI, ...detail }));
 }
 
+// NOTE: changing this set invalidates the consent baked into the stored token,
+// so the user must re-scan the login QR once after deploy. Bundle any new
+// scopes together so re-consent is a single event. The library reads
+// (playlists, recently-played) were added alongside the original transport
+// scopes in one bump.
 const SCOPES = [
   'user-read-playback-state',
   'user-modify-playback-state',
   'user-read-currently-playing',
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'user-read-recently-played',
 ].join(' ');
 
 const TOKENS_PATH = path.join(os.homedir(), '.config', 's52-spotify', 'tokens.json');
+// Trimmed now-playing snapshot, refreshed whenever the dash sees something
+// playing, so a cold load can show the last cover instead of a blank screen
+// (Feature 0 — no scope needed).
+const LAST_PLAYING_PATH = path.join(os.homedir(), '.config', 's52-spotify', 'last-playing.json');
 
 // ── PKCE / token storage ────────────────────────────────────────────────────
 
@@ -144,26 +156,38 @@ async function getAccessToken() {
 
 // ── Spotify Web API ─────────────────────────────────────────────────────────
 
-async function spotifyApi(method, apiPath, { query, retry = true } = {}) {
+async function spotifyApi(method, apiPath, { query, body, retry = true } = {}) {
   const token = await getAccessToken();
   const url = new URL(`https://api.spotify.com/v1${apiPath}`);
   for (const [k, v] of Object.entries(query || {})) if (v != null) url.searchParams.set(k, v);
 
-  const res = await fetch(url, {
-    method,
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const headers = { Authorization: `Bearer ${token}` };
+  const init = { method, headers };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, init);
 
   if (res.status === 401 && retry) {
     // Access token went stale between our expiry check and the call — force
     // one refresh and retry exactly once.
     const tokens = readTokens();
     if (tokens) await refreshTokens(tokens);
-    return spotifyApi(method, apiPath, { query, retry: false });
+    return spotifyApi(method, apiPath, { query, body, retry: false });
   }
   if (res.status === 204) return null;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  // Write commands (play/pause/next) sometimes answer 2xx with an empty or
+  // non-JSON body — don't let a parse error masquerade as a request failure.
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
   if (!res.ok) {
     const err = new Error(data?.error?.message || `Spotify API ${res.status}`);
     err.status = res.status;
@@ -181,21 +205,175 @@ async function findDeviceId() {
   return device?.id || null;
 }
 
+function readLastPlaying() {
+  try {
+    return JSON.parse(fs.readFileSync(LAST_PLAYING_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeLastPlaying(snapshot) {
+  try {
+    fs.mkdirSync(path.dirname(LAST_PLAYING_PATH), { recursive: true });
+    fs.writeFileSync(LAST_PLAYING_PATH, JSON.stringify(snapshot));
+  } catch {
+    /* the cache is best-effort; never let a write failure break now-playing */
+  }
+}
+
 async function getNowPlaying() {
   const data = await spotifyApi('GET', '/me/player');
-  if (!data) return { playing: false };
+  // /me/player is empty (204) when nothing is active, and item-less during ads
+  // or some podcast states — in either case fall back to the last cover we saw
+  // so a cold load isn't a blank screen (Feature 0).
+  if (!data || !data.item) {
+    const last = readLastPlaying();
+    if (last) return { ...last, playing: false, progressMs: null, stale: true };
+    return { playing: false };
+  }
   const item = data.item;
-  return {
+  const np = {
     playing: Boolean(data.is_playing),
-    track: item?.name || null,
-    artists: (item?.artists || []).map(a => a.name).join(', ') || null,
-    album: item?.album?.name || null,
-    artUrl: item?.album?.images?.[0]?.url || null,
+    track: item.name || null,
+    artists: (item.artists || []).map(a => a.name).join(', ') || null,
+    album: item.album?.name || null,
+    artUrl: item.album?.images?.[0]?.url || null,
     progressMs: data.progress_ms ?? null,
-    durationMs: item?.duration_ms ?? null,
+    durationMs: item.duration_ms ?? null,
     deviceName: data.device?.name || null,
     deviceIsOurs: data.device?.name === DEVICE_NAME,
   };
+  // Persist a trimmed snapshot (display fields only) for the cold-load fallback.
+  writeLastPlaying({
+    track: np.track,
+    artists: np.artists,
+    album: np.album,
+    artUrl: np.artUrl,
+    durationMs: np.durationMs,
+  });
+  return np;
+}
+
+// Most-recently-played playlist URIs, newest first. Spotify exposes no
+// "last played" field on playlists, so we derive it from recently-played
+// tracks' context — which only covers the last ~50 tracks over a short
+// window, so only recently-played playlists get a recency rank. Best-effort:
+// any failure just yields no ordering rather than breaking the playlist list.
+async function getRecentPlaylistOrder() {
+  try {
+    const data = await spotifyApi('GET', '/me/player/recently-played', { query: { limit: 50 } });
+    const order = [];
+    const seen = new Set();
+    for (const it of data?.items || []) {
+      const uri = it.context?.type === 'playlist' ? it.context.uri : null;
+      if (uri && !seen.has(uri)) {
+        seen.add(uri);
+        order.push(uri);
+      }
+    }
+    return order;
+  } catch {
+    return [];
+  }
+}
+
+// The current user's id, cached (it never changes for a given token). Needed
+// to build the Liked Songs collection context URI.
+let cachedUserId = null;
+async function getUserId() {
+  if (cachedUserId) return cachedUserId;
+  const me = await spotifyApi('GET', '/me');
+  cachedUserId = me?.id || null;
+  return cachedUserId;
+}
+
+// Feature 1 — the user's playlists, mapped to the fields the dash list needs.
+// Sorted by last-played descending where known (see getRecentPlaylistOrder);
+// playlists with no recent play keep Spotify's default library order beneath.
+async function getPlaylists() {
+  const data = await spotifyApi('GET', '/me/playlists', { query: { limit: 50 } });
+  const items = (data?.items || []).filter(Boolean).map(p => ({
+    id: p.id,
+    name: p.name,
+    uri: p.uri,
+    owner: p.owner?.display_name || null,
+    trackCount: p.tracks?.total ?? null,
+    artUrl: p.images?.[0]?.url || null,
+  }));
+
+  const recentOrder = await getRecentPlaylistOrder();
+  if (recentOrder.length) {
+    const rank = new Map(recentOrder.map((uri, i) => [uri, i]));
+    // Stable sort: recently-played float up by recency; the rest keep their
+    // original relative (default) order since Array.sort is stable in Node.
+    items.sort((a, b) => {
+      const ra = rank.has(a.uri) ? rank.get(a.uri) : Number.POSITIVE_INFINITY;
+      const rb = rank.has(b.uri) ? rank.get(b.uri) : Number.POSITIVE_INFINITY;
+      return ra - rb;
+    });
+  }
+
+  // Pin Liked Songs at the very top (above the recency sort). It isn't a real
+  // playlist — Spotify's saved-tracks collection plays via the undocumented
+  // `spotify:user:<id>:collection` context URI, which needs no extra scope.
+  const uid = await getUserId().catch(() => null);
+  if (uid) {
+    items.unshift({
+      id: 'liked-songs',
+      name: 'Liked Songs',
+      uri: `spotify:user:${uid}:collection`,
+      owner: null,
+      trackCount: null,
+      artUrl: null,
+      liked: true,
+    });
+  }
+  return items;
+}
+
+// Feature 2 — recently played tracks. The API repeats tracks across listens, so
+// dedupe by track uri keeping the most recent (results come newest-first).
+async function getRecentlyPlayed() {
+  const data = await spotifyApi('GET', '/me/player/recently-played', { query: { limit: 50 } });
+  const seen = new Set();
+  const out = [];
+  for (const it of data?.items || []) {
+    const t = it.track;
+    if (!t?.uri || seen.has(t.uri)) continue;
+    seen.add(t.uri);
+    out.push({
+      track: t.name || null,
+      artists: (t.artists || []).map(a => a.name).join(', ') || null,
+      album: t.album?.name || null,
+      artUrl: t.album?.images?.[0]?.url || null,
+      uri: t.uri,
+      contextUri: it.context?.uri || null,
+      playedAt: it.played_at || null,
+    });
+  }
+  return out;
+}
+
+// Start playback of a context (playlist/album/artist) or an explicit track list
+// on the dash unit, transferring playback there if nothing is active yet.
+async function playContext({ contextUri, offsetUri, uris }) {
+  const deviceId = await findDeviceId();
+  const query = deviceId ? { device_id: deviceId } : {};
+  const body = {};
+  if (contextUri) {
+    body.context_uri = contextUri;
+    // offset-by-uri is only valid for album/playlist contexts; the caller is
+    // responsible for only passing offsetUri when contextUri supports it.
+    if (offsetUri) body.offset = { uri: offsetUri };
+  } else if (Array.isArray(uris) && uris.length) {
+    body.uris = uris;
+  } else {
+    const err = new Error('play-context requires contextUri or uris');
+    err.status = 400;
+    throw err;
+  }
+  return spotifyApi('PUT', '/me/player/play', { query, body });
 }
 
 async function transport(action) {
@@ -218,6 +396,24 @@ async function togglePlayback() {
 }
 
 // ── HTTP plumbing ────────────────────────────────────────────────────────────
+
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 1e6) req.destroy(); // guard against absurd payloads
+    });
+    req.on('end', () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        resolve({});
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
 
 function json(res, status, obj) {
   const body = JSON.stringify(obj);
@@ -334,6 +530,33 @@ const server = http.createServer(async (req, res) => {
         if (e instanceof NotAuthenticated) json(res, 200, { ok: true, authenticated: false });
         else throw e;
       }
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/spotify/playlists') {
+      try {
+        json(res, 200, { ok: true, items: await getPlaylists() });
+      } catch (e) {
+        if (e instanceof NotAuthenticated) json(res, 200, { ok: true, authenticated: false });
+        else throw e;
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/spotify/recently-played') {
+      try {
+        json(res, 200, { ok: true, items: await getRecentlyPlayed() });
+      } catch (e) {
+        if (e instanceof NotAuthenticated) json(res, 200, { ok: true, authenticated: false });
+        else throw e;
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/spotify/play-context') {
+      const body = await readJsonBody(req);
+      await playContext(body);
+      json(res, 200, { ok: true });
       return;
     }
 

@@ -361,10 +361,12 @@ const styles = {
     gap: '8px',
     width: '100%',
     flex: 1,
+    minWidth: 0,        // let the value text ellipsis-truncate instead of overflowing the row
     minHeight: '112px',
     background: '#161208',
     border: '2px solid #3a2800',
     borderRadius: '10px',
+    overflow: 'hidden',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
   },
@@ -395,7 +397,7 @@ const styles = {
     fontSize: '26px',
     fontWeight: 'bold',
     fontFamily: MONO,
-    maxWidth: '260px',
+    maxWidth: '100%',   // bounded by the (two-up) button, not the full panel — avoids clipping past the frame edge
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',

@@ -80,7 +80,6 @@ sudo apt-get install -y -qq \
   python3-gi \
   python3-venv \
   gir1.2-gtk-3.0 \
-  gir1.2-gtklayershell-0.1 \
   rsync \
   git \
   cmake \
@@ -571,7 +570,6 @@ mkdir -p "/home/$SERVICE_USER/.config/labwc"
 
 install -m 755 "$SOURCE_DIR/scripts/s52-kiosk-inner.sh" "/home/$SERVICE_USER/.local/bin/s52-kiosk-inner.sh"
 install -m 755 "$SOURCE_DIR/scripts/s52-car-display" "/home/$SERVICE_USER/.local/bin/s52-car-display"
-install -m 755 "$SOURCE_DIR/scripts/s52-exit-overlay.py" "/home/$SERVICE_USER/.local/bin/s52-exit-overlay.py"
 
 # labwc autostart + rc.xml. We always write these — they are appliance config,
 # not user prefs. Comment out the install if you want to customise rc.xml by hand.
@@ -580,6 +578,8 @@ install -m 644 "$SOURCE_DIR/scripts/s52-labwc-rc.xml" "/home/$SERVICE_USER/.conf
 
 # Clear any stale launcher from the cage-era setup.
 rm -f "/home/$SERVICE_USER/.local/bin/s52-react-carplay-inner.sh"
+# Clear the retired top-center "back to kiosk" exit overlay (now removed).
+rm -f "/home/$SERVICE_USER/.local/bin/s52-exit-overlay.py"
 
 cp "$SOURCE_DIR/scripts/s52-display-layout.conf.example" "/home/$SERVICE_USER/.config/s52-display-layout.conf.example"
 if [[ ! -f "/home/$SERVICE_USER/.config/s52-display-layout.conf" ]]; then
