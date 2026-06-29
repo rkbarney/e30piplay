@@ -611,6 +611,47 @@ def boot_greeting(now=None):
     return 'Good evening, Dave.'
 
 
+def _current_boot_id():
+    """Stable per-power-on identifier (changes only across real reboots)."""
+    try:
+        with open('/proc/sys/kernel/random/boot_id') as fh:
+            return fh.read().strip()
+    except OSError:
+        return ''
+
+
+def _greeting_stamp_path():
+    runtime_dir = os.environ.get('XDG_RUNTIME_DIR') or '/tmp'
+    return os.path.join(runtime_dir, 's52-hal-greeted')
+
+
+def claim_boot_greeting():
+    """Return True the first time HAL greets after a real boot.
+
+    systemd restarts the sidecar (Restart=on-failure) without rebooting, and
+    each fresh process would otherwise replay 'Good <time>, Dave.' — so a brief
+    crash-loop turns into HAL chanting the greeting every few seconds. The
+    boot_id only changes across actual power cycles, so we record it in a stamp
+    file and skip the greeting when it already matches this boot. Any failure
+    here falls back to greeting (better a repeat than a silent boot)."""
+    boot_id = _current_boot_id()
+    if not boot_id:
+        return True
+    stamp = _greeting_stamp_path()
+    try:
+        with open(stamp) as fh:
+            if fh.read().strip() == boot_id:
+                return False
+    except OSError:
+        pass
+    try:
+        with open(stamp, 'w') as fh:
+            fh.write(boot_id)
+    except OSError:
+        pass
+    return True
+
+
 def pulse_source_tokens(pulse_source):
     slug = pulse_source.removeprefix('alsa_input.').removesuffix('.monitor')
     parts = re.split(r'[._-]+', slug)
@@ -1729,9 +1770,17 @@ class HalVoiceServer:
             await asyncio.to_thread(_TTS.load)
         except Exception as exc:  # noqa: BLE001 - degrade to espeak, don't refuse to start
             log.warning('Piper voice unavailable (%s) — falling back to espeak-ng', exc)
-        greeting = boot_greeting()
-        log.info('boot greeting: %r', greeting)
-        await asyncio.to_thread(speak_tts, greeting)
+        if claim_boot_greeting():
+            greeting = boot_greeting()
+            log.info('boot greeting: %r', greeting)
+            try:
+                # Never let a TTS hiccup abort startup — the WebSocket server
+                # below must come up so HAL can still listen and answer.
+                await asyncio.to_thread(speak_tts, greeting)
+            except Exception as exc:  # noqa: BLE001
+                log.warning('boot greeting failed (%s) — continuing', exc)
+        else:
+            log.info('boot greeting already spoken this boot — skipping')
         if not self.llm.available():
             log.warning('ANTHROPIC_API_KEY not set (see ~/.config/hal.env) — HAL cannot answer')
         asyncio.create_task(self.utterance_worker())
