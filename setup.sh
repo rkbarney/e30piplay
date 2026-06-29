@@ -458,12 +458,19 @@ RASPOTIFY
     # raspotify's packaged unit runs as its own system user with no Wayland/
     # Pulse session; override it to run as the kiosk user so it reaches the
     # same PipeWire/Pulse session (and DAC) as CarPlay and Chromium.
+    # Stock unit enables PrivateUsers + ProtectHome — librespot then cannot
+    # open the kiosk pulse socket ("Permission denied" on /run/user/…/pulse).
     sudo mkdir -p /etc/systemd/system/raspotify.service.d
     sudo tee /etc/systemd/system/raspotify.service.d/override.conf > /dev/null <<OVERRIDE
 [Service]
 User=$SERVICE_USER
 Group=$SERVICE_USER
 Environment=XDG_RUNTIME_DIR=/run/user/$S52_UID
+Environment=PULSE_SERVER=unix:/run/user/$S52_UID/pulse/native
+EnvironmentFile=-/home/$SERVICE_USER/.config/s52-carplay-audio.env
+PrivateUsers=no
+ProtectHome=no
+ReadWritePaths=/run/user/$S52_UID/pulse
 OVERRIDE
 
     sudo systemctl daemon-reload
