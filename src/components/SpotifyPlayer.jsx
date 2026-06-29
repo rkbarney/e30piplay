@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import QRCode from 'qrcode';
 import ScreenFrame from './ScreenFrame';
+import SpotifyLibrary from './SpotifyLibrary';
 
 const API_BASE = import.meta.env.VITE_S52_API_BASE ?? '';
 const NOW_PLAYING_POLL_MS = 3000;
@@ -43,6 +44,7 @@ const ICON_PATHS = {
   next: 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z',
   play: 'M8 5v14l11-7z',
   pause: 'M6 5h4v14H6zm8 0h4v14h-4z',
+  library: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z',
 };
 
 function TransportIcon({ name, size = 24 }) {
@@ -61,13 +63,15 @@ function TransportIcon({ name, size = 24 }) {
 }
 
 TransportIcon.propTypes = {
-  name: PropTypes.oneOf(['previous', 'next', 'play', 'pause']).isRequired,
+  name: PropTypes.oneOf(['previous', 'next', 'play', 'pause', 'library']).isRequired,
   size: PropTypes.number,
 };
 
 export default function SpotifyPlayer({ onMinus, onPlus }) {
   // unknown | login | player
   const [phase, setPhase] = useState('unknown');
+  // player | library — sub-view once logged in; the now-playing player is the default.
+  const [view, setView] = useState('player');
   const [qrDataUrl, setQrDataUrl] = useState(null);
   const [loginUrl, setLoginUrl] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -159,6 +163,15 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
     );
   }
 
+  if (view === 'library') {
+    return (
+      <SpotifyLibrary
+        onClose={() => setView('player')}
+        onPlayed={() => setView('player')}
+      />
+    );
+  }
+
   const pct = nowPlaying?.durationMs
     ? Math.min(100, (100 * (nowPlaying.progressMs ?? 0)) / nowPlaying.durationMs)
     : 0;
@@ -209,6 +222,9 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
 
       <div style={styles.navRow}>
         <button type="button" style={styles.navBtn} aria-label="Previous screen" onClick={onMinus}>−</button>
+        <button type="button" style={styles.libBtn} aria-label="Library" onClick={() => setView('library')}>
+          <TransportIcon name="library" size={22} />
+        </button>
         <button type="button" style={styles.navBtn} aria-label="Next screen" onClick={onPlus}>+</button>
       </div>
     </div>
@@ -421,7 +437,7 @@ const styles = {
     boxSizing: 'border-box',
   },
   navBtn: {
-    width: '120px',
+    width: '108px',
     height: '48px',
     borderRadius: '12px',
     background: 'rgba(20,12,0,0.55)',
@@ -431,6 +447,22 @@ const styles = {
     fontWeight: 'bold',
     fontSize: '34px',
     lineHeight: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    touchAction: 'manipulation',
+    WebkitTapHighlightColor: 'transparent',
+  },
+  // Library shortcut, centered between the −/+ nav buttons.
+  libBtn: {
+    width: '52px',
+    height: '48px',
+    borderRadius: '12px',
+    background: 'rgba(20,12,0,0.55)',
+    border: `2px solid ${AMBER}99`,
+    color: AMBER,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
