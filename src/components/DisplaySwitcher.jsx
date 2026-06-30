@@ -64,6 +64,7 @@ export default function DisplaySwitcher() {
     else if (intent === 'spotify_play_pause') postCarplayApi('/api/spotify/toggle');
     else if (intent === 'spotify_next') postCarplayApi('/api/spotify/next');
     else if (intent === 'spotify_previous') postCarplayApi('/api/spotify/previous');
+    else if (intent === 'spotify_like') postCarplayApi('/api/spotify/like?action=save');
   }, []);
 
   // Listening lives here (not inside the Hal screen) so "HAL, switch to

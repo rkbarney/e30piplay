@@ -47,6 +47,21 @@ const ICON_PATHS = {
   library: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z',
 };
 
+// Heart glyph: filled when saved to Liked Songs, outline when not.
+function HeartIcon({ filled, size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {filled ? (
+        <path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      ) : (
+        <path fill="none" stroke="currentColor" strokeWidth="2" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      )}
+    </svg>
+  );
+}
+
+HeartIcon.propTypes = { filled: PropTypes.bool, size: PropTypes.number };
+
 function TransportIcon({ name, size = 24 }) {
   return (
     <svg
@@ -148,6 +163,16 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
     }
   }, []);
 
+  // Optimistically flip the heart; the next now-playing poll reconciles truth.
+  const toggleLike = useCallback(async () => {
+    if (!nowPlaying?.trackId) return;
+    const next = !nowPlaying.liked;
+    setNowPlaying(np => (np ? { ...np, liked: next } : np));
+    try {
+      await fetch(`${API_BASE}/api/spotify/like`, { method: 'POST', headers: { Accept: 'application/json' } });
+    } catch { /* poll reconciles */ }
+  }, [nowPlaying?.trackId, nowPlaying?.liked]);
+
   if (phase === 'login') {
     return (
       <ScreenFrame variant="amber" buttons={[{ label: '−', onClick: onMinus }, { label: '+', onClick: onPlus }]}>
@@ -223,6 +248,16 @@ export default function SpotifyPlayer({ onMinus, onPlus }) {
 
       <div style={styles.navRow}>
         <button type="button" style={styles.navBtn} aria-label="Previous screen" onClick={onMinus}>−</button>
+        <button
+          type="button"
+          style={{ ...styles.libBtn, opacity: nowPlaying?.trackId ? 1 : 0.35 }}
+          disabled={!nowPlaying?.trackId}
+          aria-label={nowPlaying?.liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+          aria-pressed={Boolean(nowPlaying?.liked)}
+          onClick={toggleLike}
+        >
+          <HeartIcon filled={Boolean(nowPlaying?.liked)} size={22} />
+        </button>
         <button type="button" style={styles.libBtn} aria-label="Library" onClick={() => setView('library')}>
           <TransportIcon name="library" size={22} />
         </button>

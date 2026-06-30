@@ -42,6 +42,9 @@ const SCOPES = [
   'playlist-read-private',
   'playlist-read-collaborative',
   'user-read-recently-played',
+  // Heart button: read = show filled/outline, modify = save/unsave.
+  'user-library-read',
+  'user-library-modify',
 ].join(' ');
 
 const TOKENS_PATH = path.join(os.homedir(), '.config', 's52-spotify', 'tokens.json');
@@ -233,6 +236,7 @@ async function getNowPlaying() {
     return { playing: false };
   }
   const item = data.item;
+  const trackId = item.id || null;
   const np = {
     playing: Boolean(data.is_playing),
     track: item.name || null,
@@ -243,6 +247,8 @@ async function getNowPlaying() {
     durationMs: item.duration_ms ?? null,
     deviceName: data.device?.name || null,
     deviceIsOurs: data.device?.name === DEVICE_NAME,
+    trackId,
+    liked: await isTrackSaved(trackId),
   };
   // Persist a trimmed snapshot (display fields only) for the cold-load fallback.
   writeLastPlaying({
@@ -374,6 +380,34 @@ async function playContext({ contextUri, offsetUri, uris }) {
     throw err;
   }
   return spotifyApi('PUT', '/me/player/play', { query, body });
+}
+
+// Is this track in the user's Liked Songs? null when the library scopes aren't
+// yet granted (old token — user must re-scan QR once to pick up the new scopes).
+async function isTrackSaved(trackId) {
+  if (!trackId) return null;
+  try {
+    const saved = await spotifyApi('GET', '/me/tracks/contains', { query: { ids: trackId } });
+    return Array.isArray(saved) ? Boolean(saved[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Add/remove the currently playing track from Liked Songs.
+//   action 'save'   → always add  (HAL intent — idempotent, safe to repeat)
+//   action 'unsave' → always remove
+//   action 'toggle' → flip current state (the on-screen heart; default)
+async function setLiked(action) {
+  const data = await spotifyApi('GET', '/me/player');
+  const trackId = data?.item?.id || null;
+  if (!trackId) return { ok: false, error: 'nothing_playing' };
+  let liked;
+  if (action === 'save') liked = true;
+  else if (action === 'unsave') liked = false;
+  else liked = !(await isTrackSaved(trackId));
+  await spotifyApi(liked ? 'PUT' : 'DELETE', '/me/tracks', { query: { ids: trackId } });
+  return { ok: true, liked, trackId };
 }
 
 async function transport(action) {
@@ -563,6 +597,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/spotify/toggle') {
       await togglePlayback();
       json(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/spotify/like') {
+      const result = await setLiked(url.searchParams.get('action') || 'toggle');
+      json(res, result.ok ? 200 : 409, result);
       return;
     }
 

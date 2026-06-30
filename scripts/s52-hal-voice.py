@@ -71,6 +71,8 @@ INTENT_SPOTIFY_API_PATHS = {
     'spotify_play_pause': '/api/spotify/toggle',
     'spotify_next': '/api/spotify/next',
     'spotify_previous': '/api/spotify/previous',
+    # Save-only by voice (idempotent; never unsave via HAL).
+    'spotify_like': '/api/spotify/like?action=save',
 }
 
 SAMPLE_RATE = 16000          # required by both webrtcvad and whisper.cpp
@@ -121,6 +123,7 @@ ERROR_SPEECH = os.environ.get(
 VALID_INTENTS = frozenset({
     'switch_to_carplay', 'return_to_kiosk', 'switch_to_emulator', 'none',
     'switch_to_spotify', 'spotify_play_pause', 'spotify_next', 'spotify_previous',
+    'spotify_like',
 })
 
 # ── Piper TTS (HAL 9000 voice) ────────────────────────────────────────────────
@@ -519,6 +522,8 @@ def build_system_prompt(context, carplay_active):
         '{"intent": "spotify_play_pause"} - toggle play/pause on the Spotify player\n'
         '{"intent": "spotify_next"}       - skip to the next track\n'
         '{"intent": "spotify_previous"}   - go back to the previous track\n'
+        '{"intent": "spotify_like"}       - save the current track to the '
+        "driver's Liked Songs; use when asked to like, save, or favorite this song\n"
         '{"intent": "none"}               - conversation only, when no screen '
         'change is needed\n'
         'Pick the single best intent. Never invent other intents, and never '
