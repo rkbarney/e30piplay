@@ -1616,10 +1616,18 @@ class HalVoiceServer:
         if canned:
             line, intent = canned
             log.info('canned line: %r  intent=%s', line, intent)
+            # A canned entry may carry an internal intent (mute/unmute); apply
+            # the same semantics as the LLM branch. Unmute first so the line is
+            # actually heard; mute after speaking; never forward internal
+            # intents to the kiosk UI.
+            if intent == 'unmute_voice':
+                self.muted = False
             if not self.muted:
                 await self.broadcast({'type': 'speaking'})
                 await asyncio.to_thread(speak_tts, line)
-            if intent != 'none':
+            if intent == 'mute_voice':
+                self.muted = True
+            elif intent != 'none' and intent not in INTERNAL_INTENTS:
                 await self.broadcast({'type': 'command', 'intent': intent})
             await self.broadcast({'type': 'idle'})
             return
