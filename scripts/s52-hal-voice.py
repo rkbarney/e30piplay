@@ -59,18 +59,67 @@ HOST = os.environ.get('S52_HAL_WS_HOST', '127.0.0.1')
 PORT = int(os.environ.get('S52_HAL_WS_PORT', '8765'))
 CARPLAY_API = os.environ.get('S52_CARPLAY_API', 'http://127.0.0.1:3001')
 SPOTIFY_API = os.environ.get('S52_SPOTIFY_API', 'http://127.0.0.1:3002')
-# Screen-switch intents that also hit carplay-server when the kiosk WS may drop.
+# ── HAL capability registry ───────────────────────────────────────────────────
+# Single source of truth for what HAL can do. The Claude prompt menu
+# (build_system_prompt), the VALID_INTENTS validation gate, and the API-path
+# maps below are all derived from this list, so adding or renaming a capability
+# is a one-record edit instead of the four hand-edited places it used to take.
+#   id       - intent string HAL emits; DisplaySwitcher.jsx routes screen intents
+#   desc     - the one-line description shown to Claude in the prompt menu
+#   api      - optional (path, target); hit directly so it still works if the
+#              kiosk WS drops. target 'carplay' → carplay-server, 'spotify' →
+#              spotify-server. UI-only intents (switch_to_carplay/_spotify) omit it.
+#   internal - sidecar-only behavior (no frontend command, no API); handled in
+#              converse() rather than by the kiosk UI.
+CAPABILITIES = (
+    {'id': 'switch_to_carplay',
+     'desc': 'bring up Apple CarPlay; use this for navigation, maps, '
+             'directions, music apps, or phone calls'},
+    {'id': 'return_to_kiosk',
+     'desc': 'return to the clock / home screen; also use this to turn off, '
+             'close, exit, or shut down Apple CarPlay',
+     'api': ('/api/return-to-kiosk', 'carplay')},
+    {'id': 'switch_to_emulator',
+     'desc': 'open the retro game emulator'},
+    {'id': 'switch_to_spotify',
+     'desc': 'bring up the on-dash Spotify player; use this when asked to play '
+             'music/songs/a playlist, not for nav/maps/calls'},
+    {'id': 'spotify_play_pause',
+     'desc': 'toggle play/pause on the Spotify player',
+     'api': ('/api/spotify/toggle', 'spotify')},
+    {'id': 'spotify_next',
+     'desc': 'skip to the next track',
+     'api': ('/api/spotify/next', 'spotify')},
+    {'id': 'spotify_previous',
+     'desc': 'go back to the previous track',
+     'api': ('/api/spotify/previous', 'spotify')},
+    {'id': 'mute_voice',
+     'desc': 'stop speaking and stay silent for the rest of the drive — still '
+             'carry out commands, just do not speak aloud. Use when asked to be '
+             'quiet, hush, shut up, or stop talking',
+     'internal': True},
+    {'id': 'unmute_voice',
+     'desc': 'start speaking aloud again after being silenced. Use when asked '
+             'to talk again, speak up, or that you may resume speaking',
+     'internal': True},
+    {'id': 'none',
+     'desc': 'conversation only, when no screen change is needed'},
+)
+
+VALID_INTENTS = frozenset(cap['id'] for cap in CAPABILITIES)
+# Intents handled entirely inside the sidecar (they toggle TTS) — never
+# forwarded to the kiosk UI or an HTTP endpoint.
+INTERNAL_INTENTS = frozenset(cap['id'] for cap in CAPABILITIES if cap.get('internal'))
 # switch_to_carplay is UI-only: CarPlayReceiver POSTs launch on mount (same as +).
+# switch_to_spotify is UI-only too. The rest carry an 'api' so they still fire
+# if the kiosk WS drops.
 INTENT_API_PATHS = {
-    'return_to_kiosk': '/api/return-to-kiosk',
+    cap['id']: cap['api'][0]
+    for cap in CAPABILITIES if cap.get('api') and cap['api'][1] == 'carplay'
 }
-# Spotify transport intents — switch_to_spotify is UI-only (no API call, just
-# a screen change), the rest hit spotify-server directly so they still work
-# even if the kiosk WS drops.
 INTENT_SPOTIFY_API_PATHS = {
-    'spotify_play_pause': '/api/spotify/toggle',
-    'spotify_next': '/api/spotify/next',
-    'spotify_previous': '/api/spotify/previous',
+    cap['id']: cap['api'][0]
+    for cap in CAPABILITIES if cap.get('api') and cap['api'][1] == 'spotify'
 }
 
 SAMPLE_RATE = 16000          # required by both webrtcvad and whisper.cpp
@@ -115,13 +164,6 @@ CONTEXT_PATH = os.path.expanduser('~/.config/hal-context.yaml')
 ERROR_SPEECH = os.environ.get(
     'S52_HAL_ERROR_TEXT', "I'm sorry. I can't reach my higher functions right now.",
 )
-
-# Screen-switch intents HAL may pick. Forwarded to the kiosk UI verbatim
-# (DisplaySwitcher.jsx maps them onto the same navigation the +/− buttons drive).
-VALID_INTENTS = frozenset({
-    'switch_to_carplay', 'return_to_kiosk', 'switch_to_emulator', 'none',
-    'switch_to_spotify', 'spotify_play_pause', 'spotify_next', 'spotify_previous',
-})
 
 # ── Piper TTS (HAL 9000 voice) ────────────────────────────────────────────────
 PIPER_DIR = os.path.expanduser('~/.local/share/piper')
@@ -504,23 +546,20 @@ def build_system_prompt(context, carplay_active):
             'Right now the dashboard is on its normal display; Apple CarPlay is '
             'not currently on screen.'
         )
+    # The intent menu is generated from CAPABILITIES so the prompt, validation,
+    # and API maps can never drift. Pad the JSON so the descriptions align.
+    id_width = max(len(cap['id']) for cap in CAPABILITIES)
+    menu = '\n'.join(
+        f'{{"intent": "{cap["id"]}"}}{" " * (id_width - len(cap["id"]))} - {cap["desc"]}'
+        for cap in CAPABILITIES
+    )
     lines.append(
         'You control the dashboard by choosing one intent. Emitting an intent '
         'is how you change the screen, so use the matching intent even when '
         'that screen is not currently shown — never say a screen is unavailable. '
         'After your spoken reply, output exactly one JSON object on the final '
         'line and nothing else on that line:\n'
-        '{"intent": "switch_to_carplay"}  - bring up Apple CarPlay; use this for '
-        'navigation, maps, directions, music apps, or phone calls\n'
-        '{"intent": "return_to_kiosk"}    - return to the clock / home screen\n'
-        '{"intent": "switch_to_emulator"} - open the retro game emulator\n'
-        '{"intent": "switch_to_spotify"}  - bring up the on-dash Spotify player; '
-        'use this when asked to play music/songs/a playlist, not for nav/maps/calls\n'
-        '{"intent": "spotify_play_pause"} - toggle play/pause on the Spotify player\n'
-        '{"intent": "spotify_next"}       - skip to the next track\n'
-        '{"intent": "spotify_previous"}   - go back to the previous track\n'
-        '{"intent": "none"}               - conversation only, when no screen '
-        'change is needed\n'
+        + menu + '\n'
         'Pick the single best intent. Never invent other intents, and never '
         'speak the JSON aloud or mention it. There is no way to play a '
         'specific song, artist, or playlist by name yet — if asked, say so and '
@@ -1405,6 +1444,10 @@ class HalVoiceServer:
     def __init__(self):
         self.clients = set()
         self.active = True
+        # "HAL, shut up" sets this for the rest of the session: HAL keeps
+        # listening and acting on commands but stops speaking until "HAL, you
+        # can talk again" (or a service restart).
+        self.muted = False
         self.loop = None
         self._model = None
         self._utterance_queue = asyncio.Queue()
@@ -1573,9 +1616,18 @@ class HalVoiceServer:
         if canned:
             line, intent = canned
             log.info('canned line: %r  intent=%s', line, intent)
-            await self.broadcast({'type': 'speaking'})
-            await asyncio.to_thread(speak_tts, line)
-            if intent != 'none':
+            # A canned entry may carry an internal intent (mute/unmute); apply
+            # the same semantics as the LLM branch. Unmute first so the line is
+            # actually heard; mute after speaking; never forward internal
+            # intents to the kiosk UI.
+            if intent == 'unmute_voice':
+                self.muted = False
+            if not self.muted:
+                await self.broadcast({'type': 'speaking'})
+                await asyncio.to_thread(speak_tts, line)
+            if intent == 'mute_voice':
+                self.muted = True
+            elif intent != 'none' and intent not in INTERNAL_INTENTS:
                 await self.broadcast({'type': 'command', 'intent': intent})
             await self.broadcast({'type': 'idle'})
             return
@@ -1583,8 +1635,9 @@ class HalVoiceServer:
         await self.broadcast({'type': 'listening'})
         if not self.llm.available():
             log.warning('ANTHROPIC_API_KEY not set — cannot reach Claude')
-            await self.broadcast({'type': 'speaking'})
-            await asyncio.to_thread(speak_tts, ERROR_SPEECH)
+            if not self.muted:
+                await self.broadcast({'type': 'speaking'})
+                await asyncio.to_thread(speak_tts, ERROR_SPEECH)
             await self.broadcast({'type': 'idle'})
             return
 
@@ -1596,6 +1649,8 @@ class HalVoiceServer:
 
         async def speak(text):
             nonlocal spoke_any
+            if self.muted:
+                return
             if not spoke_any:
                 await self.broadcast({'type': 'speaking'})
                 spoke_any = True
@@ -1613,8 +1668,9 @@ class HalVoiceServer:
                     spoken_len += len(pending) - len(remainder)
         except Exception as exc:  # noqa: BLE001 - network/API errors → spoken apology
             log.error('Claude request failed: %s', exc)
-            await self.broadcast({'type': 'speaking'})
-            await asyncio.to_thread(speak_tts, ERROR_SPEECH)
+            if not self.muted:
+                await self.broadcast({'type': 'speaking'})
+                await asyncio.to_thread(speak_tts, ERROR_SPEECH)
             await self.broadcast({'type': 'idle'})
             return
 
@@ -1625,7 +1681,21 @@ class HalVoiceServer:
 
         spoken_text, intent = extract_intent(full)
         log.info('HAL: %r  intent=%s', spoken_text, intent)
-        if intent != 'none':
+        if intent == 'unmute_voice':
+            # Streaming above was suppressed while muted — lift the mute, then
+            # voice the acknowledgement so the driver hears HAL come back.
+            was_muted = self.muted
+            self.muted = False
+            log.info('voice unmuted')
+            if was_muted and spoken_text:
+                await self.broadcast({'type': 'speaking'})
+                await asyncio.to_thread(speak_tts, spoken_text)
+        elif intent == 'mute_voice':
+            # The acknowledgement was already spoken during streaming; go silent
+            # from the next utterance on.
+            self.muted = True
+            log.info('voice muted for the rest of the session')
+        elif intent != 'none' and intent not in INTERNAL_INTENTS:
             n_clients = len(self.clients)
             log.info('broadcasting intent=%s to %d client(s)', intent, n_clients)
             await self.broadcast({'type': 'command', 'intent': intent})
