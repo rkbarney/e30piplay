@@ -44,6 +44,10 @@ if os.path.exists(dst):
         cfg = json.load(open(dst))
     except Exception:
         cfg = {}
+if not pulse_sink:
+    # Bluetooth output mode unsets PULSE_SINK — drop any stale pin so LIVI
+    # follows the PipeWire default sink (BT stereo, USB DAC fallback).
+    cfg.pop("audioOutputDevice", None)
 for k, v in overrides.items():
     print(f"  {k}: {cfg.get(k, '(unset)')} -> {v}")
 cfg.update(overrides)

@@ -396,6 +396,32 @@ async function runWifiSwitch(profile) {
   }
 }
 
+// ── Bluetooth audio (Settings → BLUETOOTH / AUDIO OUT) ───────────────────────
+// All commands go through scripts/s52-bluetooth.sh, which emits status JSON.
+// Runs as the kiosk user (bluetooth group + own PipeWire session) — no sudo.
+const BT_SCRIPT_NAME = 's52-bluetooth.sh';
+const BT_SCRIPT_INSTALLED = '/usr/local/bin/s52-bluetooth.sh';
+const BT_MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
+
+function btScriptPath() {
+  return fs.existsSync(BT_SCRIPT_INSTALLED)
+    ? BT_SCRIPT_INSTALLED
+    : path.join(APP_DIR, 'scripts', BT_SCRIPT_NAME);
+}
+
+async function runBluetooth(args, timeout) {
+  const { stdout } = await run('bash', [btScriptPath(), ...args], { timeout });
+  return JSON.parse(stdout.trim());
+}
+
+// MACs come from the UI but originate in our own scan output; validate anyway
+// so nothing shell-unfriendly ever reaches the script.
+function requireMac(raw) {
+  const mac = String(raw || '').trim();
+  if (!BT_MAC_RE.test(mac)) throw new Error('invalid Bluetooth address');
+  return mac;
+}
+
 // Switch to a remote branch, then build + deploy. The branch is validated and
 // passed as an argv (execFile = no shell), so it cannot inject.
 async function runSwitch(branch, force = false) {
@@ -573,6 +599,54 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       const { log } = await runSwitch(String(body.branch || ''), Boolean(body.force));
       json(res, 200, { ok: true, log });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/bluetooth') {
+      json(res, 200, { ok: true, ...(await runBluetooth(['status'], 20000)) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/bluetooth/scan') {
+      // ~12s of discovery plus per-device info lookups.
+      json(res, 200, { ok: true, ...(await runBluetooth(['scan'], 45000)) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/bluetooth/pair') {
+      const body = await readJson(req);
+      // Worst case ≈ agent session (18s) + connect (30s) — keep under nginx's
+      // 60s proxy_read_timeout or the UI sees a 504 instead of the error.
+      json(res, 200, { ok: true, ...(await runBluetooth(['pair', requireMac(body.mac)], 58000)) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/bluetooth/connect') {
+      const body = await readJson(req);
+      json(res, 200, { ok: true, ...(await runBluetooth(['connect', requireMac(body.mac)], 58000)) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/bluetooth/disconnect') {
+      const body = await readJson(req);
+      json(res, 200, { ok: true, ...(await runBluetooth(['disconnect', requireMac(body.mac)], 25000)) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/bluetooth/forget') {
+      const body = await readJson(req);
+      json(res, 200, { ok: true, ...(await runBluetooth(['forget', requireMac(body.mac)], 25000)) });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/audio-output') {
+      const body = await readJson(req);
+      const output = body.output === 'bluetooth' || body.output === 'aux' ? body.output : null;
+      if (!output) {
+        json(res, 400, { ok: false, error: "output must be 'bluetooth' or 'aux'" });
+        return;
+      }
+      json(res, 200, { ok: true, ...(await runBluetooth(['output', output], 30000)) });
       return;
     }
 

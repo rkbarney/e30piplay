@@ -76,6 +76,9 @@ terminal/retro aesthetic matching the BMW M-TECH branding.
 
 ### System
 - OTA / update screen — pull latest code, switch branches, view WiFi profiles
+- Settings: Bluetooth audio out — scan/pair/connect the Kenwood head unit over
+  Bluetooth and send all audio there, with automatic fallback to AUX (USB DAC)
+  whenever the Bluetooth link drops
 
 ### Games
 - ROM emulator screen

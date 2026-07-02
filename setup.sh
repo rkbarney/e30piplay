@@ -74,6 +74,8 @@ sudo apt-get install -y -qq \
   pulseaudio-utils \
   pipewire-pulse \
   wireplumber \
+  bluez \
+  libspa-0.2-bluetooth \
   openssh-server \
   avahi-daemon \
   python3 \
@@ -90,6 +92,15 @@ sudo apt-get install -y -qq \
 
 sudo systemctl enable ssh
 sudo systemctl start ssh
+
+# Bluetooth audio out (Settings → BLUETOOTH): bluetoothd + PipeWire's BT plugin
+# (libspa-0.2-bluetooth above). bluetoothctl talks to bluetoothd over the system
+# D-Bus, which Debian's policy only allows for root and the `bluetooth` group —
+# the carplay-server (kiosk user) drives scan/pair/connect, so add it. Group
+# membership is picked up when s52-carplay restarts later in this script.
+sudo systemctl enable bluetooth 2>/dev/null || true
+sudo systemctl start bluetooth 2>/dev/null || true
+sudo usermod -aG bluetooth "$SERVICE_USER"
 
 # SSH hardening (opt-in). The Pi is reachable on whatever network it joins —
 # home WiFi, a phone hotspot, or any other AP — so on shared/untrusted networks
@@ -361,6 +372,9 @@ sudo install -m 755 "$SOURCE_DIR/scripts/s52-carplay-switch.sh" /usr/local/bin/s
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-enable-livi-receiver-root.sh" /usr/local/bin/s52-enable-livi-receiver-root.sh
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-restart-kiosk.sh" /usr/local/bin/s52-restart-kiosk.sh
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-wifi-switch.sh" /usr/local/bin/s52-wifi-switch.sh
+# Runs unprivileged as the kiosk user (bluetooth group + own PipeWire session);
+# no sudoers entry needed — only its internal raspotify tweak sudo's.
+sudo install -m 755 "$SOURCE_DIR/scripts/s52-bluetooth.sh" /usr/local/bin/s52-bluetooth.sh
 sudo install -m 755 "$SOURCE_DIR/scripts/s52-reboot.sh" /usr/local/bin/s52-reboot.sh
 
 # Canonical app tree for NOPASSWD root helpers (never trust caller-supplied paths).
@@ -598,6 +612,12 @@ install -m 644 "$SOURCE_DIR/scripts/s52-wifi.env.example" "/home/$SERVICE_USER/.
 
 # PipeWire user stack + USB DAC defaults for react-carplay (Electron). Idempotent.
 S52_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
+# If libspa-0.2-bluetooth was just installed, the running PipeWire session
+# doesn't have the BT plugin loaded yet — bounce the user audio stack so
+# bluez sinks can appear without a reboot. Best effort (first install has no
+# session yet; the reboot after setup covers that).
+sudo -u "$SERVICE_USER" env XDG_RUNTIME_DIR="/run/user/${S52_UID}" \
+  systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
 if [[ -x "$SOURCE_DIR/scripts/pi-audio-usb-default.sh" ]]; then
   echo "    CarPlay audio: PipeWire / USB DAC defaults (best effort)…"
   for ((_s = 0; _s < 15; _s++)); do
