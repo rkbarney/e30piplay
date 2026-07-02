@@ -269,15 +269,22 @@ def parse(tsv):
 paired = parse(os.environ.get("PAIRED_TSV", ""))
 mode = os.environ.get("MODE") or "aux"
 bt_sink = os.environ.get("BT_SINK") or None
+default_sink = os.environ.get("DEFAULT_SINK") or None
 connected = [d for d in paired if d["connected"]]
+
+# In bluetooth mode apps follow the default sink (PULSE_SINK is unset), so the
+# actual route is what the default points at — a present-but-not-default bluez
+# sink still plays through aux. Require both: the sink exists AND is default
+# (a just-vanished sink can leave a stale default name for a moment).
+bt_active = bool(mode == "bluetooth" and bt_sink and default_sink and default_sink.startswith("bluez_"))
 
 status = {
     "available": os.environ.get("AVAILABLE") == "true",
     "powered": os.environ.get("POWERED") == "true",
     "mode": mode,
     "btSink": bt_sink,
-    "defaultSink": os.environ.get("DEFAULT_SINK") or None,
-    "effectiveOutput": "bluetooth" if (mode == "bluetooth" and bt_sink) else "aux",
+    "defaultSink": default_sink,
+    "effectiveOutput": "bluetooth" if bt_active else "aux",
     "connected": connected[0] if connected else None,
     "paired": paired,
 }

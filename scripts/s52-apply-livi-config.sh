@@ -27,6 +27,10 @@ mkdir -p "$(dirname "$DST")"
 # passes it to its GStreamer pulsesink — matching react-carplay when PULSE_SINK
 # is set (react-carplay skips --alsa-output-device in that case).
 CARPLAY_AUDIO_ENV="${HOME}/.config/s52-carplay-audio.env"
+# Bluetooth mode intentionally omits PULSE_SINK from the env file; an exported
+# value inherited from the caller would survive the source below and re-pin
+# LIVI to the DAC, so make the file the only source of truth.
+unset PULSE_SINK
 if [[ -f "${CARPLAY_AUDIO_ENV}" ]]; then
   # shellcheck disable=SC1090
   . "${CARPLAY_AUDIO_ENV}"
