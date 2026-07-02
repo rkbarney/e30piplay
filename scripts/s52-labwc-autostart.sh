@@ -128,8 +128,11 @@ elif [ -x "${CARPLAY_LAUNCHER}" ]; then
     USB_ALSA_CARD="${ALSA_CARD:-${S52_USB_ALSA_CARD:-Audio}}"
     # When PULSE_SINK is set (PipeWire + libpulse), let Electron use Pulse; do not
     # also pass --alsa-output-device or Chromium can bypass the Pulse default.
+    # Bluetooth output mode deliberately unsets PULSE_SINK so audio follows the
+    # PipeWire default sink (BT stereo, USB DAC as fallback) — pinning ALSA here
+    # would bypass PipeWire and lock CarPlay to the DAC.
     CARPLAY_ALSA_FLAG=""
-    if [ -z "${PULSE_SINK:-}" ] && command -v amixer >/dev/null 2>&1 && amixer -c "${USB_ALSA_CARD}" info >/dev/null 2>&1; then
+    if [ "${S52_AUDIO_OUTPUT:-aux}" != "bluetooth" ] && [ -z "${PULSE_SINK:-}" ] && command -v amixer >/dev/null 2>&1 && amixer -c "${USB_ALSA_CARD}" info >/dev/null 2>&1; then
       CARPLAY_ALSA_FLAG="--alsa-output-device=plughw:CARD=${USB_ALSA_CARD},DEV=0"
     fi
     # Mesa 25.0.7 (rpt) broke the GBM RGBA_8888 -> dma_buf export path on the

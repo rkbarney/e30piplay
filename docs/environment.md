@@ -11,7 +11,7 @@ single place to look up "what is actually installed."
 | Compute | **Raspberry Pi 5 (8 GB)** (BCM2712) |
 | Display | Waveshare 2.8″ HDMI capacitive touch, **480×640 portrait** (mounted flush in the factory clock opening) |
 | CarPlay dongle | **Carlinkit "AutoKit" A15W**, AP `AutoKit-2041`, fw `2025.10.15.1127`, USB `1314:1520`. iPhone = **wireless only** (no wired data path). See `docs/carlinkit-dongle-reference.md`. |
-| Audio out | USB DAC (C-Media / Unitek Y-247A) → 3.5 mm → Kenwood **AUX** |
+| Audio out | Two paths, chosen in Settings → AUDIO OUT: **Bluetooth** (Pi 5 onboard BT → Kenwood head unit, A2DP) with automatic fallback to **AUX** (USB DAC C-Media / Unitek Y-247A → 3.5 mm). Pair/connect via Settings → BLUETOOTH; routing logic in `scripts/s52-bluetooth.sh`. |
 | Mic | USB lavalier |
 | Power | 12 V ACC → buck → Pi USB-C (`usb_max_current_enable=1`) |
 
