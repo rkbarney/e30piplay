@@ -65,6 +65,7 @@ sudo apt-get install -y -qq \
   labwc \
   wlrctl \
   wlr-randr \
+  wtype \
   swaybg \
   seatd \
   chromium \
