@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """s52-hal-voice — conversational "HAL" voice assistant sidecar.
 
-Listens on the USB mic for the wake word "HAL", transcribes the rest of the
-phrase with whisper.cpp (via pywhispercpp), and hands it to Claude Haiku in the
-cloud. HAL's reply is spoken in the HAL 9000 voice via Piper TTS (a local
+Listens on the USB mic for the wake word "HAL" — via an openWakeWord neural
+detector when a model is installed (S52_HAL_WAKE_MODEL), falling back to
+matching "HAL" in the transcript — transcribes the phrase with whisper.cpp
+(via pywhispercpp), and hands it to Claude Haiku in the cloud. HAL's reply is spoken in the HAL 9000 voice via Piper TTS (a local
 neural voice, pre-trained on 2001: A Space Odyssey audio) — streamed
 sentence-by-sentence as Claude responds, so the first words land fast. Claude
 also picks a screen-switch intent, emitted as a JSON object on the last line of
@@ -17,7 +18,8 @@ frame over a local WebSocket that Hal.jsx / DisplaySwitcher.jsx already consume:
 
 Pipeline:
 
-    Mic → whisper.cpp STT → Claude Haiku (streaming) → Piper TTS → speakers
+    Mic → openWakeWord ("HAL") ─┐
+        → whisper.cpp STT → Claude Haiku (streaming) → Piper TTS → speakers
                                   │
                                   └→ intent JSON → WebSocket → UI
 
@@ -129,7 +131,7 @@ FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000
 # 16 kHz for VAD/whisper rather than failing to open the mic.
 CAPTURE_RATE_CANDIDATES = (16000, 48000, 44100)
 VAD_AGGRESSIVENESS = int(os.environ.get('S52_HAL_VAD_LEVEL', '3'))  # 0-3, higher = stricter
-SILENCE_END_MS = int(os.environ.get('S52_HAL_SILENCE_END_MS', '1200'))  # trailing silence closes utterance
+SILENCE_END_MS = int(os.environ.get('S52_HAL_SILENCE_END_MS', '700'))  # trailing silence closes utterance
 MIN_UTTERANCE_MS = int(os.environ.get('S52_HAL_MIN_UTTERANCE_MS', '450'))  # ignore clicks/pops
 MAX_UTTERANCE_MS = 8000      # safety cap so a stuck-open mic can't buffer forever
 PHRASE_COALESCE_SEC = 4.0    # merge split utterances ("hal" + "switch to carplay")
@@ -141,6 +143,24 @@ LEVEL_BROADCAST_MS = int(os.environ.get('S52_HAL_LEVEL_MS', '33'))
 LEVEL_GAIN = float(os.environ.get('S52_HAL_LEVEL_GAIN', '2.5'))
 
 WHISPER_MODEL = os.environ.get('S52_HAL_WHISPER_MODEL', 'tiny.en')
+# Vocabulary hint prepended to whisper decoding — biases tiny.en toward "HAL"
+# instead of "how"/"hall", so the transcript wake-word match actually fires.
+STT_INITIAL_PROMPT = os.environ.get(
+    'S52_HAL_STT_PROMPT',
+    'HAL, switch to CarPlay. HAL 9000, play some music. HAL, how are you?',
+)
+
+# ── openWakeWord wake engine ──────────────────────────────────────────────────
+# Neural wake detector scoring the same 16 kHz stream the VAD sees, so "HAL"
+# is caught the moment it is spoken instead of after whisper transcribes the
+# finished utterance. S52_HAL_WAKE_MODEL is a path to a trained model (train a
+# custom "HAL" via https://github.com/dscripka/openWakeWord and drop it at the
+# default path) or a pretrained name (hey_jarvis, alexa, hey_mycroft) for
+# testing, downloaded on first run. No model → transcript matching only.
+OWW_DIR = os.path.expanduser('~/.local/share/openwakeword')
+WAKE_MODEL = os.environ.get('S52_HAL_WAKE_MODEL', os.path.join(OWW_DIR, 'hal.onnx'))
+WAKE_THRESHOLD = float(os.environ.get('S52_HAL_WAKE_THRESHOLD', '0.5'))
+WAKE_CHUNK_SAMPLES = 1280  # openWakeWord consumes 80 ms blocks @ 16 kHz
 
 MODELS_DIR = os.path.expanduser('~/.local/share/pywhispercpp/models')
 # Corrupt/partial downloads are usually a few MB; real models are tens of MB.
@@ -928,7 +948,7 @@ def pick_fallback_sink(sinks):
     return None, 'no suitable sink (mic excluded)'
 
 
-def resolve_tts_output():
+def _resolve_tts_output_uncached():
     """Return (backend, target, origin) for TTS playback.
 
     backend is 'pulse' (paplay + PULSE_SINK) or 'alsa' (aplay -D).
@@ -986,6 +1006,27 @@ def resolve_tts_output():
         return 'alsa', alsa_hdmi, 'hdmi (ALSA direct)'
 
     return None, None, 'none'
+
+
+# Resolution shells out to pactl several times (card profiles + sink lists),
+# which added ~100-300 ms before every spoken sentence — cache it briefly.
+TTS_OUTPUT_TTL_SEC = float(os.environ.get('S52_HAL_TTS_OUTPUT_TTL', '10'))
+_TTS_OUTPUT_CACHE = {'stamp': 0.0, 'value': None}
+
+
+def invalidate_tts_output_cache():
+    _TTS_OUTPUT_CACHE['value'] = None
+
+
+def resolve_tts_output():
+    now = time.monotonic()
+    cached = _TTS_OUTPUT_CACHE['value']
+    if cached is not None and now - _TTS_OUTPUT_CACHE['stamp'] < TTS_OUTPUT_TTL_SEC:
+        return cached
+    value = _resolve_tts_output_uncached()
+    _TTS_OUTPUT_CACHE['stamp'] = now
+    _TTS_OUTPUT_CACHE['value'] = value
+    return value
 
 
 def resolve_pulse_sink():
@@ -1313,6 +1354,7 @@ def _play_tts_audio(pcm, sample_rate, text, backend=None, target=None, origin=''
         subprocess.run(cmd, input=pcm, env=env, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
         log.warning('TTS playback failed: %s', exc)
+        invalidate_tts_output_cache()
 
 
 def speak_espeak(text, tts_output=None):
@@ -1340,6 +1382,101 @@ def speak_espeak(text, tts_output=None):
             log.info('TTS(espeak) → ALSA default (%s): %r', origin, text)
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
         log.warning('espeak fallback failed: %s', exc)
+        invalidate_tts_output_cache()
+
+
+class WakeWordEngine:
+    """openWakeWord detector fed the same 30 ms / 16 kHz frames as webrtcvad.
+
+    Detection fires while the driver is still talking (~200 ms into the wake
+    word), long before the utterance closes and whisper runs — the sidecar can
+    flip the eye to 'listening' immediately and later trust the utterance as
+    wake-engaged even when tiny.en mangles "HAL" in the transcript.
+    """
+
+    def __init__(self, model_spec=WAKE_MODEL, threshold=WAKE_THRESHOLD):
+        self._spec = (model_spec or '').strip()
+        self._threshold = threshold
+        self._model = None
+        self._buffer = bytearray()
+        self._above = False  # rising-edge tracking so one wake fires once
+
+    @property
+    def ready(self):
+        return self._model is not None
+
+    def _resolve_model_path(self):
+        if not self._spec:
+            return None
+        if os.sep in self._spec or self._spec.endswith(('.onnx', '.tflite')):
+            path = os.path.expanduser(self._spec)
+            if os.path.isfile(path):
+                return path
+            log.info(
+                'no wake model at %s — using transcript matching only (train a '
+                'custom "HAL" model with openWakeWord, or set '
+                'S52_HAL_WAKE_MODEL=hey_jarvis to test with a stock phrase)',
+                path,
+            )
+            return None
+        # Pretrained model name (e.g. hey_jarvis) — fetched into OWW_DIR once.
+        from openwakeword import MODELS, utils
+        if self._spec not in MODELS:
+            log.warning(
+                'unknown openWakeWord pretrained model %r (choices: %s)',
+                self._spec, ', '.join(sorted(MODELS)),
+            )
+            return None
+        utils.download_models(model_names=[self._spec], target_directory=OWW_DIR)
+        candidates = sorted(glob.glob(os.path.join(OWW_DIR, self._spec + '*.onnx')))
+        return candidates[-1] if candidates else None
+
+    def load(self):
+        """Load the wake model (blocking — run via to_thread). False = disabled."""
+        path = self._resolve_model_path()
+        if not path:
+            return False
+        from openwakeword import utils
+        from openwakeword.model import Model
+        # Shared feature models (melspectrogram/embedding) — 'none' matches no
+        # pretrained wake model, so only the feature/VAD models download.
+        utils.download_models(model_names=['none'], target_directory=OWW_DIR)
+        self._model = Model(
+            wakeword_models=[path],
+            inference_framework='onnx',  # onnxruntime is already here for Piper
+            melspec_model_path=os.path.join(OWW_DIR, 'melspectrogram.onnx'),
+            embedding_model_path=os.path.join(OWW_DIR, 'embedding_model.onnx'),
+        )
+        log.info(
+            'wake engine ready: %s (threshold %.2f)',
+            os.path.basename(path), self._threshold,
+        )
+        return True
+
+    def process(self, frame):
+        """Feed one VAD frame; True once per threshold crossing (rising edge)."""
+        if self._model is None:
+            return False
+        self._buffer.extend(frame)  # amortized O(1) append, unlike np.concatenate
+        chunk_bytes = WAKE_CHUNK_SAMPLES * 2  # int16 samples
+        fired = False
+        while len(self._buffer) >= chunk_bytes:
+            chunk = np.frombuffer(bytes(self._buffer[:chunk_bytes]), dtype=np.int16)
+            del self._buffer[:chunk_bytes]
+            try:
+                scores = self._model.predict(chunk)
+            except Exception as exc:  # noqa: BLE001 - engine hiccup ≠ dead sidecar
+                log.warning('wake engine predict failed: %s', exc)
+                return False
+            score = max(scores.values()) if scores else 0.0
+            if score >= self._threshold:
+                if not self._above:
+                    fired = True
+                    log.info('wake word detected (score %.2f)', score)
+                self._above = True
+            else:
+                self._above = False
+        return fired
 
 
 class HalTts:
@@ -1386,25 +1523,41 @@ class HalTts:
         with wave.open(path, 'wb') as wav_file:
             self._voice.synthesize_wav(text.strip(), wav_file)
 
-    def speak(self, text):
-        """Synthesize and play one chunk of speech (blocking — run via to_thread)."""
+    def render(self, text):
+        """Synthesize one chunk to PCM (blocking — run via to_thread).
+
+        Kept separate from play() so the next sentence can synthesize while
+        this one is still on the speakers. Returns an opaque value for play(),
+        or None for empty text.
+        """
         text = text.strip()
         if not text:
-            return
-        tts_output = resolve_tts_output()
+            return None
         if not self.ready:
-            speak_espeak(text, tts_output)
-            return
+            return ('espeak', text, None, None)
         try:
             pcm, sample_rate = self._synth_pcm(text)
         except Exception as exc:  # noqa: BLE001 - never let a synth error go unspoken
             log.warning('Piper synth failed (%s) — espeak fallback', exc)
-            speak_espeak(text, tts_output)
-            return
+            return ('espeak', text, None, None)
         if not pcm:
+            return None
+        return ('pcm', text, pcm, sample_rate)
+
+    def play(self, rendered):
+        """Play one render()ed chunk (blocking — run via to_thread)."""
+        if rendered is None:
             return
-        backend, target, origin = tts_output
+        kind, text, pcm, sample_rate = rendered
+        if kind == 'espeak':
+            speak_espeak(text)
+            return
+        backend, target, origin = resolve_tts_output()
         _play_tts_audio(pcm, sample_rate, text, backend, target, origin)
+
+    def speak(self, text):
+        """Synthesize and play one chunk of speech (blocking — run via to_thread)."""
+        self.play(self.render(text))
 
 
 # Module-level singleton so speak_tts() stays the single swap point for the voice.
@@ -1455,6 +1608,7 @@ class HalVoiceServer:
         self._level_raw = 0.0
         self._level_smooth = 0.0
         self.llm = HalLLM()
+        self.wake = WakeWordEngine()
         self.context = load_context()
         self.canned = self.context.get('canned') if isinstance(self.context.get('canned'), list) else []
 
@@ -1463,7 +1617,10 @@ class HalVoiceServer:
             ensure_whisper_model()
             from pywhispercpp.model import Model
             log.info('loading whisper.cpp model %s…', WHISPER_MODEL)
-            self._model = Model(WHISPER_MODEL, n_threads=4)
+            params = {'n_threads': 4}
+            if STT_INITIAL_PROMPT:
+                params['initial_prompt'] = STT_INITIAL_PROMPT
+            self._model = Model(WHISPER_MODEL, **params)
         return self._model
 
     async def broadcast(self, frame):
@@ -1545,9 +1702,9 @@ class HalVoiceServer:
     async def utterance_worker(self):
         """Process one utterance at a time — whisper.cpp is not re-entrant."""
         while True:
-            pcm_int16 = await self._utterance_queue.get()
+            pcm_int16, wake_fired = await self._utterance_queue.get()
             try:
-                await self.process_utterance(pcm_int16)
+                await self.process_utterance(pcm_int16, wake_fired)
             except Exception as exc:
                 log.error('utterance failed: %s', exc)
                 await self.broadcast({'type': 'idle'})
@@ -1573,7 +1730,7 @@ class HalVoiceServer:
             self._phrase_chunks.clear()
         return combined, has_wake
 
-    async def process_utterance(self, pcm_int16):
+    async def process_utterance(self, pcm_int16, wake_fired=False):
         utterance_ms = len(pcm_int16) * 1000 // SAMPLE_RATE
         if utterance_ms < MIN_UTTERANCE_MS:
             log.debug('ignoring short utterance (%d ms)', utterance_ms)
@@ -1590,6 +1747,12 @@ class HalVoiceServer:
 
         log.info('heard: %r', transcript)
         combined, has_wake = self.coalesce_phrase(transcript)
+        if wake_fired and combined and not has_wake:
+            # The neural detector heard "HAL" even though the transcript didn't
+            # match — trust the engine and engage on whatever whisper heard.
+            log.info('wake engine engaged (transcript had no wake word)')
+            self._phrase_chunks.clear()
+            has_wake = True
         if not has_wake:
             words = combined.split()
             if words and words[0] in WAKE_HOMOPHONES_START:
@@ -1646,15 +1809,27 @@ class HalVoiceServer:
         full = ''
         spoken_len = 0     # chars of the prose region already sent to TTS
         spoke_any = False
+        play_task = None   # playback of the previous sentence, if still going
 
         async def speak(text):
-            nonlocal spoke_any
+            """Synthesize now, play after the previous sentence finishes —
+            Piper renders sentence N+1 while N is still on the speakers."""
+            nonlocal spoke_any, play_task
             if self.muted:
                 return
             if not spoke_any:
                 await self.broadcast({'type': 'speaking'})
                 spoke_any = True
-            await asyncio.to_thread(speak_tts, text)
+            rendered = await asyncio.to_thread(_TTS.render, text)
+            if play_task is not None:
+                await play_task
+            play_task = asyncio.create_task(asyncio.to_thread(_TTS.play, rendered))
+
+        async def flush_playback():
+            nonlocal play_task
+            if play_task is not None:
+                task, play_task = play_task, None
+                await task
 
         try:
             async with self.llm.stream(system, command) as stream:
@@ -1668,6 +1843,7 @@ class HalVoiceServer:
                     spoken_len += len(pending) - len(remainder)
         except Exception as exc:  # noqa: BLE001 - network/API errors → spoken apology
             log.error('Claude request failed: %s', exc)
+            await flush_playback()
             if not self.muted:
                 await self.broadcast({'type': 'speaking'})
                 await asyncio.to_thread(speak_tts, ERROR_SPEECH)
@@ -1678,6 +1854,7 @@ class HalVoiceServer:
         tail = prose_region(full)[spoken_len:].strip()
         if tail:
             await speak(tail)
+        await flush_playback()
 
         spoken_text, intent = extract_intent(full)
         log.info('HAL: %r  intent=%s', spoken_text, intent)
@@ -1707,22 +1884,33 @@ class HalVoiceServer:
                 await self.invoke_api(SPOTIFY_API, spotify_path)
         await self.broadcast({'type': 'idle'})
 
-    def enqueue_utterance(self, pcm_int16):
+    def enqueue_utterance(self, pcm_int16, wake_fired=False):
         if self._utterance_queue.qsize() >= 2:
             log.debug('dropping utterance — queue full')
             return
-        self._utterance_queue.put_nowait(pcm_int16)
+        self._utterance_queue.put_nowait((pcm_int16, wake_fired))
 
     async def _vad_drain(self, frame_queue, vad):
         """Shared VAD state machine — PortAudio and parec both feed this queue."""
         voiced_frames = []
         silence_ms = 0
         utterance_ms = 0
+        wake_fired = False       # engine heard "HAL" during the buffered utterance
+        wake_pending_until = 0.0  # covers "HAL" (pause) "command" split utterances
         while True:
             frame = await frame_queue.get()
             if not self.active:
                 voiced_frames, silence_ms, utterance_ms = [], 0, 0
+                wake_fired = False
+                wake_pending_until = 0.0  # a pre-pause wake must not engage post-resume speech
                 continue
+
+            if self.wake.ready and self.wake.process(frame):
+                wake_fired = True
+                wake_pending_until = time.monotonic() + PHRASE_COALESCE_SEC
+                # Flip the eye to listening the moment "HAL" lands — feedback
+                # arrives while the driver is still mid-sentence.
+                await self.broadcast({'type': 'listening'})
 
             is_speech = vad.is_speech(frame, SAMPLE_RATE)
             if is_speech:
@@ -1739,8 +1927,10 @@ class HalVoiceServer:
             )
             if should_finalize:
                 pcm = np.frombuffer(b''.join(voiced_frames), dtype=np.int16)
+                engaged = wake_fired or time.monotonic() < wake_pending_until
                 voiced_frames, silence_ms, utterance_ms = [], 0, 0
-                self.enqueue_utterance(pcm)
+                wake_fired = False
+                self.enqueue_utterance(pcm, engaged)
 
     async def _capture_portaudio(self, input_device):
         capture_rate, capture_channels = pick_capture_settings(input_device)
@@ -1840,6 +2030,10 @@ class HalVoiceServer:
             await asyncio.to_thread(_TTS.load)
         except Exception as exc:  # noqa: BLE001 - degrade to espeak, don't refuse to start
             log.warning('Piper voice unavailable (%s) — falling back to espeak-ng', exc)
+        try:
+            await asyncio.to_thread(self.wake.load)
+        except Exception as exc:  # noqa: BLE001 - transcript matching still works
+            log.warning('wake engine unavailable (%s) — transcript matching only', exc)
         if claim_boot_greeting():
             greeting = boot_greeting()
             log.info('boot greeting: %r', greeting)

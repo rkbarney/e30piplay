@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 /**
  * Connects to the local HAL speech sidecar (scripts/s52-hal-voice.py). The
  * sidecar runs whisper.cpp STT against the USB mic and, once the "hal" wake
- * word is heard, sends the phrase to Claude Haiku and speaks the reply in the
- * HAL 9000 voice (Piper TTS) over AUX. It pushes JSON frames over a WebSocket:
+ * word is heard (openWakeWord neural detector when a model is installed,
+ * else transcript matching), sends the phrase to Claude Haiku and speaks the
+ * reply in the HAL 9000 voice (Piper TTS) over AUX. It pushes JSON frames over a WebSocket:
  * { type: 'listening' | 'speaking' | 'idle' } for HAL's eye state (listening
  * only after a wake-word match — not on raw VAD), { type: 'level', value:
  * number } for live mic RMS (0..1, pre-smoothed by the sidecar so the browser
