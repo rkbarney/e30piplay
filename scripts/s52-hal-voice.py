@@ -1398,7 +1398,7 @@ class WakeWordEngine:
         self._spec = (model_spec or '').strip()
         self._threshold = threshold
         self._model = None
-        self._buffer = np.empty(0, dtype=np.int16)
+        self._buffer = bytearray()
         self._above = False  # rising-edge tracking so one wake fires once
 
     @property
@@ -1457,13 +1457,12 @@ class WakeWordEngine:
         """Feed one VAD frame; True once per threshold crossing (rising edge)."""
         if self._model is None:
             return False
-        self._buffer = np.concatenate(
-            (self._buffer, np.frombuffer(frame, dtype=np.int16)),
-        )
+        self._buffer.extend(frame)  # amortized O(1) append, unlike np.concatenate
+        chunk_bytes = WAKE_CHUNK_SAMPLES * 2  # int16 samples
         fired = False
-        while self._buffer.size >= WAKE_CHUNK_SAMPLES:
-            chunk = self._buffer[:WAKE_CHUNK_SAMPLES]
-            self._buffer = self._buffer[WAKE_CHUNK_SAMPLES:]
+        while len(self._buffer) >= chunk_bytes:
+            chunk = np.frombuffer(bytes(self._buffer[:chunk_bytes]), dtype=np.int16)
+            del self._buffer[:chunk_bytes]
             try:
                 scores = self._model.predict(chunk)
             except Exception as exc:  # noqa: BLE001 - engine hiccup ≠ dead sidecar
@@ -1903,6 +1902,7 @@ class HalVoiceServer:
             if not self.active:
                 voiced_frames, silence_ms, utterance_ms = [], 0, 0
                 wake_fired = False
+                wake_pending_until = 0.0  # a pre-pause wake must not engage post-resume speech
                 continue
 
             if self.wake.ready and self.wake.process(frame):
