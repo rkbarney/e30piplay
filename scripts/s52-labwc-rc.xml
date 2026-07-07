@@ -15,6 +15,25 @@
   <theme><cornerRadius>0</cornerRadius></theme>
   <focus><followMouse>no</followMouse></focus>
   <!--
+    Boot cursor hide: labwc paints its default xcursor at screen centre from
+    startup until the first input event — the React app's `cursor: none`
+    (src/global.css) only applies once the pointer is over Chromium's surface,
+    so the arrow sat on the clock face after every boot. labwc (>= 0.8.x, Pi OS
+    ships 0.8.4) only exposes HideCursor as a keybind action, so autostart
+    fires this bind via wtype right after launch. wlroots shows the cursor
+    again on real pointer motion, so a bench USB mouse works the moment it
+    moves — no config flip needed. WarpCursor parks the pointer in the corner
+    as belt-and-braces in case a client re-arms the cursor image later.
+    <default/> keeps labwc's stock keybinds (A-Tab etc.) for bench keyboards.
+  -->
+  <keyboard>
+    <default />
+    <keybind key="A-W-h">
+      <action name="HideCursor" />
+      <action name="WarpCursor" x="-1" y="-1" />
+    </keybind>
+  </keyboard>
+  <!--
     Touch: send real touch events to Chromium (car UI is touch-native). Pi OS
     desktop defaults mouseEmulation=yes so file-manager double-click works; on a
     kiosk with a Waveshare USB panel + bench USB mouse that can leave a visible

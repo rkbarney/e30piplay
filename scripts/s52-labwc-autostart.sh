@@ -53,12 +53,31 @@ sleep "${SWAYBG_SETTLE}" 2>/dev/null || sleep 1
 # hides the X11 root cursor, and s52-kiosk-inner.sh launches Chromium with
 # --ozone-platform=wayland (no XWayland) — so unclutter had no cursor to hide,
 # and the pointer stayed visible in the car regardless of the heuristic.
-# Cursor visibility is now controlled entirely inside the React app: the
-# global `cursor: none` in src/global.css, overridden by a `.show-cursor`
-# class on <body> that the Settings screen's "Show mouse" toggle sets
-# (src/useSettings.js). Flip it on at the bench, off for the car — no
-# detection heuristics, no Pi-side service.
+# In-app cursor visibility (pointer over the page) is controlled by the React
+# app: the global `cursor: none` in src/global.css, overridden by a
+# `.show-cursor` class on <body> that the Settings screen's "Show mouse"
+# toggle sets (src/useSettings.js).
 "${HOME}/.local/bin/s52-kiosk-inner.sh" &
+
+# BUT the React CSS cannot touch labwc's own cursor: the compositor paints its
+# default xcursor at screen centre from startup until the first input event,
+# which left an arrow sitting on the clock face after every car boot (first
+# touch hid it — wlroots hides the pointer cursor on touch input). labwc only
+# exposes HideCursor as a keybind action (A-W-h in rc.xml), so synthesize that
+# keypress with wtype. Fire a few times: surfaces that map late (Chromium,
+# react-carplay) can re-arm the cursor image after the first hide. wlroots
+# shows the cursor again on real pointer motion, so a bench USB mouse works
+# the moment it moves — nothing to toggle for bench use.
+if command -v wtype >/dev/null 2>&1; then
+  (
+    for _hide_delay in 1 5 15; do
+      sleep "${_hide_delay}"
+      wtype -M alt -M logo -P h -p h -m logo -m alt 2>/dev/null || true
+    done
+  ) &
+else
+  echo "[$(date)] wtype missing — compositor cursor stays visible until first touch (re-run setup.sh)" >&2
+fi
 
 # Background CarPlay. Pi 5 V3D init races with Chromium's GPU process on cold
 # boot — we delay a few seconds and force software paint on the AppImage so
