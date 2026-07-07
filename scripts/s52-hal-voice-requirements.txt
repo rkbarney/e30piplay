@@ -11,3 +11,5 @@ numpy
 anthropic
 piper-tts
 pyyaml
+# Neural wake-word detector (runs on the onnxruntime piper-tts already pulls in).
+openwakeword
