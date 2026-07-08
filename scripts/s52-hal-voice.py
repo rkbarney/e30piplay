@@ -79,43 +79,43 @@ CAPABILITIES = (
     {'id': 'switch_to_carplay',
      'desc': 'bring up Apple CarPlay; use this for navigation, maps, '
              'directions, music apps, or phone calls',
-     'help': 'Say, HAL, bring up CarPlay, or ask for directions or a phone '
-             'call, and I will put CarPlay on the dashboard.'},
+     'help': "Say 'Hey HAL, bring up CarPlay' or ask for directions or a "
+             "phone call and I will put CarPlay on the dashboard."},
     {'id': 'return_to_kiosk',
      'desc': 'return to the clock / home screen; also use this to turn off, '
              'close, exit, or shut down Apple CarPlay',
      'api': ('/api/return-to-kiosk', 'carplay'),
-     'help': 'Say, HAL, close CarPlay, to return to the clock.'},
+     'help': "Say 'Hey HAL, close CarPlay' to return to the clock."},
     {'id': 'switch_to_emulator',
      'desc': 'open the retro game emulator',
-     'help': 'Say, HAL, open the emulator, for retro games.'},
+     'help': "Say 'Hey HAL, open the emulator' for retro games."},
     {'id': 'switch_to_spotify',
      'desc': 'bring up the on-dash Spotify player; use this when asked to play '
              'music/songs/a playlist, not for nav/maps/calls',
-     'help': 'Say, HAL, play some music, to bring up Spotify.'},
+     'help': "Say 'Hey HAL, play some music' to bring up Spotify."},
     {'id': 'spotify_play_pause',
      'desc': 'toggle play/pause on the Spotify player',
      'api': ('/api/spotify/toggle', 'spotify'),
-     'help': 'Say, HAL, pause, or, HAL, play, to control playback.'},
+     'help': "Say 'Hey HAL, pause' or 'Hey HAL, play' to control playback."},
     {'id': 'spotify_next',
      'desc': 'skip to the next track',
      'api': ('/api/spotify/next', 'spotify'),
-     'help': 'Say, HAL, next track, to skip ahead.'},
+     'help': "Say 'Hey HAL, next track' to skip ahead."},
     {'id': 'spotify_previous',
      'desc': 'go back to the previous track',
      'api': ('/api/spotify/previous', 'spotify'),
-     'help': 'Say, HAL, previous track, to go back.'},
+     'help': "Say 'Hey HAL, previous track' to go back."},
     {'id': 'mute_voice',
      'desc': 'stop speaking and stay silent for the rest of the drive — still '
              'carry out commands, just do not speak aloud. Use when asked to be '
              'quiet, hush, shut up, or stop talking',
      'internal': True,
-     'help': 'Say, HAL, be quiet, and I will carry out commands silently.'},
+     'help': "Say 'Hey HAL, be quiet' and I will carry out commands silently."},
     {'id': 'unmute_voice',
      'desc': 'start speaking aloud again after being silenced. Use when asked '
              'to talk again, speak up, or that you may resume speaking',
      'internal': True,
-     'help': 'Say, HAL, you may speak again, to restore my voice.'},
+     'help': "Say 'Hey HAL, you may speak again' to restore my voice."},
     {'id': 'list_capabilities',
      'desc': 'recite the list of voice commands and capabilities. Use when '
              'asked what you can do, your capabilities, available commands, '
