@@ -536,13 +536,17 @@ function readSettings() {
 // server just persists it. null is allowed (means "use the default").
 function writeSettings(patch) {
   const next = { ...readSettings().settings };
-  for (const [key, value] of Object.entries(patch || {})) {
+  for (const [key, value] of Object.entries(patch)) {
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
       next[key] = value;
     }
   }
   fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2));
+  // Write-then-rename so a power cut mid-write (this runs in a car) can never
+  // leave a truncated file — the old settings survive instead.
+  const tmp = `${SETTINGS_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+  fs.renameSync(tmp, SETTINGS_FILE);
   return next;
 }
 
@@ -645,6 +649,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/settings') {
       const patch = await readJson(req);
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+        json(res, 400, { ok: false, error: 'settings patch must be a JSON object' });
+        return;
+      }
       json(res, 200, { ok: true, exists: true, settings: writeSettings(patch) });
       return;
     }
