@@ -23,7 +23,12 @@ import { useEffect, useRef, useState } from 'react';
  * No sidecar running -> the socket fails to connect and this hook is a
  * silent no-op, so the UI works (eye just idles) before the sidecar exists.
  */
-const WS_URL = import.meta.env.VITE_HAL_WS_URL ?? 'ws://127.0.0.1:8765';
+// The kiosk (which loads http://localhost) talks to the sidecar directly;
+// remote browsers (a phone that scanned the REMOTE QR) reach it through the
+// nginx /hal-ws proxy, since :8765 itself is loopback-only on the Pi.
+const IS_KIOSK = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+const WS_URL = import.meta.env.VITE_HAL_WS_URL
+  ?? (IS_KIOSK ? 'ws://127.0.0.1:8765' : `ws://${window.location.host}/hal-ws`);
 
 export default function useHalVoice(onIntent, active = true) {
   const [state, setState] = useState('idle'); // idle | listening | speaking
@@ -36,7 +41,10 @@ export default function useHalVoice(onIntent, active = true) {
   const socketRef = useRef(null);
 
   const sendActive = (socket, isActive) => {
-    if (socket?.readyState === WebSocket.OPEN) {
+    // Kiosk-only: the sidecar's active flag is global, and it must track what
+    // the CAR display shows — a remote phone sitting on the CarPlay face must
+    // not mute the car's mic. Remote browsers are view-only listeners.
+    if (IS_KIOSK && socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'set_active', active: isActive }));
     }
   };

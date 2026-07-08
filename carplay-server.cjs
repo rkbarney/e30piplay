@@ -512,6 +512,40 @@ function listRoms() {
   return roms;
 }
 
+// ── Shared UI settings ────────────────────────────────────────────────────────
+// One settings blob for every browser showing the UI (kiosk + phones that
+// scanned the REMOTE QR), so a change made on a phone reaches the car display.
+// Stored outside APP_DIR on purpose: a write here must never dirty the git
+// tree, which would block OTA updates.
+const SETTINGS_FILE = process.env.S52_SETTINGS_FILE
+  || path.join(os.homedir(), '.config', 's52', 'settings.json');
+
+function readSettings() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { exists: true, settings: parsed };
+    }
+  } catch {
+    /* missing or corrupt file — fall through to "not seeded yet" */
+  }
+  return { exists: false, settings: {} };
+}
+
+// Shallow merge of scalar values only — the client owns the schema, the
+// server just persists it. null is allowed (means "use the default").
+function writeSettings(patch) {
+  const next = { ...readSettings().settings };
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+      next[key] = value;
+    }
+  }
+  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2));
+  return next;
+}
+
 // ── Remote access (REMOTE face QR code) ──────────────────────────────────────
 // nginx already serves the kiosk UI on port 80 to the whole LAN; the REMOTE
 // face just needs an address a phone can reach. Prefer wlan over wired so the
@@ -577,6 +611,17 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/network-info') {
       json(res, 200, { ok: true, ...getNetworkInfo() });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/settings') {
+      json(res, 200, { ok: true, ...readSettings() });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/settings') {
+      const patch = await readJson(req);
+      json(res, 200, { ok: true, exists: true, settings: writeSettings(patch) });
       return;
     }
 

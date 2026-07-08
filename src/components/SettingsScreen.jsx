@@ -74,6 +74,12 @@ export default function SettingsScreen({ settings, onUpdate, onBack, onReinstall
         method: 'POST',
         headers: { Accept: 'application/json' },
       });
+      if (res.status === 403) {
+        // nginx keeps reboot/reinstall loopback-only (see setup.sh).
+        setMessage('Reboot only works from the car display itself.');
+        setBusy(false);
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         setMessage(data.detail || data.error || 'Reboot failed.');
@@ -98,6 +104,11 @@ export default function SettingsScreen({ settings, onUpdate, onBack, onReinstall
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ force }),
       });
+      if (res.status === 403) {
+        setMessage('Reinstall only works from the car display itself.');
+        setBusy(false);
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         const detail = data.detail || data.error || 'Reinstall failed.';
