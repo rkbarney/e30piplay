@@ -512,6 +512,33 @@ function listRoms() {
   return roms;
 }
 
+// ── Remote access (REMOTE face QR code) ──────────────────────────────────────
+// nginx already serves the kiosk UI on port 80 to the whole LAN; the REMOTE
+// face just needs an address a phone can reach. Prefer wlan over wired so the
+// QR points at the network a phone is actually on when both are up.
+function getNetworkInfo() {
+  const rank = (name) => {
+    if (/^wl/.test(name)) return 0;                 // wlan0, wlp*
+    if (/^(eth|en|end)/.test(name)) return 1;       // eth0, end0, enp*
+    return 2;
+  };
+  const candidates = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (a.family !== 'IPv4' || a.internal) continue;
+      candidates.push({ name, address: a.address });
+    }
+  }
+  candidates.sort((a, b) => rank(a.name) - rank(b.name));
+  const best = candidates[0] || null;
+  return {
+    hostname: os.hostname(),
+    interface: best ? best.name : null,
+    ip: best ? best.address : null,
+    url: best ? `http://${best.address}/` : null,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -545,6 +572,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/wifi') {
       json(res, 200, { ok: true, ...(await getWifiStatus()) });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/network-info') {
+      json(res, 200, { ok: true, ...getNetworkInfo() });
       return;
     }
 
