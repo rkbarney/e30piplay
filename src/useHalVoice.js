@@ -28,7 +28,9 @@ import { useEffect, useRef, useState } from 'react';
 // nginx /hal-ws proxy, since :8765 itself is loopback-only on the Pi.
 const IS_KIOSK = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
 const WS_URL = import.meta.env.VITE_HAL_WS_URL
-  ?? (IS_KIOSK ? 'ws://127.0.0.1:8765' : `ws://${window.location.host}/hal-ws`);
+  ?? (IS_KIOSK
+    ? 'ws://127.0.0.1:8765'
+    : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/hal-ws`);
 
 export default function useHalVoice(onIntent, active = true) {
   const [state, setState] = useState('idle'); // idle | listening | speaking

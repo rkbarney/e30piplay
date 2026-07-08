@@ -237,10 +237,15 @@ server {
     # ^~ stops regex/other locations from stealing /api/* ; POST must not hit try_files (→ 405).
     #
     # Private-LAN readable: a phone that scanned the REMOTE face QR gets the
-    # same live UI (status, Spotify transport, WiFi profile switch, shared
-    # settings). Destructive endpoints stay loopback-only below, so a guest on
-    # the WiFi — or a CSRF/DNS-rebinding page loaded in some LAN browser — can
-    # at worst flip screens or pause music, never reflash or reboot the car.
+    # same live UI. Concretely, LAN clients can read all status endpoints and
+    # drive the non-destructive controls: screen switching / CarPlay
+    # launch-relaunch, Spotify transport, WiFi profile switching, Bluetooth
+    # pair/connect/forget, audio output, and shared settings. Destructive
+    # endpoints stay loopback-only below, and both API servers additionally
+    # enforce same-origin (Origin must match Host) and reject non-device Host
+    # headers, so a CSRF/DNS-rebinding page in a LAN browser gets 403. The
+    # residual exposure is a trusted-network call: anyone on this WiFi can
+    # reconfigure the display/audio, but never reflash or reboot the car.
     location ^~ /api {
         allow 127.0.0.1;
         allow ::1;
