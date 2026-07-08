@@ -1704,6 +1704,18 @@ class HalVoiceServer:
             await self.broadcast({'type': 'level', 'value': round(boosted, 4)})
 
     async def handle_client(self, websocket):
+        # Connections proxied by nginx (/hal-ws, i.e. remote browsers on the
+        # LAN) carry an X-Forwarded-For header; the kiosk connects straight to
+        # :8765 and does not. Remote clients are view-only: set_active tracks
+        # what the CAR display is showing, so a phone parked on the CarPlay
+        # face must not be able to mute the car's mic.
+        try:
+            headers = getattr(websocket, 'request_headers', None)
+            if headers is None:
+                headers = websocket.request.headers  # websockets >= 14
+            proxied = headers.get('X-Forwarded-For') is not None
+        except Exception:
+            proxied = True  # can't tell — treat as untrusted
         self.clients.add(websocket)
         try:
             async for message in websocket:
@@ -1712,6 +1724,9 @@ class HalVoiceServer:
                 except json.JSONDecodeError:
                     continue
                 if msg.get('type') == 'set_active':
+                    if proxied:
+                        log.info('ignoring set_active from remote (proxied) client')
+                        continue
                     self.active = bool(msg.get('active', True))
                     log.info('listening %s', 'resumed' if self.active else 'paused (CarPlay foregrounded)')
         except websockets.exceptions.ConnectionClosed:

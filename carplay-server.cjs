@@ -512,6 +512,76 @@ function listRoms() {
   return roms;
 }
 
+// ── Shared UI settings ────────────────────────────────────────────────────────
+// One settings blob for every browser showing the UI (kiosk + phones that
+// scanned the REMOTE QR), so a change made on a phone reaches the car display.
+// Stored outside APP_DIR on purpose: a write here must never dirty the git
+// tree, which would block OTA updates.
+const SETTINGS_FILE = process.env.S52_SETTINGS_FILE
+  || path.join(os.homedir(), '.config', 's52', 'settings.json');
+
+function readSettings() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { exists: true, settings: parsed };
+    }
+  } catch {
+    /* missing or corrupt file — fall through to "not seeded yet" */
+  }
+  return { exists: false, settings: {} };
+}
+
+// Shallow merge of scalar values only — the client owns the schema, the
+// server just persists it. null is allowed (means "use the default").
+function writeSettings(patch) {
+  const next = { ...readSettings().settings };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+      next[key] = value;
+    }
+  }
+  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+  // Write-then-rename so a power cut mid-write (this runs in a car) can never
+  // leave a truncated file — the old settings survive instead.
+  const tmp = `${SETTINGS_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+  fs.renameSync(tmp, SETTINGS_FILE);
+  return next;
+}
+
+// ── CSRF / DNS-rebinding guard (see the check in the request handler) ────────
+function normalizeHost(hostWithPort) {
+  const host = String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+  // All loopback spellings count as one origin: proxies (vite dev, nginx
+  // upstreams) may say 127.0.0.1 where the browser's Origin says localhost,
+  // and nothing hostile can serve a page from this device's own loopback.
+  return ['127.0.0.1', '::1', '[::1]'].includes(host) ? 'localhost' : host;
+}
+
+function deviceHostAllowed(hostWithPort) {
+  const host = normalizeHost(hostWithPort);
+  if (!host) return false;
+  if (host === 'localhost') return true; // includes all loopback spellings via normalizeHost
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // LAN/loopback IP literal
+  const name = os.hostname().toLowerCase();
+  return host === name || host === `${name}.local`;
+}
+
+function requestFromThisDevice(req) {
+  if (!deviceHostAllowed(req.headers.host)) return false;
+  const origin = req.headers.origin;
+  if (!origin) return true; // curl / same-origin GET — browsers omit Origin
+  try {
+    // Strict same-origin: the page must have been served by the exact host
+    // this request is addressed to — an Origin that is merely "some other
+    // LAN IP" (a page hosted on a different device) is still cross-site.
+    return normalizeHost(new URL(origin).host) === normalizeHost(req.headers.host);
+  } catch {
+    return false;
+  }
+}
+
 // ── Remote access (REMOTE face QR code) ──────────────────────────────────────
 // nginx already serves the kiosk UI on port 80 to the whole LAN; the REMOTE
 // face just needs an address a phone can reach. Prefer wlan over wired so the
@@ -543,13 +613,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
-    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api')) {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Accept',
-      });
-      res.end();
+    // CSRF / DNS-rebinding guard. Now that nginx lets LAN devices reach /api,
+    // the UI's own requests are always same-origin (no CORS headers are ever
+    // sent — the old wildcard preflight is gone), so a browser page from any
+    // other origin can't read responses or pass a preflight. Two request-forgery
+    // paths remain and are closed here: a "simple" cross-site POST carries an
+    // Origin header that won't be this device (reject), and a DNS-rebound page
+    // is same-origin in the browser but arrives with its own hostname in Host
+    // (reject anything that isn't an IP literal, localhost, or this Pi's name).
+    if (url.pathname.startsWith('/api') && !requestFromThisDevice(req)) {
+      json(res, 403, { ok: false, error: 'forbidden' });
       return;
     }
 
@@ -577,6 +650,21 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/network-info') {
       json(res, 200, { ok: true, ...getNetworkInfo() });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/settings') {
+      json(res, 200, { ok: true, ...readSettings() });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/settings') {
+      const patch = await readJson(req);
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+        json(res, 400, { ok: false, error: 'settings patch must be a JSON object' });
+        return;
+      }
+      json(res, 200, { ok: true, exists: true, settings: writeSettings(patch) });
       return;
     }
 

@@ -53,6 +53,12 @@ export default function SystemScreen({ onMinus, onPlus, onSettings }) {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ force }),
       });
+      if (res.status === 403) {
+        // nginx keeps update/reboot/reinstall loopback-only (see setup.sh).
+        setStatus('error');
+        setMessage('Updates can only be started from the car display itself.');
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         setStatus('error');
@@ -79,6 +85,11 @@ export default function SystemScreen({ onMinus, onPlus, onSettings }) {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ branch, force }),
       });
+      if (res.status === 403) {
+        setStatus('error');
+        setMessage('Branch switching only works from the car display itself.');
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         setStatus('error');

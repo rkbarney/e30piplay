@@ -236,13 +236,45 @@ server {
 
     # ^~ stops regex/other locations from stealing /api/* ; POST must not hit try_files (→ 405).
     #
-    # Loopback-only: the control API can switch branches, pull+build+deploy, and
-    # kill/restart the receiver. It is only ever called same-origin by the
-    # on-device Chromium kiosk (which loads http://localhost), so it must NOT be
-    # reachable from other devices on the WiFi/hotspot, nor driveable cross-origin
-    # (CSRF/DNS-rebinding) from a browser elsewhere on the network. Allow loopback
-    # only; everything else gets 403.
+    # Private-LAN readable: a phone that scanned the REMOTE face QR gets the
+    # same live UI. Concretely, LAN clients can read all status endpoints and
+    # drive the non-destructive controls: screen switching / CarPlay
+    # launch-relaunch, Spotify transport, WiFi profile switching, Bluetooth
+    # pair/connect/forget, audio output, and shared settings. Destructive
+    # endpoints stay loopback-only below, and both API servers additionally
+    # enforce same-origin (Origin must match Host) and reject non-device Host
+    # headers, so a CSRF/DNS-rebinding page in a LAN browser gets 403. The
+    # residual exposure is a trusted-network call: anyone on this WiFi can
+    # reconfigure the display/audio, but never reflash or reboot the car.
     location ^~ /api {
+        allow 127.0.0.1;
+        allow ::1;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
+        deny all;
+
+        proxy_pass         http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header   Host \$host;
+        proxy_set_header   X-Real-IP \$remote_addr;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+    }
+
+    # Loopback-only: these pull+build+deploy, wipe the install, reboot, or
+    # switch branches. Only the on-device kiosk (which loads http://localhost)
+    # may call them; remote browsers get 403 and the UI says "kiosk only".
+    # Exact matches (=) take precedence over the ^~ /api prefix above.
+    # /api/reinstall/status and /api/reinstall/ack deliberately stay
+    # LAN-visible: status is a read-only view of the install log so a phone
+    # can watch a reinstall the kiosk started, and ack merely dismisses the
+    # finished overlay — neither can start anything.
+NGINX
+
+for ENDPOINT in /api/update /api/reinstall /api/reboot /api/switch-branch; do
+sudo tee -a /etc/nginx/sites-available/s52 > /dev/null <<NGINX
+    location = ${ENDPOINT} {
         allow 127.0.0.1;
         allow ::1;
         deny all;
@@ -254,12 +286,18 @@ server {
         proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto \$scheme;
     }
+NGINX
+done
 
-    # Same loopback-only trust boundary as /api above, just routed to the
+sudo tee -a /etc/nginx/sites-available/s52 > /dev/null <<NGINX
+    # Same private-LAN trust boundary as /api above, just routed to the
     # Spotify control sidecar (play/pause/now-playing/login-url) on :3002.
     location ^~ /api/spotify {
         allow 127.0.0.1;
         allow ::1;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
         deny all;
 
         proxy_pass         http://127.0.0.1:3002;
@@ -308,6 +346,29 @@ server {
 
     location / {
         try_files \$uri \$uri/ /index.html;
+    }
+
+    # HAL voice sidecar status frames (eye state, mic level, transcripts) so a
+    # remote browser's HAL face mirrors the car. View-only from remotes: the
+    # client only sends set_active from the kiosk itself (see useHalVoice.js),
+    # because the sidecar's active flag is global — a phone parked on the
+    # CarPlay face must not mute the car's mic.
+    location = /hal-ws {
+        allow 127.0.0.1;
+        allow ::1;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
+        deny all;
+
+        proxy_pass         http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade \$http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        # The sidecar uses this header's presence to tell proxied (remote,
+        # view-only) clients apart from the kiosk's direct connection.
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_read_timeout 1h;
     }
 
     # Same trust boundary as /api — the WebSocket bridge also reaches the
