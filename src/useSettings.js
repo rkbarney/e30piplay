@@ -69,9 +69,13 @@ export default function useSettings() {
         if (cancelled || !data.ok || pendingRef.current > 0) return;
         if (data.exists) {
           const next = { ...DEFAULTS, ...data.settings };
-          saveCache(next);
-          setSettings((prev) =>
-            JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
+          // Only touch localStorage when something changed — an unconditional
+          // write every poll tick would grind the kiosk's SD card forever.
+          setSettings((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+            saveCache(next);
+            return next;
+          });
         } else {
           // Server has never been seeded (first run after settings moved
           // server-side). Push this browser's existing localStorage copy up so

@@ -448,13 +448,17 @@ display:flex;align-items:center;justify-content:center;height:100vh;margin:0;tex
 // /spotify-callback is exempt — the public OAuth bouncer navigates the phone
 // here, and it only completes a login this Pi started (state-checked).
 function normalizeHost(hostWithPort) {
-  return String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+  const host = String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+  // All loopback spellings count as one origin: proxies (vite dev, nginx
+  // upstreams) may say 127.0.0.1 where the browser's Origin says localhost,
+  // and nothing hostile can serve a page from this device's own loopback.
+  return ['127.0.0.1', '::1', '[::1]'].includes(host) ? 'localhost' : host;
 }
 
 function deviceHostAllowed(hostWithPort) {
   const host = normalizeHost(hostWithPort);
   if (!host) return false;
-  if (host === 'localhost' || host === '[::1]' || host === '::1') return true;
+  if (host === 'localhost') return true; // includes all loopback spellings via normalizeHost
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // LAN/loopback IP literal
   const name = os.hostname().toLowerCase();
   return host === name || host === `${name}.local`;
