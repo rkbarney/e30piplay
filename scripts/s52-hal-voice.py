@@ -201,19 +201,6 @@ PIPER_CONFIG_URL = os.environ.get(
 )
 PIPER_MODEL_MIN_BYTES = 60 * 1024 * 1024  # real model ~63 MB; catch truncated downloads
 
-# HAL delivery tuning (piper SynthesisConfig). HAL speaks slowly, evenly, and
-# unhurried, so the voice is slightly slowed with reduced variability by
-# default. These cost nothing at synthesis time — dial them in by ear on the
-# Pi via ~/.config/s52-hal-voice.env.
-#   length_scale  >1 = slower (HAL is deliberate); ~1.0 is Piper's natural pace
-#   noise_scale   lower = steadier, less volatile timbre
-#   noise_w       lower = more measured, less phrase-to-phrase variation
-#   volume        1.0 = unchanged output loudness
-TTS_LENGTH_SCALE = float(os.environ.get('S52_HAL_TTS_LENGTH_SCALE', '1.2'))
-TTS_NOISE_SCALE = float(os.environ.get('S52_HAL_TTS_NOISE_SCALE', '0.5'))
-TTS_NOISE_W_SCALE = float(os.environ.get('S52_HAL_TTS_NOISE_W', '0.7'))
-TTS_VOLUME = float(os.environ.get('S52_HAL_TTS_VOLUME', '1.0'))
-
 MIC_WAIT_SEC = float(os.environ.get('S52_HAL_MIC_WAIT_SEC', '5'))
 
 # Wake word + homophones. We engage Claude when the wake word is heard; the rest
@@ -1497,28 +1484,10 @@ class HalTts:
 
     def __init__(self):
         self._voice = None
-        self._syn_config = None
 
     @property
     def ready(self):
         return self._voice is not None
-
-    def _make_syn_config(self):
-        """HAL's slow, even delivery as a piper SynthesisConfig.
-
-        Returns None on an older piper-tts without SynthesisConfig, so the
-        voice still speaks (just at Piper's stock pace)."""
-        try:
-            from piper import SynthesisConfig
-        except ImportError:
-            log.info('piper SynthesisConfig unavailable — using stock delivery')
-            return None
-        return SynthesisConfig(
-            length_scale=TTS_LENGTH_SCALE,
-            noise_scale=TTS_NOISE_SCALE,
-            noise_w_scale=TTS_NOISE_W_SCALE,
-            volume=TTS_VOLUME,
-        )
 
     def load(self):
         ensure_piper_model()
@@ -1536,16 +1505,10 @@ class HalTts:
                     os.remove(path)
             ensure_piper_model()
             self._voice = PiperVoice.load(PIPER_MODEL_PATH, use_cuda=False)
-        self._syn_config = self._make_syn_config()
-        if self._syn_config is not None:
-            log.info(
-                'HAL delivery: length_scale=%s noise_scale=%s noise_w=%s volume=%s',
-                TTS_LENGTH_SCALE, TTS_NOISE_SCALE, TTS_NOISE_W_SCALE, TTS_VOLUME,
-            )
         return self._voice
 
     def _synth_pcm(self, text):
-        chunks = list(self._voice.synthesize(text, syn_config=self._syn_config))
+        chunks = list(self._voice.synthesize(text))
         if not chunks:
             return b'', SAMPLE_RATE
         pcm = b''.join(chunk.audio_int16_bytes for chunk in chunks)
@@ -1558,7 +1521,7 @@ class HalTts:
             raise RuntimeError('Piper voice not loaded')
         import wave
         with wave.open(path, 'wb') as wav_file:
-            self._voice.synthesize_wav(text.strip(), wav_file, syn_config=self._syn_config)
+            self._voice.synthesize_wav(text.strip(), wav_file)
 
     def render(self, text):
         """Synthesize one chunk to PCM (blocking — run via to_thread).
