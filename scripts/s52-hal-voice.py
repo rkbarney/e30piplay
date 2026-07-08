@@ -73,39 +73,59 @@ SPOTIFY_API = os.environ.get('S52_SPOTIFY_API', 'http://127.0.0.1:3002')
 #              spotify-server. UI-only intents (switch_to_carplay/_spotify) omit it.
 #   internal - sidecar-only behavior (no frontend command, no API); handled in
 #              converse() rather than by the kiosk UI.
+#   help     - spoken line for the list_capabilities recital; the rundown is
+#              generated from these so it can never drift from the real list.
 CAPABILITIES = (
     {'id': 'switch_to_carplay',
      'desc': 'bring up Apple CarPlay; use this for navigation, maps, '
-             'directions, music apps, or phone calls'},
+             'directions, music apps, or phone calls',
+     'help': 'Say, HAL, bring up CarPlay, or ask for directions or a phone '
+             'call, and I will put CarPlay on the dashboard.'},
     {'id': 'return_to_kiosk',
      'desc': 'return to the clock / home screen; also use this to turn off, '
              'close, exit, or shut down Apple CarPlay',
-     'api': ('/api/return-to-kiosk', 'carplay')},
+     'api': ('/api/return-to-kiosk', 'carplay'),
+     'help': 'Say, HAL, close CarPlay, to return to the clock.'},
     {'id': 'switch_to_emulator',
-     'desc': 'open the retro game emulator'},
+     'desc': 'open the retro game emulator',
+     'help': 'Say, HAL, open the emulator, for retro games.'},
     {'id': 'switch_to_spotify',
      'desc': 'bring up the on-dash Spotify player; use this when asked to play '
-             'music/songs/a playlist, not for nav/maps/calls'},
+             'music/songs/a playlist, not for nav/maps/calls',
+     'help': 'Say, HAL, play some music, to bring up Spotify.'},
     {'id': 'spotify_play_pause',
      'desc': 'toggle play/pause on the Spotify player',
-     'api': ('/api/spotify/toggle', 'spotify')},
+     'api': ('/api/spotify/toggle', 'spotify'),
+     'help': 'Say, HAL, pause, or, HAL, play, to control playback.'},
     {'id': 'spotify_next',
      'desc': 'skip to the next track',
-     'api': ('/api/spotify/next', 'spotify')},
+     'api': ('/api/spotify/next', 'spotify'),
+     'help': 'Say, HAL, next track, to skip ahead.'},
     {'id': 'spotify_previous',
      'desc': 'go back to the previous track',
-     'api': ('/api/spotify/previous', 'spotify')},
+     'api': ('/api/spotify/previous', 'spotify'),
+     'help': 'Say, HAL, previous track, to go back.'},
     {'id': 'mute_voice',
      'desc': 'stop speaking and stay silent for the rest of the drive — still '
              'carry out commands, just do not speak aloud. Use when asked to be '
              'quiet, hush, shut up, or stop talking',
-     'internal': True},
+     'internal': True,
+     'help': 'Say, HAL, be quiet, and I will carry out commands silently.'},
     {'id': 'unmute_voice',
      'desc': 'start speaking aloud again after being silenced. Use when asked '
              'to talk again, speak up, or that you may resume speaking',
+     'internal': True,
+     'help': 'Say, HAL, you may speak again, to restore my voice.'},
+    {'id': 'list_capabilities',
+     'desc': 'recite the list of voice commands and capabilities. Use when '
+             'asked what you can do, your capabilities, available commands, '
+             'or for help. Speak only a brief one-sentence acknowledgement — '
+             'the full list is recited automatically after your reply',
      'internal': True},
     {'id': 'none',
-     'desc': 'conversation only, when no screen change is needed'},
+     'desc': 'conversation only, when no screen change is needed',
+     'help': 'And beyond commands, you may simply talk to me — ask me '
+             'anything about the car, the road, or whatever is on your mind.'},
 )
 
 VALID_INTENTS = frozenset(cap['id'] for cap in CAPABILITIES)
@@ -632,6 +652,11 @@ def extract_intent(full_text):
             intent = candidate
         spoken = full_text[:match.start()] + full_text[match.end():]
     return spoken.strip(), intent
+
+
+def capabilities_speech():
+    """The spoken capability rundown, derived from the registry's help lines."""
+    return ' '.join(cap['help'] for cap in CAPABILITIES if cap.get('help'))
 
 
 def match_canned(command, canned):
@@ -1788,6 +1813,8 @@ class HalVoiceServer:
             if not self.muted:
                 await self.broadcast({'type': 'speaking'})
                 await asyncio.to_thread(speak_tts, line)
+                if intent == 'list_capabilities':
+                    await asyncio.to_thread(speak_tts, capabilities_speech())
             if intent == 'mute_voice':
                 self.muted = True
             elif intent != 'none' and intent not in INTERNAL_INTENTS:
@@ -1872,6 +1899,13 @@ class HalVoiceServer:
             # from the next utterance on.
             self.muted = True
             log.info('voice muted for the rest of the session')
+        elif intent == 'list_capabilities':
+            # Claude spoke a short lead-in during streaming; the accurate,
+            # registry-derived rundown follows so the two can never disagree.
+            if not self.muted:
+                if not spoke_any:
+                    await self.broadcast({'type': 'speaking'})
+                await asyncio.to_thread(speak_tts, capabilities_speech())
         elif intent != 'none' and intent not in INTERNAL_INTENTS:
             n_clients = len(self.clients)
             log.info('broadcasting intent=%s to %d client(s)', intent, n_clients)
