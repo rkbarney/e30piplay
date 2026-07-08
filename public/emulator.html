@@ -25,10 +25,33 @@
     #game { width: 100%; height: 100%; }
     .ejs_menu_bar { display: none !important; }
     .ejs_start_button { display: none !important; }
+    /* Touch affordance to open EmulatorJS's control-remap menu (the menu bar
+       is hidden above). Needed so the human can rebind this non-standard
+       controller by pressing each button once. */
+    #s52-controls-btn {
+      position: fixed;
+      top: 4px;
+      right: 4px;
+      z-index: 2147483647;
+      padding: 7px 10px;
+      font: bold 11px/1 monospace;
+      letter-spacing: 0.08em;
+      color: #ff5500;
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid #ff5500;
+      border-radius: 6px;
+      opacity: 0.45;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      user-select: none;
+    }
+    #s52-controls-btn:active { opacity: 1; }
   </style>
 </head>
 <body>
 <div id="game"></div>
+<button id="s52-controls-btn" type="button">CTRLS</button>
 <script>
   (function () {
     var p = new URLSearchParams(location.search);
@@ -163,7 +186,119 @@
       }
     });
 
+    // ── Gamepad reliability + cross-game control persistence ────────────────
+    // Problem 1 (detection): the browser only exposes a connected gamepad to a
+    //   document after a button is pressed while THAT document has focus. Every
+    //   game is a fresh iframe, so unless the iframe holds focus the human's
+    //   first press is swallowed and EmulatorJS never sees a "connected" event
+    //   (emulator.js:1140 auto-selects the pad to player 1 on that event).
+    //   Fix: aggressively claim focus on load and on every interaction.
+    // Problem 2 (mapping persistence): EmulatorJS stores control remaps under a
+    //   PER-GAME localStorage key (emulator.js:4144 → "ejs-<id>-<core>-<name>-
+    //   settings"), so a remap done in one ROM would not apply to others. Fix:
+    //   mirror the live control map to a single GLOBAL key and re-apply it on
+    //   every game load, so one remap covers every game and survives reboots.
+    var GLOBAL_CONTROLS_KEY = 's52-gamepad-controls-v1';
+
+    function loadGlobalControls() {
+      try {
+        var raw = window.localStorage && localStorage.getItem(GLOBAL_CONTROLS_KEY);
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed['0']) return parsed;
+      } catch (e) {}
+      return null;
+    }
+
+    function saveGlobalControls(controls) {
+      try {
+        if (window.localStorage) {
+          localStorage.setItem(GLOBAL_CONTROLS_KEY, JSON.stringify(controls));
+        }
+      } catch (e) {}
+    }
+
+    function grabFocus() {
+      try { window.focus(); } catch (e) {}
+      try { if (document.body && document.body.focus) document.body.focus(); } catch (e) {}
+    }
+
+    ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown'].forEach(function (evt) {
+      window.addEventListener(evt, grabFocus, true);
+    });
+    window.addEventListener('gamepadconnected', grabFocus);
+    window.addEventListener('load', grabFocus);
+    grabFocus();
+
+    // Copy the saved gamepad bindings (value2) onto the running emulator's
+    // control set. Only touches control ids the current core already exposes,
+    // so we never inject inputs the core doesn't understand. Runs AFTER
+    // emulator.js:1001 loadSettings (which happens just before started=true at
+    // :1012), so it overrides any stale per-game mapping.
+    function applyControlBindings(emu) {
+      var g = loadGlobalControls() || window.EJS_defaultControls;
+      if (!g || !emu || !emu.controls) return;
+      try {
+        for (var pl in g) {
+          if (!emu.controls[pl]) continue;
+          for (var cid in g[pl]) {
+            if (!emu.controls[pl][cid]) continue;
+            var src = g[pl][cid];
+            if (src && typeof src === 'object' && src.value2 !== undefined) {
+              emu.controls[pl][cid].value2 = src.value2;
+            }
+          }
+        }
+        if (typeof emu.setupKeys === 'function') emu.setupKeys();
+        if (typeof emu.checkGamepadInputs === 'function') emu.checkGamepadInputs();
+        if (!loadGlobalControls()) saveGlobalControls(emu.controls);
+      } catch (e) {}
+    }
+
+    var s52HookDone = false;
+    function installControlsHook() {
+      var emu = window.EJS_emulator;
+      if (!emu || !emu.started || !emu.controls) return false;
+      if (s52HookDone) return true;
+      s52HookDone = true;
+
+      applyControlBindings(emu);
+      // Late re-apply in case EmulatorJS reloads per-game settings after start.
+      setTimeout(function () { applyControlBindings(emu); }, 800);
+
+      // Persist every remap (made through the CTRLS menu) to the global key.
+      if (typeof emu.saveSettings === 'function' && !emu.__s52Wrapped) {
+        var orig = emu.saveSettings.bind(emu);
+        emu.saveSettings = function () {
+          orig();
+          try { saveGlobalControls(emu.controls); } catch (e) {}
+        };
+        emu.__s52Wrapped = true;
+      }
+      grabFocus();
+      return true;
+    }
+
+    var s52HookTimer = setInterval(function () {
+      if (installControlsHook()) clearInterval(s52HookTimer);
+    }, 200);
+
+    // CTRLS button → open EmulatorJS's built-in control-remap menu (touch).
+    (function () {
+      var btn = document.getElementById('s52-controls-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var emu = window.EJS_emulator;
+        if (emu && emu.controlMenu) {
+          emu.controlMenu.style.display = '';
+        }
+        grabFocus();
+      });
+    }());
+
     window.EJS_ready = function () {
+      grabFocus();
+      installControlsHook();
       try {
         window.parent.postMessage({ type: 's52-emulator-ready' }, parentOrigin);
       } catch (e) {}
@@ -184,6 +319,79 @@
       'save-save-interval': 15,
       'save-state-location': 'browser',
     };
+
+    // Player-1 default control map. Mirrors EmulatorJS 4.2.3 defaults, EXCEPT
+    // the four direction controls (ids 4/5/6/7 = UP/DOWN/LEFT/RIGHT) are bound
+    // to the LEFT analog stick axes instead of the standard dpad buttons.
+    //
+    // Why: the 8BitDo N30 Modkit (wired) reports its dpad as ABS_X/ABS_Y, which
+    // the browser Gamepad API exposes as the left stick (axes 0/1), not as
+    // dpad buttons[12-15]. EmulatorJS binds each control to a SINGLE gamepad
+    // input via `value2` — a button label ("DPAD_UP") OR an axis spec
+    // ("LEFT_STICK_Y:-1"), never both — so the directions must target the axes
+    // for this controller's dpad to move the character.
+    //
+    // The face buttons here assume the STANDARD gamepad layout, which this
+    // controller does not use (only A lines up). That is why the human must
+    // remap once via the CTRLS button; that remap is stored globally (see
+    // above) and this default is only the out-of-the-box fallback. A saved
+    // global mapping always wins over this default.
+    var DEFAULT_CONTROLS = {
+      0: {
+        0:  { value: 'x',           value2: 'BUTTON_2' },
+        1:  { value: 's',           value2: 'BUTTON_4' },
+        2:  { value: 'v',           value2: 'SELECT' },
+        3:  { value: 'enter',       value2: 'START' },
+        4:  { value: 'up arrow',    value2: 'LEFT_STICK_Y:-1' },
+        5:  { value: 'down arrow',  value2: 'LEFT_STICK_Y:+1' },
+        6:  { value: 'left arrow',  value2: 'LEFT_STICK_X:-1' },
+        7:  { value: 'right arrow', value2: 'LEFT_STICK_X:+1' },
+        8:  { value: 'z',           value2: 'BUTTON_1' },
+        9:  { value: 'a',           value2: 'BUTTON_3' },
+        10: { value: 'q',           value2: 'LEFT_TOP_SHOULDER' },
+        11: { value: 'e',           value2: 'RIGHT_TOP_SHOULDER' },
+        12: { value: 'tab',         value2: 'LEFT_BOTTOM_SHOULDER' },
+        13: { value: 'r',           value2: 'RIGHT_BOTTOM_SHOULDER' },
+        14: { value: '',            value2: 'LEFT_STICK' },
+        15: { value: '',            value2: 'RIGHT_STICK' },
+        16: { value: 'h',           value2: 'LEFT_STICK_X:+1' },
+        17: { value: 'f',           value2: 'LEFT_STICK_X:-1' },
+        18: { value: 'g',           value2: 'LEFT_STICK_Y:+1' },
+        19: { value: 't',           value2: 'LEFT_STICK_Y:-1' },
+        20: { value: 'l',           value2: 'RIGHT_STICK_X:+1' },
+        21: { value: 'j',           value2: 'RIGHT_STICK_X:-1' },
+        22: { value: 'k',           value2: 'RIGHT_STICK_Y:+1' },
+        23: { value: 'i',           value2: 'RIGHT_STICK_Y:-1' },
+        24: { value: '1' },
+        25: { value: '2' },
+        26: { value: '3' },
+      },
+      1: {},
+      2: {},
+      3: {},
+    };
+
+    // A previously saved global remap takes priority over the default so it
+    // applies to every game from the first frame. Merge (rather than replace)
+    // so control ids the saved map doesn't cover keep their default bindings.
+    function mergeGlobalOverDefault() {
+      var merged = JSON.parse(JSON.stringify(DEFAULT_CONTROLS));
+      var g = loadGlobalControls();
+      if (g) {
+        for (var pl in g) {
+          if (!merged[pl]) merged[pl] = {};
+          for (var cid in g[pl]) {
+            var src = g[pl][cid];
+            if (!src || typeof src !== 'object') continue;
+            if (!merged[pl][cid]) merged[pl][cid] = {};
+            if (src.value !== undefined) merged[pl][cid].value = src.value;
+            if (src.value2 !== undefined) merged[pl][cid].value2 = src.value2;
+          }
+        }
+      }
+      return merged;
+    }
+    window.EJS_defaultControls = mergeGlobalOverDefault();
 
     var s = document.createElement('script');
     s.src = '/emulatorjs/loader.js';
