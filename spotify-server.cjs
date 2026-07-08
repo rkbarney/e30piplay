@@ -447,8 +447,12 @@ display:flex;align-items:center;justify-content:center;height:100vh;margin:0;tex
 // No CORS headers are sent anywhere anymore — the UI is always same-origin.
 // /spotify-callback is exempt — the public OAuth bouncer navigates the phone
 // here, and it only completes a login this Pi started (state-checked).
+function normalizeHost(hostWithPort) {
+  return String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+}
+
 function deviceHostAllowed(hostWithPort) {
-  const host = String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+  const host = normalizeHost(hostWithPort);
   if (!host) return false;
   if (host === 'localhost' || host === '[::1]' || host === '::1') return true;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // LAN/loopback IP literal
@@ -461,7 +465,10 @@ function requestFromThisDevice(req) {
   const origin = req.headers.origin;
   if (!origin) return true; // curl / same-origin GET — browsers omit Origin
   try {
-    return deviceHostAllowed(new URL(origin).host);
+    // Strict same-origin: the page must have been served by the exact host
+    // this request is addressed to — an Origin that is merely "some other
+    // LAN IP" (a page hosted on a different device) is still cross-site.
+    return normalizeHost(new URL(origin).host) === normalizeHost(req.headers.host);
   } catch {
     return false;
   }

@@ -551,8 +551,12 @@ function writeSettings(patch) {
 }
 
 // ── CSRF / DNS-rebinding guard (see the check in the request handler) ────────
+function normalizeHost(hostWithPort) {
+  return String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+}
+
 function deviceHostAllowed(hostWithPort) {
-  const host = String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+  const host = normalizeHost(hostWithPort);
   if (!host) return false;
   if (host === 'localhost' || host === '[::1]' || host === '::1') return true;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // LAN/loopback IP literal
@@ -565,7 +569,10 @@ function requestFromThisDevice(req) {
   const origin = req.headers.origin;
   if (!origin) return true; // curl / same-origin GET — browsers omit Origin
   try {
-    return deviceHostAllowed(new URL(origin).host);
+    // Strict same-origin: the page must have been served by the exact host
+    // this request is addressed to — an Origin that is merely "some other
+    // LAN IP" (a page hosted on a different device) is still cross-site.
+    return normalizeHost(new URL(origin).host) === normalizeHost(req.headers.host);
   } catch {
     return false;
   }
