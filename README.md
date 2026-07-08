@@ -7,7 +7,7 @@ entry screen that hands the display to the upstream Electron **`react-carplay`**
 ## What it does
 
 - Boots into **HAL**, a voice-driven assistant screen (offline wake-word + STT, cloud LLM, TTS) that can navigate the UI by voice
-- Cycles through six faces — `HAL`, `Spotify` (native Spotify Connect player), `Factory` clock, `Digital` clock, `System` (OTA), and `Games` (ROM emulator) — and a CarPlay entry screen
+- Cycles through seven faces — `HAL`, `Spotify` (native Spotify Connect player), `Factory` clock, `Digital` clock, `System` (OTA), `Games` (ROM emulator), and `Remote` (QR code that opens the UI in a browser on the same WiFi) — and a CarPlay entry screen
 - Spotify face logs in via a phone-scannable QR code (PKCE OAuth) and gives HAL transport control (play/pause/skip) over the Pi's own Spotify Connect device, independent of CarPlay
 - Uses `-` to cycle faces and `+` to open the CarPlay screen (launch Electron from there on the Pi)
 - Runs in a fixed 320x480 design viewport with auto scaling

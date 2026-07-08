@@ -7,6 +7,7 @@ import SettingsScreen  from './SettingsScreen';
 import Games           from './Games';
 import Hal             from './Hal';
 import SpotifyPlayer   from './SpotifyPlayer';
+import RemoteScreen    from './RemoteScreen';
 import ReinstallProgress from './ReinstallProgress';
 import useHalVoice     from '../useHalVoice';
 import useReinstallWatch from '../useReinstallWatch';
@@ -124,6 +125,7 @@ export default function DisplaySwitcher() {
       {screen === 'digital'  && <DigitalClock onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'system'   && <SystemScreen onMinus={handleMinus} onPlus={handlePlus} onSettings={openSettings} />}
       {screen === 'games'    && <Games onMinus={handleMinus} onPlus={handlePlus} />}
+      {screen === 'remote'   && <RemoteScreen onMinus={handleMinus} onPlus={handlePlus} />}
       {screen === 'settings' && (
         <SettingsScreen
           settings={settings}
