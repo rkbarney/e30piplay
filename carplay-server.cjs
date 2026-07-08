@@ -546,6 +546,27 @@ function writeSettings(patch) {
   return next;
 }
 
+// ── CSRF / DNS-rebinding guard (see the check in the request handler) ────────
+function deviceHostAllowed(hostWithPort) {
+  const host = String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+  if (!host) return false;
+  if (host === 'localhost' || host === '[::1]' || host === '::1') return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // LAN/loopback IP literal
+  const name = os.hostname().toLowerCase();
+  return host === name || host === `${name}.local`;
+}
+
+function requestFromThisDevice(req) {
+  if (!deviceHostAllowed(req.headers.host)) return false;
+  const origin = req.headers.origin;
+  if (!origin) return true; // curl / same-origin GET — browsers omit Origin
+  try {
+    return deviceHostAllowed(new URL(origin).host);
+  } catch {
+    return false;
+  }
+}
+
 // ── Remote access (REMOTE face QR code) ──────────────────────────────────────
 // nginx already serves the kiosk UI on port 80 to the whole LAN; the REMOTE
 // face just needs an address a phone can reach. Prefer wlan over wired so the
@@ -577,13 +598,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
-    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api')) {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Accept',
-      });
-      res.end();
+    // CSRF / DNS-rebinding guard. Now that nginx lets LAN devices reach /api,
+    // the UI's own requests are always same-origin (no CORS headers are ever
+    // sent — the old wildcard preflight is gone), so a browser page from any
+    // other origin can't read responses or pass a preflight. Two request-forgery
+    // paths remain and are closed here: a "simple" cross-site POST carries an
+    // Origin header that won't be this device (reject), and a DNS-rebound page
+    // is same-origin in the browser but arrives with its own hostname in Host
+    // (reject anything that isn't an IP literal, localhost, or this Pi's name).
+    if (url.pathname.startsWith('/api') && !requestFromThisDevice(req)) {
+      json(res, 403, { ok: false, error: 'forbidden' });
       return;
     }
 

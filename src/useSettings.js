@@ -45,6 +45,9 @@ export default function useSettings() {
   // Count of in-flight POSTs — while one is pending, poll results are stale
   // relative to what the user just tapped, so don't apply them.
   const pendingRef = useRef(0);
+  // One poll at a time: a slow response must not overlap (and lose to) a
+  // fresher one fired by the next interval tick.
+  const syncingRef = useRef(false);
 
   // CSS only (cursor: none → auto). Compositor pointer motion is labwc/libinput;
   // this toggle cannot fix a frozen USB mouse at the bench.
@@ -55,11 +58,13 @@ export default function useSettings() {
   useEffect(() => {
     let cancelled = false;
     const sync = async () => {
-      if (pendingRef.current > 0) return;
+      if (pendingRef.current > 0 || syncingRef.current) return;
+      syncingRef.current = true;
       try {
         const res = await fetch(`${API_BASE}/api/settings`, {
           headers: { Accept: 'application/json' },
         });
+        if (!res.ok) return; // server error / 403 — keep the local cache
         const data = await res.json();
         if (cancelled || !data.ok || pendingRef.current > 0) return;
         if (data.exists) {
@@ -82,6 +87,8 @@ export default function useSettings() {
         }
       } catch {
         /* API unreachable (dev without server) — the local cache stands */
+      } finally {
+        syncingRef.current = false;
       }
     };
     sync();

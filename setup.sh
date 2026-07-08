@@ -261,6 +261,10 @@ server {
     # switch branches. Only the on-device kiosk (which loads http://localhost)
     # may call them; remote browsers get 403 and the UI says "kiosk only".
     # Exact matches (=) take precedence over the ^~ /api prefix above.
+    # /api/reinstall/status and /api/reinstall/ack deliberately stay
+    # LAN-visible: status is a read-only view of the install log so a phone
+    # can watch a reinstall the kiosk started, and ack merely dismisses the
+    # finished overlay — neither can start anything.
 NGINX
 
 for ENDPOINT in /api/update /api/reinstall /api/reboot /api/switch-branch; do
@@ -356,6 +360,9 @@ sudo tee -a /etc/nginx/sites-available/s52 > /dev/null <<NGINX
         proxy_http_version 1.1;
         proxy_set_header   Upgrade \$http_upgrade;
         proxy_set_header   Connection "upgrade";
+        # The sidecar uses this header's presence to tell proxied (remote,
+        # view-only) clients apart from the kiosk's direct connection.
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_read_timeout 1h;
     }
 

@@ -26,7 +26,7 @@ import { useEffect, useRef, useState } from 'react';
 // The kiosk (which loads http://localhost) talks to the sidecar directly;
 // remote browsers (a phone that scanned the REMOTE QR) reach it through the
 // nginx /hal-ws proxy, since :8765 itself is loopback-only on the Pi.
-const IS_KIOSK = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+const IS_KIOSK = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
 const WS_URL = import.meta.env.VITE_HAL_WS_URL
   ?? (IS_KIOSK ? 'ws://127.0.0.1:8765' : `ws://${window.location.host}/hal-ws`);
 

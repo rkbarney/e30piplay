@@ -441,17 +441,38 @@ display:flex;align-items:center;justify-content:center;height:100vh;margin:0;tex
 </head><body><div>Login failed: ${String(message).replace(/[<>&]/g, '')}</div></body></html>`;
 }
 
+// CSRF / DNS-rebinding guard, same as carplay-server.cjs: /api/spotify is
+// LAN-reachable through nginx, so reject requests whose Host isn't this
+// device (rebound DNS) or whose Origin is some other site (cross-site POST).
+// No CORS headers are sent anywhere anymore — the UI is always same-origin.
+// /spotify-callback is exempt — the public OAuth bouncer navigates the phone
+// here, and it only completes a login this Pi started (state-checked).
+function deviceHostAllowed(hostWithPort) {
+  const host = String(hostWithPort || '').replace(/:\d+$/, '').toLowerCase();
+  if (!host) return false;
+  if (host === 'localhost' || host === '[::1]' || host === '::1') return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // LAN/loopback IP literal
+  const name = os.hostname().toLowerCase();
+  return host === name || host === `${name}.local`;
+}
+
+function requestFromThisDevice(req) {
+  if (!deviceHostAllowed(req.headers.host)) return false;
+  const origin = req.headers.origin;
+  if (!origin) return true; // curl / same-origin GET — browsers omit Origin
+  try {
+    return deviceHostAllowed(new URL(origin).host);
+  } catch {
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
-    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api')) {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Accept',
-      });
-      res.end();
+    if (url.pathname.startsWith('/api') && !requestFromThisDevice(req)) {
+      json(res, 403, { ok: false, error: 'forbidden' });
       return;
     }
 
