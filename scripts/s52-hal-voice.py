@@ -181,6 +181,10 @@ OWW_DIR = os.path.expanduser('~/.local/share/openwakeword')
 WAKE_MODEL = os.environ.get('S52_HAL_WAKE_MODEL', os.path.join(OWW_DIR, 'hal.onnx'))
 WAKE_THRESHOLD = float(os.environ.get('S52_HAL_WAKE_THRESHOLD', '0.5'))
 WAKE_CHUNK_SAMPLES = 1280  # openWakeWord consumes 80 ms blocks @ 16 kHz
+# With a wake model loaded, a transcript that merely *looks* like a wake phrase
+# ("how…", "hell…", a podcast saying "HAL") does not engage — only the neural
+# detector does. Set to 1 to let either path wake HAL (pre-engine behavior).
+TRANSCRIPT_WAKE = os.environ.get('S52_HAL_TRANSCRIPT_WAKE', '0') == '1'
 
 MODELS_DIR = os.path.expanduser('~/.local/share/pywhispercpp/models')
 # Corrupt/partial downloads are usually a few MB; real models are tens of MB.
@@ -1793,6 +1797,15 @@ class HalVoiceServer:
             log.info('wake engine engaged (transcript had no wake word)')
             self._phrase_chunks.clear()
             has_wake = True
+        elif has_wake and not wake_fired and self.wake.ready and not TRANSCRIPT_WAKE:
+            # Speaker audio (podcasts, radio) constantly yields "HAL"-shaped
+            # transcripts; with the engine live, its silence is the verdict.
+            log.info(
+                'transcript %r looks like a wake phrase but the wake engine '
+                'stayed quiet — ignoring (S52_HAL_TRANSCRIPT_WAKE=1 restores '
+                'transcript-only wake)', combined,
+            )
+            return
         if not has_wake:
             words = combined.split()
             if words and words[0] in WAKE_HOMOPHONES_START:
